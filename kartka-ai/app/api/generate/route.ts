@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { createServerSupabase } from '@/lib/supabase-server';
+import { createClient } from '@supabase/supabase-js';
  
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
  
@@ -24,7 +24,10 @@ const LANG_HINTS: Record<string, string> = {
  
 export async function POST(req: NextRequest) {
   try {
-    const supabase = createServerSupabase();
+    const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Необхідна авторизація' }, { status: 401 });
  

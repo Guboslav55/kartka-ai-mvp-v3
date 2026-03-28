@@ -98,4 +98,3 @@ export default function AuthPage() {
   );
 }
 
-export const metadata = { title: 'Вхід / Реєстрація' };

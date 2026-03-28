@@ -24,12 +24,25 @@ const LANG_HINTS: Record<string, string> = {
  
 export async function POST(req: NextRequest) {
   try {
+    // Get auth token from request header
+    const authHeader = req.headers.get('authorization');
+    const token = authHeader?.replace('Bearer ', '');
+ 
+    if (!token) {
+      return NextResponse.json({ error: 'Необхідна авторизація' }, { status: 401 });
+    }
+ 
+    // Create supabase client with user token
     const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Необхідна авторизація' }, { status: 401 });
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { global: { headers: { Authorization: `Bearer ${token}` } } }
+    );
+ 
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Необхідна авторизація' }, { status: 401 });
+    }
  
     const { data: profile } = await supabase.from('users').select('*').eq('id', user.id).single();
     if (!profile) return NextResponse.json({ error: 'Профіль не знайдено' }, { status: 404 });
@@ -66,7 +79,6 @@ ${features ? `Характеристики: ${features}` : ''}
       throw new Error('Неповна відповідь від AI. Спробуй ще раз.');
     }
  
-    // Generate image
     let imageUrl: string | undefined;
     if (generateImage) {
       try {

@@ -293,6 +293,3 @@ export default function GeneratePage() {
     </div>
   );
 }
-
-// Metadata for generate page
-export const metadata = { title: 'Генератор карток' };

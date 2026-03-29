@@ -164,7 +164,8 @@ export default function BannerPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Помилка генерації');
-      setFinalUrl(data.imageUrl);
+      // Always use base64 for download — never opens new tab
+      setFinalUrl(data.imageB64 || data.imageUrl);
 
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Помилка. Спробуй ще раз.');
@@ -355,3 +356,4 @@ export default function BannerPage() {
     </div>
   );
 }
+

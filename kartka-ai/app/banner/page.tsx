@@ -133,9 +133,15 @@ export default function BannerPage() {
         throw new Error((err as any).error || 'Помилка генерації');
       }
 
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      setFinalUrl(objectUrl);
+      // Read response as ArrayBuffer then convert to base64 data URL
+      const arrayBuffer = await res.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+      let binary = '';
+      for (let i = 0; i < uint8Array.byteLength; i++) {
+        binary += String.fromCharCode(uint8Array[i]);
+      }
+      const base64 = btoa(binary);
+      setFinalUrl(`data:image/png;base64,${base64}`);
 
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Помилка. Спробуй ще раз.');
@@ -150,7 +156,7 @@ export default function BannerPage() {
     a.download = `banner-${(productName||'tovar').replace(/\s/g,'-').slice(0,40)}.png`;
     a.style.display = 'none';
     document.body.appendChild(a); a.click();
-    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(finalUrl); }, 1000);
+    document.body.removeChild(a);
   }
 
   return (

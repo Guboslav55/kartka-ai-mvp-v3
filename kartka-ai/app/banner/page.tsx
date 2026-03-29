@@ -33,6 +33,7 @@ export default function BannerPage() {
   const [template, setTemplate] = useState('benefits');
   const [accessToken, setAccessToken] = useState('');
 
+  const [keepBackground, setKeepBackground] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [removingBg, setRemovingBg] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -143,33 +144,27 @@ export default function BannerPage() {
     setGenerating(true); setError(''); setFinalUrl(null); setBackgroundUrl(null);
 
     try {
-      // Step 1: Remove bg if photo exists
+      // Step 1: Remove bg only if user wants it
       let productSrc = photo;
-      if (photo) {
+      if (photo && !keepBackground) {
         setStep('🔮 Видаляю фон товару...');
         const noBg = await doRemoveBg();
         if (noBg) productSrc = noBg;
       }
 
-      // Step 2: Generate background + infographics (WITHOUT product)
-      setStep('🎨 AI генерує фон та інфографіку...');
-      const res = await fetch('/api/generate-banner', {
+      // Step 2: Server-side SVG render (fast, precise, free)
+      setStep('🎨 Рендерю банер на сервері...');
+      const res = await fetch('/api/render-banner', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
-        body: JSON.stringify({ productName, price, bullets, bgStyle, template }),
+        body: JSON.stringify({
+          productName, price, bullets, bgStyle, template,
+          productB64: productSrc, // original or no-bg photo
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Помилка генерації');
-      setBackgroundUrl(data.backgroundUrl);
-
-      // Step 3: Composite original product onto background
-      if (productSrc && data.backgroundUrl) {
-        setStep('✨ Накладаю фото товару...');
-        const final = await composite(data.backgroundUrl, productSrc, template);
-        setFinalUrl(final);
-      } else {
-        setFinalUrl(data.backgroundUrl);
-      }
+      setFinalUrl(data.imageUrl);
 
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Помилка. Спробуй ще раз.');
@@ -229,6 +224,19 @@ export default function BannerPage() {
                 </div>
               )}
             </div>
+
+            {/* Keep background toggle */}
+            {photo && (
+              <label className="flex items-center gap-3 mt-3 cursor-pointer select-none">
+                <button type="button" onClick={() => setKeepBackground(v => !v)}
+                  className={`w-9 h-5 rounded-full transition-colors shrink-0 relative ${keepBackground ? 'bg-gold' : 'bg-white/15'}`}>
+                  <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all" style={{ left: keepBackground ? '17px' : '2px' }} />
+                </button>
+                <span className="text-white/60 text-xs">
+                  {keepBackground ? '✓ Залишити оригінальний фон товару' : 'Видалити фон (Remove.bg)'}
+                </span>
+              </label>
+            )}
           </div>
 
           {/* Product data */}
@@ -291,7 +299,7 @@ export default function BannerPage() {
               ? <><span className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin"/>{step || 'Генерую...'}</>
               : '✦ Згенерувати банер'}
           </button>
-          <p className="text-white/20 text-xs text-center">~30-40 секунд · Фото товару не змінюється</p>
+          <p className="text-white/20 text-xs text-center">~2-5 секунд · Серверний рендер · Фото товару не змінюється</p>
         </div>
 
         {/* RESULT */}
@@ -347,4 +355,3 @@ export default function BannerPage() {
     </div>
   );
 }
-

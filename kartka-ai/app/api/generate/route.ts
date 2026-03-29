@@ -157,3 +157,4 @@ STRICT: NO text, NO letters, NO words, NO watermarks anywhere in the image.`;
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Помилка сервера' }, { status: 500 });
   }
 }
+

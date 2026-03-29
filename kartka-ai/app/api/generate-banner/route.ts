@@ -5,10 +5,10 @@ import { createClient } from '@supabase/supabase-js';
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const STYLE_PROMPTS: Record<string, string> = {
-  dark:  'dark navy/black premium background, subtle gold rim lighting, dramatic studio photography',
-  white: 'pure white seamless background, soft diffused studio lighting, high-key photography',
-  navy:  'deep navy blue gradient background, cool blue accent lighting, premium feel',
-  gold:  'very dark background with warm golden bokeh and ambient glow, luxury look',
+  dark:  'very dark navy/black gradient, subtle golden rim light from top-right, premium dramatic studio atmosphere',
+  white: 'pure white seamless gradient, soft diffused studio lighting from top-left, clean minimal',
+  navy:  'deep navy blue to dark blue gradient, cool blue accent lighting, professional premium',
+  gold:  'very dark charcoal background with warm golden ambient glow and bokeh, luxury feel',
 };
 
 async function uploadToStorage(
@@ -18,74 +18,85 @@ async function uploadToStorage(
 ): Promise<string | null> {
   try {
     const buffer = Buffer.from(b64, 'base64');
-    const fileName = `banners/${userId}/${Date.now()}.jpg`;
+    const fileName = `banners/${userId}/${Date.now()}.png`;
     const { error } = await supabase.storage
       .from('card-images')
-      .upload(fileName, buffer, { contentType: 'image/jpeg' });
+      .upload(fileName, buffer, { contentType: 'image/png' });
     if (error) return null;
     const { data } = supabase.storage.from('card-images').getPublicUrl(fileName);
     return data.publicUrl;
   } catch { return null; }
 }
 
-function buildPrompt(template: string, productName: string, price: string, bullets: string[], bgStyle: string): string {
+function buildBackgroundPrompt(template: string, productName: string, price: string, bullets: string[], bgStyle: string): string {
   const style = STYLE_PROMPTS[bgStyle] ?? STYLE_PROMPTS.dark;
-  const b = bullets.filter(x => x.trim()).slice(0, 3).map(x => x.replace(/^[✓•]\s*/, ''));
+  const b = bullets.filter(x => x.trim()).slice(0, 3).map(x => x.replace(/^[✓•]\s*/, '').trim());
+
+  // IMPORTANT: We generate background + text overlay ONLY
+  // The actual product photo will be composited on top via Canvas
 
   if (template === 'benefits') {
-    return `Professional e-commerce product card banner, 1024x1024 pixels.
+    return `Create a product card background layout for Ukrainian marketplace (1024x1024px).
 
-DESIGN: Split layout. Left 58%: product photo with dramatic drop shadow on ${style}. Right 42%: elegant dark frosted glass panel.
+IMPORTANT: This is BACKGROUND ONLY — left side must be EMPTY space (solid dark area) where product photo will be placed later.
 
-RIGHT PANEL — render this text exactly:
-• Header label: "ПЕРЕВАГИ" in small caps gold color
-• Product title: "${productName}" in bold white sans-serif font, 2 lines max
-• Thin gold divider line
-• 3 benefit rows with gold circle checkmark icon:
-  — "${b[0] || 'Висока якість матеріалів'}"
-  — "${b[1] || 'Зручна та ергономічна конструкція'}"  
-  — "${b[2] || 'Довговічність та надійність'}"
-${price ? `• Price block at bottom: "${price} ₴" in very large bold gold Unbounded-style font, centered` : ''}
+LEFT HALF (x:0 to x:512): completely empty ${style} background — NO objects, NO product, just clean background with subtle lighting.
 
-TYPOGRAPHY: Clean modern sans-serif. All text sharp and fully readable. No blurry text.
-STYLE: ${style}. Ukrainian premium marketplace aesthetic. No watermarks. No placeholder text.`;
+RIGHT HALF (x:512 to x:1024): elegant frosted glass dark panel with this exact text:
+• Small label at top: "ПЕРЕВАГИ" in gold (#c8a84b) small caps, 14px
+• Product name: "${productName}" in bold white, 22px, 2 lines max, Unbounded-style font
+• Thin gold horizontal divider line
+• 3 benefit rows, each with small gold circle ✓ icon on left:
+  Row 1: "${b[0] || 'Висока якість матеріалів'}"
+  Row 2: "${b[1] || 'Зручна конструкція'}"
+  Row 3: "${b[2] || 'Надійність та довговічність'}"
+• Text color: white, 16px, Golos Text style font
+${price ? `• Bottom price block: gold rounded rectangle, "${price} ₴" in large bold gold font, 32px` : ''}
+
+Panel style: dark frosted glass rgba(0,0,0,0.7), rounded corners 20px, gold top accent bar 4px.
+
+Overall: ${style}. Professional Ukrainian e-commerce design. Sharp crisp text. No watermarks.`;
   }
 
   if (template === 'callout') {
-    return `Professional e-commerce product card banner, 1024x1024 pixels.
+    return `Create a product card background layout for Ukrainian marketplace (1024x1024px).
 
-DESIGN: Product centered (65% of frame). ${style}.
+IMPORTANT: CENTER AREA must be EMPTY where product photo will be placed. Generate only the background and text annotations.
 
-TOP BAR: Semi-transparent frosted panel, product name "${productName}" in bold centered white text.
+BACKGROUND: ${style}. Clean gradient. Product placeholder area in center (300x400px centered).
 
-CALLOUT ANNOTATIONS — 3 annotation labels with thin dashed lines pointing to product parts:
-• Left callout: "${b[0] || 'Якісний матеріал'}" — small white label with gold left border
-• Right callout: "${b[1] || 'Ергономічний дизайн'}" — same style  
-• Bottom-left callout: "${b[2] || 'Надійна конструкція'}" — same style
+ANNOTATIONS around the empty center — 3 callout labels with thin lines pointing inward:
+• Top-left callout at (120, 180): white rounded pill label, text "${b[0] || 'Якісний матеріал'}", gold left border 3px, dark background
+• Top-right callout at (650, 220): same style, text "${b[1] || 'Ергономічний дизайн'}"
+• Bottom-right callout at (620, 680): same style, text "${b[2] || 'Надійна підошва'}"
 
-Each callout: frosted dark pill label, text fully readable, thin dashed gold line to product.
-${price ? `BOTTOM CENTER: Price "${price} ₴" in large bold gold font on frosted bar.` : ''}
+Each label: max 120px wide, white text 13px, semi-transparent dark background, thin dashed line from label edge pointing to center.
 
-All text must be sharp and fully readable. ${style}. No watermarks.`;
+TOP BAR: semi-transparent frosted pill at top center, text "${productName}" bold white 18px.
+${price ? `BOTTOM CENTER: "${price} ₴" large bold gold text 36px.` : ''}
+
+No product, no objects in image center. Only background + UI elements. ${style}.`;
   }
 
-  // CTA template
-  return `Professional e-commerce product card banner, 1024x1024 pixels.
+  // CTA
+  return `Create a product card background layout for Ukrainian marketplace (1024x1024px).
 
-DESIGN: Left 45%: product photo, dramatic lighting, drop shadow. Right 55%: text layout on ${style}.
+IMPORTANT: LEFT SIDE (x:0 to x:420) must be EMPTY background where product photo will be placed.
 
-RIGHT SIDE — render this text exactly:
-• Small label: "НОВА КОЛЕКЦІЯ" in gold small caps
-• Product name: "${productName}" bold white 2-line title
-• 3 benefit rows with gold checkmarks:
-  ✓ "${b[0] || 'Преміум якість'}"
+LEFT SIDE: clean ${style} background, empty, maybe subtle shadow vignette on right edge.
+
+RIGHT SIDE (x:420 to x:1024): text layout on same background:
+• Small gold label: "НОВА КОЛЕКЦІЯ"
+• Product name: "${productName}" bold white 24px, 2 lines
+• 3 benefits with gold checkmarks:
+  ✓ "${b[0] || 'Преміум якість'}"  
   ✓ "${b[1] || 'Зручно та практично'}"
   ✓ "${b[2] || 'Гарантія якості'}"
-${price ? `• Large price: "${price} ₴" in very large bold gold font` : ''}
-• CTA button: gold rounded rectangle with text "ЗАМОВИТИ ЗАРАЗ" in dark bold
-• Below button: small text "🚚 Доставка по всій Україні"
+${price ? `• Large price: "${price} ₴" very large bold gold 48px` : ''}
+• Gold CTA button: rounded rectangle, text "ЗАМОВИТИ ЗАРАЗ" dark bold 18px
+• Small text below: "🚚 Доставка по всій Україні" gray 13px
 
-TYPOGRAPHY: All text sharp, readable, professional. ${style}. No watermarks.`;
+${style}. Sharp text. No watermarks. No product illustration on right side.`;
 }
 
 export async function POST(req: NextRequest) {
@@ -103,59 +114,34 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser(token);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { productName, price, bullets, bgStyle = 'dark', template = 'benefits', imageBase64 } = await req.json();
+    const { productName, price, bullets, bgStyle = 'dark', template = 'benefits' } = await req.json();
+    // NOTE: imageBase64 is NOT used here — product photo is composited client-side
 
-    const prompt = buildPrompt(template, productName || 'Товар', price || '', bullets || [], bgStyle);
+    const prompt = buildBackgroundPrompt(template, productName || 'Товар', price || '', bullets || [], bgStyle);
 
-    let imageUrl: string | null = null;
+    // Generate background only via DALL-E 3
+    const result = await openai.images.generate({
+      model: 'dall-e-3',
+      prompt,
+      size: '1024x1024',
+      quality: 'hd',
+      style: 'natural',
+      n: 1,
+    });
 
-    // Try gpt-image-1 with uploaded photo first
-    if (imageBase64) {
-      try {
-        const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
-        const buf = Buffer.from(base64Data, 'base64');
-        const file = new File([buf], 'product.jpg', { type: 'image/jpeg' });
+    const url = result.data[0]?.url;
+    if (!url) throw new Error('Не вдалося згенерувати банер');
 
-        const result = await (openai.images as any).edit({
-          model: 'gpt-image-1',
-          image: file,
-          prompt: `${prompt}\n\nIMPORTANT: The uploaded image is the actual product photo. Composite it into the banner layout described above. Keep the product recognizable and sharp.`,
-          n: 1,
-          size: '1024x1024',
-          quality: 'high',
-        });
+    // Download and store permanently
+    const r = await fetch(url);
+    const buf = await r.arrayBuffer();
+    const b64 = Buffer.from(buf).toString('base64');
+    const permanent = await uploadToStorage(supabase, b64, user.id);
 
-        const b64 = result.data[0]?.b64_json;
-        if (b64) {
-          const perm = await uploadToStorage(supabase, b64, user.id);
-          imageUrl = perm ?? `data:image/png;base64,${b64}`;
-        }
-      } catch (err) {
-        console.warn('gpt-image-1 failed, fallback to dall-e-3:', err);
-      }
-    }
-
-    // Fallback: DALL-E 3 generation
-    if (!imageUrl) {
-      const result = await openai.images.generate({
-        model: 'dall-e-3',
-        prompt,
-        size: '1024x1024',
-        quality: 'hd',
-        style: 'natural',
-        n: 1,
-      });
-      const url = result.data[0]?.url;
-      if (url) {
-        const r = await fetch(url);
-        const b = await r.arrayBuffer();
-        const b64 = Buffer.from(b).toString('base64');
-        const perm = await uploadToStorage(supabase, b64, user.id);
-        imageUrl = perm ?? url;
-      }
-    }
-
-    return NextResponse.json({ imageUrl });
+    return NextResponse.json({
+      backgroundUrl: permanent ?? url,
+      template,
+    });
 
   } catch (err: unknown) {
     console.error('Banner error:', err);

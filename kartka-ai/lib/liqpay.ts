@@ -39,4 +39,3 @@ export function verifyLiqpaySignature(data: string, signature: string): boolean 
     .digest('base64');
   return expected === signature;
 }
-

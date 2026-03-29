@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import Link from 'next/link';
- 
+
 const TEMPLATES = [
   { id: 'benefits', name: '✓ Переваги справа', desc: 'Фото + панель переваг' },
   { id: 'callout',  name: '◎ Callout стрілки', desc: 'Фото + підписи зі стрілками' },
@@ -16,12 +16,30 @@ const BG_STYLES = [
   { id: 'navy',  label: '🌑 Синій' },
   { id: 'gold',  label: '✨ Золотий' },
 ];
- 
+
+
+// Compress image to max 400px and reduce quality before sending to API
+async function compressImage(base64: string, maxSize = 400): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ratio = Math.min(maxSize / img.width, maxSize / img.height, 1);
+      canvas.width = Math.round(img.width * ratio);
+      canvas.height = Math.round(img.height * ratio);
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', 0.7));
+    };
+    img.src = base64;
+  });
+}
+
 export default function BannerPage() {
   const router = useRouter();
   const supabase = createClient();
   const fileRef = useRef<HTMLInputElement>(null);
- 
+
   const [photo, setPhoto] = useState<string|null>(null);
   const [noBgPhoto, setNoBgPhoto] = useState<string|null>(null);
   const [photoName, setPhotoName] = useState('');
@@ -37,14 +55,14 @@ export default function BannerPage() {
   const [finalUrl, setFinalUrl] = useState<string|null>(null);
   const [error, setError] = useState('');
   const [step, setStep] = useState('');
- 
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) { router.push('/auth'); return; }
       setAccessToken(session.access_token);
     });
   }, []);
- 
+
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]; if (!file) return;
     setPhotoName(file.name);
@@ -56,7 +74,7 @@ export default function BannerPage() {
     };
     reader.readAsDataURL(file);
   }
- 
+
   async function analyzePhoto(base64?: string) {
     const src = base64 || photo; if (!src || !accessToken) return;
     setAnalyzing(true);
@@ -72,7 +90,7 @@ export default function BannerPage() {
     } catch {}
     setAnalyzing(false);
   }
- 
+
   async function generate() {
     if (!productName.trim() && !photo) return;
     setGenerating(true); setError(''); setFinalUrl(null);
@@ -80,7 +98,7 @@ export default function BannerPage() {
       // Step 1: optionally remove bg
       let productSrc = photo;
       const isInfographic = template === 'infographic';
- 
+
       if (photo && !keepBackground && !isInfographic) {
         setStep('🔮 Видаляю фон...');
         try {
@@ -92,36 +110,39 @@ export default function BannerPage() {
           if (res.ok) { const d = await res.json(); if (d.imageBase64) { productSrc = d.imageBase64; setNoBgPhoto(d.imageBase64); } }
         } catch {}
       }
- 
+
       // Step 2: render
       setStep(isInfographic ? '📊 AI аналізує товар і генерує інфографіку...' : '🎨 Рендерю банер...');
- 
+
       const endpoint = isInfographic ? '/api/infographic' : '/api/og-banner';
       const body = isInfographic
         ? { productName, productB64: photo }
         : { productName, price, bullets, bgStyle, template, productB64: productSrc };
- 
+
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          ...body,
+          productB64: body.productB64 ? await compressImage(body.productB64) : null,
+        }),
       });
- 
+
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error((err as any).error || 'Помилка генерації');
       }
- 
+
       const blob = await res.blob();
       const objectUrl = URL.createObjectURL(blob);
       setFinalUrl(objectUrl);
- 
+
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Помилка. Спробуй ще раз.');
     }
     setGenerating(false); setStep('');
   }
- 
+
   function download() {
     if (!finalUrl) return;
     const a = document.createElement('a');
@@ -131,7 +152,7 @@ export default function BannerPage() {
     document.body.appendChild(a); a.click();
     setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(finalUrl); }, 1000);
   }
- 
+
   return (
     <div className="min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-8">
@@ -140,7 +161,7 @@ export default function BannerPage() {
       </div>
       <h1 className="font-display font-black text-2xl sm:text-3xl mb-2 tracking-tight">🖼️ Банер товару</h1>
       <p className="text-white/40 text-sm mb-8">Оберіть шаблон — AI генерує банер з кириличними шрифтами</p>
- 
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-4">
           {/* Upload */}
@@ -176,7 +197,7 @@ export default function BannerPage() {
               </label>
             )}
           </div>
- 
+
           {/* Template — FIRST */}
           <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-5">
             <label className="block text-gold text-xs font-bold uppercase tracking-widest mb-3">Тип банеру</label>
@@ -190,7 +211,7 @@ export default function BannerPage() {
               ))}
             </div>
           </div>
- 
+
           {/* Data — hidden for infographic */}
           {template !== 'infographic' && (
             <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-5 space-y-2.5">
@@ -215,7 +236,7 @@ export default function BannerPage() {
               ))}
             </div>
           )}
- 
+
           {/* Infographic note */}
           {template === 'infographic' && (
             <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-5">
@@ -228,7 +249,7 @@ export default function BannerPage() {
               </div>
             </div>
           )}
- 
+
           {/* Style — hidden for infographic */}
           {template !== 'infographic' && (
             <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-5">
@@ -239,9 +260,9 @@ export default function BannerPage() {
               </div>
             </div>
           )}
- 
+
           {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-red-300 text-sm">⚠️ {error}</div>}
- 
+
           <button onClick={generate} disabled={generating||(!productName.trim()&&!photo)}
             className="w-full bg-gradient-to-r from-gold to-gold-light text-black font-bold py-4 rounded-xl hover:opacity-90 disabled:opacity-40 flex items-center justify-center gap-2 text-base">
             {generating?<><span className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin"/>{step||'Генерую...'}</>:
@@ -251,7 +272,7 @@ export default function BannerPage() {
             {template==='infographic'?'~10-15 сек · AI аналізує товар і підбирає шаблон':'~5-8 сек · Noto Sans · Кирилиця ✓'}
           </p>
         </div>
- 
+
         {/* Result */}
         <div>
           <div className="bg-white/[0.04] border border-white/10 rounded-2xl overflow-hidden sticky top-6">
@@ -280,3 +301,4 @@ export default function BannerPage() {
     </div>
   );
 }
+

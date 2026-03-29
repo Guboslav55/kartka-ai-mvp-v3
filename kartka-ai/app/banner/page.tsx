@@ -116,7 +116,7 @@ export default function BannerPage() {
 
       const endpoint = isInfographic ? '/api/infographic' : '/api/og-banner';
       const body = isInfographic
-        ? { productName, productB64: photo }
+        ? { productName, productB64: productSrc, bullets, accent: '#c8a84b', bg: '#0d0d0d' }
         : { productName, price, bullets, bgStyle, template, productB64: productSrc };
 
       const res = await fetch(endpoint, {
@@ -301,3 +301,4 @@ export default function BannerPage() {
     </div>
   );
 }
+

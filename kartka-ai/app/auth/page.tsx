@@ -3,7 +3,7 @@ import { useState, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import Link from 'next/link';
- 
+
 function AuthForm() {
   const router = useRouter();
   const [mode, setMode] = useState<'login' | 'register'>('register');
@@ -15,7 +15,7 @@ function AuthForm() {
   const [done, setDone] = useState(false);
   const [resent, setResent] = useState(false);
   const supabase = createClient();
- 
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(''); setLoading(true);
@@ -41,7 +41,7 @@ function AuthForm() {
     }
     setLoading(false);
   }
- 
+
   async function resendEmail() {
     setResending(true); setResent(false);
     const { error: err } = await supabase.auth.resend({
@@ -52,7 +52,7 @@ function AuthForm() {
     if (!err) setResent(true);
     setResending(false);
   }
- 
+
   if (done) return (
     <div className="text-center">
       <div className="text-5xl mb-4">📧</div>
@@ -64,13 +64,13 @@ function AuthForm() {
       <p className="text-white/30 text-xs mb-8">
         Не прийшов лист? Перевір папку "Спам". Листи інколи затримуються до 2 хвилин.
       </p>
- 
+
       {resent && (
         <p className="text-green-400 text-sm mb-4 bg-green-400/10 rounded-lg px-4 py-2">
           ✓ Лист надіслано повторно!
         </p>
       )}
- 
+
       <button
         onClick={resendEmail}
         disabled={resending}
@@ -78,7 +78,7 @@ function AuthForm() {
       >
         {resending ? 'Надсилаю...' : '↺ Надіслати лист ще раз'}
       </button>
- 
+
       <button
         onClick={() => { setDone(false); setMode('login'); setResent(false); }}
         className="w-full text-white/30 text-sm hover:text-white transition-colors py-2"
@@ -87,7 +87,7 @@ function AuthForm() {
       </button>
     </div>
   );
- 
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
@@ -137,7 +137,7 @@ function AuthForm() {
     </form>
   );
 }
- 
+
 export default function AuthPage() {
   return (
     <div className="min-h-screen flex items-center justify-center px-6">
@@ -162,3 +162,4 @@ export default function AuthPage() {
     </div>
   );
 }
+

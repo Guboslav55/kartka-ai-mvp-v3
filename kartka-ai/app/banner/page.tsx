@@ -133,12 +133,13 @@ export default function BannerPage() {
         throw new Error((err as any).error || 'Помилка генерації');
       }
 
-      // Read response as ArrayBuffer then convert to base64 data URL
+      // Convert response to base64 using chunks to avoid btoa size limit
       const arrayBuffer = await res.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
       let binary = '';
-      for (let i = 0; i < uint8Array.byteLength; i++) {
-        binary += String.fromCharCode(uint8Array[i]);
+      const chunkSize = 8192;
+      for (let i = 0; i < uint8Array.byteLength; i += chunkSize) {
+        binary += String.fromCharCode(...uint8Array.subarray(i, i + chunkSize));
       }
       const base64 = btoa(binary);
       setFinalUrl(`data:image/png;base64,${base64}`);
@@ -307,4 +308,3 @@ export default function BannerPage() {
     </div>
   );
 }
-

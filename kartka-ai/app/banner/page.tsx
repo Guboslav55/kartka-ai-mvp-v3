@@ -133,16 +133,11 @@ export default function BannerPage() {
         throw new Error((err as any).error || 'Помилка генерації');
       }
 
-      // Convert response to base64 using chunks to avoid btoa size limit
-      const arrayBuffer = await res.arrayBuffer();
-      const uint8Array = new Uint8Array(arrayBuffer);
-      let binary = '';
-      const chunkSize = 8192;
-      for (let i = 0; i < uint8Array.byteLength; i += chunkSize) {
-        binary += String.fromCharCode(...uint8Array.subarray(i, i + chunkSize));
-      }
-      const base64 = btoa(binary);
-      setFinalUrl(`data:image/png;base64,${base64}`);
+      // Use blob URL directly - most reliable approach
+      const blob = await res.blob();
+      if (blob.size === 0) throw new Error('Сервер повернув порожній файл');
+      const blobUrl = URL.createObjectURL(new Blob([blob], { type: 'image/png' }));
+      setFinalUrl(blobUrl);
 
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Помилка. Спробуй ще раз.');
@@ -308,3 +303,5 @@ export default function BannerPage() {
     </div>
   );
 }
+
+

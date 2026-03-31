@@ -4,18 +4,12 @@ import { NextRequest } from 'next/server';
 export const runtime = 'edge';
 
 export async function POST(req: NextRequest) {
-  const [fontReg, fontBold] = await Promise.all([
-    fetch('https://fonts.gstatic.com/s/notosans/v36/o-0IIpQlx3QUlC5A4PNjXhFVZNyBx2pqPIif.woff2').then(r=>r.arrayBuffer()),
-    fetch('https://fonts.gstatic.com/s/notosans/v36/o-0NipQlx3QUlC5A4PNjThZVZNyBx2pqPIif.woff2').then(r=>r.arrayBuffer()),
-  ]);
-
   const { productName='', bullets=[], productB64=null, accent='#c8a84b', bg='#0d0d0d' } = await req.json();
 
   const W=1024, H=1024;
   const accentColor = accent || '#c8a84b';
   const bgColor = bg || '#0d0d0d';
 
-  // Build specs from bullets
   const icons = ['🔒','📐','⚡','✅','🛡️','⭐'];
   const specs = (bullets as string[])
     .filter((b:string)=>b.trim())
@@ -38,21 +32,17 @@ export async function POST(req: NextRequest) {
   const titleWords = (productName || 'ТОВАР').toUpperCase().split(' ');
   const line1 = titleWords.slice(0,2).join(' ');
   const line2 = titleWords.slice(2,4).join(' ');
-
   const photoSrc = productB64 as string | null;
 
   const el = (
-    <div style={{width:W,height:H,display:'flex',background:bgColor,fontFamily:'"NotoSans"',position:'relative'}}>
-      {/* Faded bg */}
+    <div style={{width:W,height:H,display:'flex',background:bgColor,position:'relative'}}>
       {photoSrc && (
         <img src={photoSrc} width={1024} height={1024}
           style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',opacity:0.1}} />
       )}
-      {/* Gradient overlay */}
       <div style={{position:'absolute',inset:0,
         background:`linear-gradient(150deg, ${bgColor}f5 0%, ${bgColor}99 55%, ${bgColor}ee 100%)`,
         display:'flex'}} />
-      {/* Product right */}
       {photoSrc && (
         <div style={{position:'absolute',right:28,top:80,width:460,height:500,
           display:'flex',alignItems:'center',justifyContent:'center'}}>
@@ -61,19 +51,15 @@ export async function POST(req: NextRequest) {
               filter:'drop-shadow(0 24px 64px rgba(0,0,0,0.9))'}} />
         </div>
       )}
-      {/* Content */}
       <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',padding:'52px 48px 44px'}}>
-        {/* Accent bar */}
         <div style={{width:56,height:5,background:accentColor,borderRadius:3,marginBottom:24,display:'flex'}} />
-        {/* Title */}
         <div style={{display:'flex',flexDirection:'column',marginBottom:10}}>
           <div style={{fontSize:54,fontWeight:700,color:'#ffffff',lineHeight:1.05,display:'flex'}}>{line1}</div>
           {line2 && <div style={{fontSize:54,fontWeight:700,color:accentColor,lineHeight:1.05,display:'flex'}}>{line2}</div>}
         </div>
         <div style={{width:72,height:3,background:accentColor,borderRadius:2,marginBottom:36,display:'flex'}} />
-        {/* Specs */}
         <div style={{display:'flex',flexDirection:'column',gap:14,maxWidth:470}}>
-          {specs.map((s, i) => (
+          {specs.map((s:any, i:number) => (
             <div key={i} style={{display:'flex',alignItems:'center',gap:16,
               background:'rgba(255,255,255,0.07)',borderRadius:14,
               padding:'16px 22px',borderLeft:`4px solid ${accentColor}`}}>
@@ -85,10 +71,9 @@ export async function POST(req: NextRequest) {
             </div>
           ))}
         </div>
-        {/* Bottom */}
         <div style={{position:'absolute',bottom:40,left:48,right:48,
           display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-          <div style={{fontSize:13,color:'rgba(255,255,255,0.38)',display:'flex'}}>Доставка по всій Україні 🇺🇦</div>
+          <div style={{fontSize:13,color:'rgba(255,255,255,0.38)',display:'flex'}}>Доставка по всій Україні</div>
           <div style={{background:accentColor,borderRadius:50,padding:'9px 24px',
             fontSize:14,fontWeight:700,color:'#000',display:'flex'}}>ЗАМОВИТИ</div>
         </div>
@@ -96,12 +81,7 @@ export async function POST(req: NextRequest) {
     </div>
   );
 
-  return new ImageResponse(el, {
-    width:W, height:H,
-    fonts:[
-      {name:'NotoSans',data:fontReg, weight:400,style:'normal'},
-      {name:'NotoSans',data:fontBold,weight:700,style:'normal'},
-    ],
-  });
+  // No fonts - use system fonts to avoid empty response
+  return new ImageResponse(el, { width: W, height: H });
 }
 

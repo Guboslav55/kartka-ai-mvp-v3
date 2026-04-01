@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -178,38 +175,29 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── Step 2: gpt-image-1 generates the banner ─────────────────────────────
-    // Write photo to temp file (required by SDK for images.edit)
-    const b64data = productB64.replace(/^data:image\/\w+;base64,/, '');
-    const photoBuf = Buffer.from(b64data, 'base64');
-    const tmpPath = path.join(os.tmpdir(), `product-${Date.now()}.jpg`);
-    fs.writeFileSync(tmpPath, photoBuf);
-
+    // ── Step 2: Generate banner with DALL-E 3 ────────────────────────────────
+    // dall-e-2 images.edit requires square PNG — convert with sharp
+    // Better: use dall-e-3 images.generate with the detailed prompt
+    // DALL-E 3 produces much better quality banners than dall-e-2 edit
     let imageBuffer: Buffer;
 
-    try {
-      // Use images.edit — takes original product photo as reference
-      // gpt-image-1 will transform it into a marketing banner
-      const response = await openai.images.edit({
-        model: 'gpt-image-1',
-        image: fs.createReadStream(tmpPath) as unknown as File,
-        prompt: designPrompt,
-        size: '1024x1024',
-        n: 1,
-      });
+    const response = await openai.images.generate({
+      model: 'dall-e-3',
+      prompt: designPrompt.slice(0, 4000),
+      size: '1024x1024',
+      quality: 'hd',
+      style: 'vivid',
+      n: 1,
+      response_format: 'b64_json',
+    });
 
-      if (response.data[0]?.b64_json) {
-        imageBuffer = Buffer.from(response.data[0].b64_json, 'base64');
-      } else if (response.data[0]?.url) {
-        const imgRes = await fetch(response.data[0].url);
-        imageBuffer = Buffer.from(await imgRes.arrayBuffer());
-      } else {
-        throw new Error('No image data in response');
-      }
-
-    } finally {
-      // Clean up temp file
-      try { fs.unlinkSync(tmpPath); } catch {}
+    if (response.data[0]?.b64_json) {
+      imageBuffer = Buffer.from(response.data[0].b64_json, 'base64');
+    } else if (response.data[0]?.url) {
+      const imgRes = await fetch(response.data[0].url);
+      imageBuffer = Buffer.from(await imgRes.arrayBuffer());
+    } else {
+      throw new Error('No image data in response');
     }
 
     // ── Step 3: Upload to Supabase ────────────────────────────────────────────

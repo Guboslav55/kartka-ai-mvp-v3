@@ -263,9 +263,31 @@ export async function POST(req: NextRequest) {
     if (!bgB64) throw new Error('DALL-E 3 не повернув зображення');
     const bgBuffer = Buffer.from(bgB64, 'base64');
 
-    // ── Step 3: Decode product photo ────────────────────────────────────────
+    // ── Step 3: Decode product photo + Remove background ────────────────────
     const photoData = productB64.replace(/^data:image\/\w+;base64,/, '');
-    const photoBuf = Buffer.from(photoData, 'base64');
+    let photoBuf = Buffer.from(photoData, 'base64');
+
+    // Remove background via Remove.bg API
+    if (process.env.REMOVE_BG_API_KEY) {
+      try {
+        const formData = new FormData();
+        formData.append('image_file', new Blob([photoBuf], { type: 'image/jpeg' }), 'product.jpg');
+        formData.append('size', 'auto');
+
+        const rbRes = await fetch('https://api.remove.bg/v1.0/removebg', {
+          method: 'POST',
+          headers: { 'X-Api-Key': process.env.REMOVE_BG_API_KEY },
+          body: formData,
+        });
+
+        if (rbRes.ok) {
+          const rbBuf = Buffer.from(await rbRes.arrayBuffer());
+          photoBuf = rbBuf; // PNG with transparent background
+        }
+      } catch (e) {
+        console.warn('Remove.bg failed, using original photo:', e);
+      }
+    }
 
     // ── Step 4: Detect accent color from product photo ───────────────────────
     // Use a category-based accent as fallback

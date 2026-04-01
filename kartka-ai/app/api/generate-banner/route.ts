@@ -195,7 +195,6 @@ export async function POST(req: NextRequest) {
         image: fs.createReadStream(tmpPath) as unknown as File,
         prompt: designPrompt,
         size: '1024x1024',
-        quality: 'high',
         n: 1,
       });
 

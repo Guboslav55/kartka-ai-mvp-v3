@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     .map((b:string, i:number) => ({
       icon: icons[i] || '✅',
       label: `ПЕРЕВАГА ${i+1}`,
-      value: b.replace(/^[✓•]\s*/,'').slice(0,22),
+      value: b.replace(/^[✓•]\s*/,'').trim(),
     }));
 
   if (specs.length === 0) {
@@ -49,18 +49,18 @@ export async function POST(req: NextRequest) {
         background:`linear-gradient(150deg, ${bgColor}f5 0%, ${bgColor}99 55%, ${bgColor}ee 100%)`,
         display:'flex'}} />
       {photoSrc && (
-        <div style={{position:'absolute',right:28,top:80,width:460,height:500,
+        <div style={{position:'absolute',right:20,top:60,width:480,height:560,
           display:'flex',alignItems:'center',justifyContent:'center'}}>
-          <img src={photoSrc} width={460} height={500}
-            style={{maxWidth:460,maxHeight:500,objectFit:'contain',
+          <img src={photoSrc} width={480} height={560}
+            style={{maxWidth:480,maxHeight:560,objectFit:'contain',
               filter:'drop-shadow(0 24px 64px rgba(0,0,0,0.9))'}} />
         </div>
       )}
       <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',padding:'52px 48px 44px'}}>
         <div style={{width:56,height:5,background:accentColor,borderRadius:3,marginBottom:24,display:'flex'}} />
         <div style={{display:'flex',flexDirection:'column',marginBottom:10}}>
-          <div style={{fontSize:54,fontWeight:700,color:'#ffffff',lineHeight:1.05,display:'flex'}}>{line1}</div>
-          {line2 && <div style={{fontSize:54,fontWeight:700,color:accentColor,lineHeight:1.05,display:'flex'}}>{line2}</div>}
+          <div style={{fontSize:48,fontWeight:700,color:'#ffffff',lineHeight:1.05,display:'flex'}}>{line1}</div>
+          {line2 && <div style={{fontSize:48,fontWeight:700,color:accentColor,lineHeight:1.05,display:'flex'}}>{line2}</div>}
         </div>
         <div style={{width:72,height:3,background:accentColor,borderRadius:2,marginBottom:36,display:'flex'}} />
         <div style={{display:'flex',flexDirection:'column',gap:14,maxWidth:470}}>
@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
               <div style={{fontSize:26,width:36,display:'flex',alignItems:'center',justifyContent:'center'}}>{s.icon}</div>
               <div style={{display:'flex',flexDirection:'column',gap:2}}>
                 <div style={{fontSize:11,fontWeight:700,color:accentColor,letterSpacing:1.5,display:'flex'}}>{s.label}</div>
-                <div style={{fontSize:18,fontWeight:700,color:'#ffffff',display:'flex'}}>{s.value}</div>
+                <div style={{fontSize:15,fontWeight:500,color:'#ffffff',display:'flex',flexWrap:'wrap',lineHeight:1.4}}>{s.value}</div>
               </div>
             </div>
           ))}

@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
           <div style={{width:'100%',height:1,background:T.accent,opacity:0.3,marginBottom:26,display:'flex'}} />
           <div style={{display:'flex',flexDirection:'column',gap:20,flex:1}}>
             {b.map((bull,i)=>{
-              const bL=lines(bull,28);
+              const bL=lines(bull,32);
               return (
                 <div key={i} style={{display:'flex',alignItems:'flex-start',gap:12}}>
                   <div style={{width:26,height:26,borderRadius:'50%',background:T.accent,
@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
 
   } else if (template === 'callout') {
     const callouts = [
-      {x:24,  y:160, text:b[0]||'Висока якість',       isLeft:true},
+      {x:16,  y:160, text:b[0]||'Висока якість',       isLeft:true},
       {x:660, y:220, text:b[1]||'Ергономічний дизайн', isLeft:false},
       {x:640, y:620, text:b[2]||'Надійна конструкція', isLeft:false},
     ].slice(0,Math.max(b.length,2));
@@ -106,13 +106,13 @@ export async function POST(req: NextRequest) {
           <div style={{fontSize:20,fontWeight:700,color:T.accent,display:'flex'}}>{productName}</div>
         </div>
         {callouts.map((c,i)=>{
-          const cL=lines(c.text,20); const bh=cL.length*26+20;
+          const cL=lines(c.text,24); const bh=cL.length*28+24;
           return (
-            <div key={i} style={{position:'absolute',left:c.x,top:c.y,width:196,minHeight:bh,
+            <div key={i} style={{position:'absolute',left:c.x,top:c.y,width:220,minHeight:bh,
               background:'rgba(0,0,0,0.88)',borderRadius:10,
               borderLeft:`4px solid ${T.accent}`,
               display:'flex',flexDirection:'column',padding:'10px 12px',gap:3}}>
-              {cL.map((l,li)=><div key={li} style={{fontSize:14,color:'#fff',lineHeight:1.5,display:'flex'}}>{l}</div>)}
+              {cL.map((l,li)=><div key={li} style={{fontSize:15,color:'#fff',lineHeight:1.5,display:'flex'}}>{l}</div>)}
               {/* Arrow line */}
               <div style={{position:'absolute',top:'50%',marginTop:-1,
                 ...(c.isLeft?{right:-44,width:40}:{left:-44,width:40}),

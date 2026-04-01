@@ -217,6 +217,29 @@ export default function GeneratePage() {
     if (fileRef.current) fileRef.current.value = '';
   }
 
+  // ── Compress image for API (max 1024px, JPEG 85%) to avoid 413 / timeout ───
+  function compressForApi(base64: string): Promise<string> {
+    return new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 1024;
+        const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d')!;
+        // White background for PNG with transparency (remove-bg output)
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = () => resolve(base64); // fallback: send as-is
+      img.src = base64;
+    });
+  }
+
   // ── Generate card ─────────────────────────────────────────────────────────
   const generate = useCallback(async () => {
     if (!productName.trim() || loading) return;
@@ -227,8 +250,9 @@ export default function GeneratePage() {
     setResult(null);
 
     try {
-      // Use processed photo (cropped + no-bg) if ready, else original
-      const photoToSend = processedPhoto ?? originalPhoto ?? null;
+      // Use processed photo (cropped + no-bg), compress to avoid 413 on Vercel
+      const rawPhoto = processedPhoto ?? originalPhoto ?? null;
+      const photoToSend = rawPhoto ? await compressForApi(rawPhoto) : null;
 
       const res = await fetch('/api/generate', {
         method:  'POST',
@@ -253,10 +277,9 @@ export default function GeneratePage() {
     }
 
     setLoading(false);
-  }, [
-    productName, category, features, platform, tone, lang,
-    genImage, processedPhoto, originalPhoto, cardsLeft, loading, accessToken,
-  ]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productName, category, features, platform, tone, lang,
+    genImage, processedPhoto, originalPhoto, cardsLeft, loading, accessToken]);
 
   function copyAll() {
     if (!result) return;

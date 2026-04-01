@@ -13,8 +13,9 @@ const PLATFORMS = [
 
 const STEPS = [
   '🔍 Аналізую фото товару...',
-  '🎨 Розробляю унікальний дизайн...',
-  '⚡ Генерую банер...',
+  '✂️ Видаляю фон товару...',
+  '🎨 DALL-E 3 генерує унікальний фон...',
+  '⚡ Збираю фінальний банер...',
   '✓ Готово!',
 ];
 
@@ -317,9 +318,10 @@ export default function BannerPage() {
                     <p className="text-white/70 text-sm font-medium">{STEPS[stepIdx]}</p>
                     <p className="text-white/30 text-xs mt-1">
                       {stepIdx === 0 && 'GPT-4o аналізує ваш товар'}
-                      {stepIdx === 1 && 'Створюю унікальну концепцію'}
-                      {stepIdx === 2 && 'gpt-image-1 генерує зображення (~20-30 сек)'}
-                      {stepIdx === 3 && 'Зберігаємо результат'}
+                      {stepIdx === 1 && 'Remove.bg прибирає фон'}
+                      {stepIdx === 2 && 'DALL-E 3 створює унікальний фон (~20 сек)'}
+                      {stepIdx === 3 && 'sharp збирає фінальний банер'}
+                      {stepIdx === 4 && 'Зберігаємо результат'}
                     </p>
                   </div>
                 </div>

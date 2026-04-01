@@ -1,48 +1,137 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import Link from 'next/link';
 import type { SavedCard } from '@/types';
 
 const PLATFORM_LABELS: Record<string, string> = {
-  prom: 'Prom.ua', rozetka: 'Rozetka', olx: 'OLX', general: 'Загальний'
+  prom: 'Prom.ua', rozetka: 'Rozetka', olx: 'OLX', general: 'Загальний',
 };
+
+interface ChatMsg {
+  role: 'user' | 'assistant';
+  content: string;
+  changed?: string[];
+}
 
 function CopyBtn({ text, label }: { text: string; label: string }) {
   const [ok, setOk] = useState(false);
   return (
-    <button onClick={() => { navigator.clipboard.writeText(text); setOk(true); setTimeout(() => setOk(false), 2000); }}
-      className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all border ${ok ? 'bg-green-600 text-white border-green-600' : 'border-gray-200 text-gray-400 hover:border-gray-400 hover:text-gray-700'}`}>
+    <button
+      onClick={() => { navigator.clipboard.writeText(text); setOk(true); setTimeout(() => setOk(false), 2000); }}
+      className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all border ${
+        ok ? 'bg-green-600 text-white border-green-600' : 'border-gray-200 text-gray-400 hover:border-gray-400 hover:text-gray-700'
+      }`}
+    >
       {ok ? '✓ Скопійовано!' : label}
     </button>
   );
 }
 
+function AIBadge({ show }: { show: boolean }) {
+  if (!show) return null;
+  return (
+    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded"
+      style={{ background: 'rgba(200,168,75,0.15)', color: '#c8a84b' }}>
+      AI змінив
+    </span>
+  );
+}
+
+const SUGGESTIONS = [
+  'Зроби заголовок коротшим',
+  'Перепиши опис більш продаючим',
+  'Додай цифри у переваги',
+  'Додай заклик до дії',
+  'Більше SEO ключових слів',
+];
+
 export default function CardPage() {
-  const router = useRouter();
-  const params = useParams();
+  const router   = useRouter();
+  const params   = useParams();
   const supabase = createClient();
-  const [card, setCard] = useState<SavedCard | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [allCopied, setAllCopied] = useState(false);
+
+  const [card,        setCard]        = useState<SavedCard | null>(null);
+  const [loading,     setLoading]     = useState(true);
+  const [allCopied,   setAllCopied]   = useState(false);
+  const [accessToken, setAccessToken] = useState('');
+
+  const [chatOpen,    setChatOpen]    = useState(false);
+  const [messages,    setMessages]    = useState<ChatMsg[]>([]);
+  const [input,       setInput]       = useState('');
+  const [aiLoading,   setAiLoading]   = useState(false);
+  const [lastChanged, setLastChanged] = useState<string[]>([]);
+
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const inputRef   = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    async function load() {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) { router.push('/auth'); return; }
+      setAccessToken(session.access_token);
+    });
+    (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.push('/auth'); return; }
-
       const { data } = await supabase
         .from('cards').select('*')
         .eq('id', params.id).eq('user_id', user.id)
         .single();
-
       if (!data) { router.push('/dashboard'); return; }
       setCard(data as SavedCard);
       setLoading(false);
+    })();
+  }, [params.id]); // eslint-disable-line
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, aiLoading]);
+
+  const sendMessage = useCallback(async (text: string) => {
+    if (!text.trim() || !card || aiLoading) return;
+    setMessages(prev => [...prev, { role: 'user', content: text }]);
+    setInput('');
+    setAiLoading(true);
+    setLastChanged([]);
+    try {
+      const res = await fetch('/api/edit-card', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({
+          cardId: card.id,
+          userMessage: text,
+          card: {
+            product_name: card.product_name,
+            platform: card.platform,
+            title: card.title,
+            description: card.description,
+            bullets: card.bullets,
+            keywords: card.keywords,
+          },
+          history: messages.slice(-6),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Помилка AI');
+      if (data.diff && Object.keys(data.diff).length > 0) {
+        setCard(prev => prev ? { ...prev, ...data.diff } : prev);
+        setLastChanged(data.changedFields ?? []);
+      }
+      setMessages(prev => [
+        ...prev,
+        { role: 'assistant', content: data.explanation ?? 'Готово', changed: data.changedFields },
+      ]);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Помилка сервера';
+      setMessages(prev => [...prev, { role: 'assistant', content: '⚠️ ' + msg }]);
     }
-    load();
-  }, [params.id]);
+    setAiLoading(false);
+  }, [card, messages, accessToken, aiLoading]);
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input); }
+  }
 
   function copyAll() {
     if (!card) return;
@@ -60,18 +149,15 @@ export default function CardPage() {
 
   function downloadCSV() {
     if (!card) return;
-    const bullets = card.bullets as string[];
-    const keywords = card.keywords as string[];
     const rows = [
       ['Назва', 'Опис', 'Переваги', 'Ключові слова', 'Платформа'],
-      [card.title, card.description, bullets.join(' | '), keywords.join(', '), card.platform],
+      [card.title, card.description, (card.bullets as string[]).join(' | '), (card.keywords as string[]).join(', '), card.platform],
     ];
     const csv = '\uFEFF' + rows.map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(';')).join('\n');
-    const a = Object.assign(document.createElement('a'), {
+    Object.assign(document.createElement('a'), {
       href: URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' })),
       download: `kartka-${card.id.slice(0, 8)}.csv`,
-    });
-    a.click();
+    }).click();
   }
 
   if (loading) return (
@@ -79,120 +165,256 @@ export default function CardPage() {
       <div className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin" />
     </div>
   );
-
   if (!card) return null;
 
-  const bullets = card.bullets as string[];
+  const bullets  = card.bullets  as string[];
   const keywords = card.keywords as string[];
   const platform = PLATFORM_LABELS[card.platform] ?? card.platform;
-  const date = new Date(card.created_at).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' });
+  const date     = new Date(card.created_at).toLocaleDateString('uk-UA', {
+    day: 'numeric', month: 'long', year: 'numeric',
+  });
 
   return (
-    <div className="min-h-screen px-4 sm:px-6 py-8 max-w-3xl mx-auto">
-      {/* Header */}
+    <div className="min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto">
+
       <div className="flex items-center justify-between mb-8">
         <Link href="/dashboard" className="text-white/40 text-sm hover:text-white transition-colors">← Кабінет</Link>
         <div className="flex items-center gap-3">
           <span className="text-white/25 text-xs">{date}</span>
-          <span className="text-xs bg-white/8 text-white/40 px-2.5 py-1 rounded-full">{platform}</span>
+          <span className="text-xs bg-white/[0.08] text-white/40 px-2.5 py-1 rounded-full">{platform}</span>
         </div>
       </div>
 
-      {/* Card */}
-      <div className="bg-white rounded-2xl overflow-hidden shadow-2xl">
-        {/* Card header */}
-        <div className="bg-navy px-5 py-4 flex items-center justify-between gap-3">
-          <span className="bg-white/15 text-white text-xs font-bold px-3 py-1 rounded-full">{platform}</span>
-          <div className="flex items-center gap-3">
-            <span className="text-white/40 text-xs">{card.title.length}/80 симв.</span>
+      <div className={`grid gap-6 ${chatOpen ? 'lg:grid-cols-2' : 'max-w-3xl mx-auto'}`}>
+
+        {/* ── Card ── */}
+        <div className="bg-white rounded-2xl overflow-hidden shadow-2xl">
+
+          <div className="bg-navy px-5 py-4 flex items-center justify-between gap-3">
+            <span className="bg-white/15 text-white text-xs font-bold px-3 py-1 rounded-full">{platform}</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => { setChatOpen(v => !v); setTimeout(() => inputRef.current?.focus(), 150); }}
+                className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-all ${
+                  chatOpen ? 'bg-gold text-black' : 'bg-white/15 text-white hover:bg-white/25'
+                }`}
+              >
+                ✦ AI редагування
+              </button>
+              <span className="text-white/40 text-xs">{card.title.length}/80</span>
+              <button
+                onClick={copyAll}
+                className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-all ${
+                  allCopied ? 'bg-green-500 text-white' : 'bg-white/15 text-white hover:bg-white/25'
+                }`}
+              >
+                {allCopied ? '✓ Все скопійовано!' : '📋 Копіювати все'}
+              </button>
+            </div>
+          </div>
+
+          <div className="p-5 sm:p-6 space-y-4">
+
+            {card.image_url && (
+              <div className="relative group">
+                <img src={card.image_url} alt={card.title}
+                  className="w-full h-44 sm:h-52 object-contain bg-gray-50 rounded-xl" />
+                <a href={card.image_url} download target="_blank" rel="noreferrer"
+                  className="absolute bottom-3 right-3 bg-black/70 text-white text-xs px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity font-semibold">
+                  ⬇ Завантажити
+                </a>
+              </div>
+            )}
+
+            {/* Title */}
+            <div className={`rounded-xl p-4 transition-colors ${lastChanged.includes('title') ? 'bg-yellow-50 ring-1 ring-yellow-200' : 'bg-gray-50'}`}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Заголовок</span>
+                  <AIBadge show={lastChanged.includes('title')} />
+                </div>
+                <CopyBtn text={card.title} label="Копіювати" />
+              </div>
+              <h2 className="font-bold text-lg text-navy leading-tight">{card.title}</h2>
+            </div>
+
+            {/* Description */}
+            <div className={`rounded-xl p-4 transition-colors ${lastChanged.includes('description') ? 'bg-yellow-50 ring-1 ring-yellow-200' : 'bg-gray-50'}`}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Опис</span>
+                  <AIBadge show={lastChanged.includes('description')} />
+                </div>
+                <CopyBtn text={card.description} label="Копіювати" />
+              </div>
+              <p className="text-gray-700 text-sm leading-relaxed">{card.description}</p>
+            </div>
+
+            {/* Bullets */}
+            {bullets.length > 0 && (
+              <div className={`rounded-xl p-4 transition-colors ${lastChanged.includes('bullets') ? 'bg-yellow-50 ring-1 ring-yellow-200' : 'bg-gray-50'}`}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Переваги</span>
+                    <AIBadge show={lastChanged.includes('bullets')} />
+                  </div>
+                  <CopyBtn text={bullets.map(b => '• ' + b).join('\n')} label="Копіювати" />
+                </div>
+                <ul className="space-y-2">
+                  {bullets.map((b, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-gray-700 border-b border-gray-100 pb-2 last:border-0">
+                      <span className="text-navy font-bold mt-0.5 shrink-0">✓</span>{b}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Keywords */}
+            {keywords.length > 0 && (
+              <div className={`rounded-xl p-4 transition-colors ${lastChanged.includes('keywords') ? 'bg-yellow-50 ring-1 ring-yellow-200' : 'bg-gray-50'}`}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Ключові слова</span>
+                    <AIBadge show={lastChanged.includes('keywords')} />
+                  </div>
+                  <CopyBtn text={keywords.join(', ')} label="Копіювати" />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {keywords.map(k => (
+                    <button key={k} onClick={() => navigator.clipboard.writeText(k)}
+                      className="bg-blue-50 text-navy text-xs font-medium px-3 py-1 rounded-full hover:bg-blue-100 transition-colors cursor-copy">
+                      {k}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="px-5 sm:px-6 pb-6 grid grid-cols-1 sm:grid-cols-3 gap-2">
             <button onClick={copyAll}
-              className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-all ${allCopied ? 'bg-green-500 text-white' : 'bg-white/15 text-white hover:bg-white/25'}`}>
+              className={`px-4 py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${
+                allCopied ? 'bg-green-600 text-white' : 'bg-gray-900 text-white hover:bg-gray-700'
+              }`}>
               {allCopied ? '✓ Скопійовано!' : '📋 Копіювати все'}
             </button>
+            <button onClick={downloadCSV}
+              className="bg-green-700 text-white px-4 py-3 rounded-xl text-sm font-semibold hover:bg-green-600 transition-colors flex items-center justify-center gap-2">
+              ⬇ Завантажити CSV
+            </button>
+            <Link href="/generate"
+              className="border border-gray-200 text-gray-500 px-4 py-3 rounded-xl text-sm font-semibold hover:border-gray-400 hover:text-gray-700 transition-colors flex items-center justify-center gap-2 text-center">
+              ✦ Нова картка
+            </Link>
           </div>
         </div>
 
-        <div className="p-5 sm:p-7 space-y-5">
-          {/* Image */}
-          {card.image_url && (
-            <div className="relative group">
-              <img src={card.image_url} alt={card.title} className="w-full h-48 sm:h-64 object-cover rounded-xl" />
-              <a href={card.image_url} download target="_blank" rel="noreferrer"
-                className="absolute bottom-3 right-3 bg-black/70 text-white text-xs px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity font-semibold">
-                ⬇ Завантажити
-              </a>
-            </div>
-          )}
+        {/* ── Chat panel ── */}
+        {chatOpen && (
+          <div className="flex flex-col bg-white/[0.04] border border-white/10 rounded-2xl overflow-hidden"
+            style={{ height: '640px' }}>
 
-          {/* Title */}
-          <div className="bg-gray-50 rounded-xl p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Заголовок</span>
-              <CopyBtn text={card.title} label="Копіювати" />
-            </div>
-            <h2 className="font-display font-bold text-lg text-navy leading-tight">{card.title}</h2>
-          </div>
-
-          {/* Description */}
-          <div className="bg-gray-50 rounded-xl p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Опис</span>
-              <CopyBtn text={card.description} label="Копіювати" />
-            </div>
-            <p className="text-gray-700 text-sm leading-relaxed">{card.description}</p>
-          </div>
-
-          {/* Bullets */}
-          {bullets.length > 0 && (
-            <div className="bg-gray-50 rounded-xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Переваги</span>
-                <CopyBtn text={bullets.map(b => '• ' + b).join('\n')} label="Копіювати" />
+            <div className="px-5 py-4 border-b border-white/[0.08] flex items-center justify-between shrink-0">
+              <div>
+                <p className="text-white text-sm font-bold">✦ AI редагування</p>
+                <p className="text-white/30 text-xs">Скажи що змінити — AI оновить картку</p>
               </div>
-              <ul className="space-y-2">
-                {bullets.map((b, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-gray-700 border-b border-gray-100 pb-2 last:border-0">
-                    <span className="text-navy font-bold mt-0.5 shrink-0">✓</span>{b}
-                  </li>
-                ))}
-              </ul>
+              <button onClick={() => setChatOpen(false)}
+                className="text-white/30 hover:text-white text-xl leading-none transition-colors">✕</button>
             </div>
-          )}
 
-          {/* Keywords */}
-          {keywords.length > 0 && (
-            <div className="bg-gray-50 rounded-xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Ключові слова</span>
-                <CopyBtn text={keywords.join(', ')} label="Копіювати" />
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {keywords.map(k => (
-                  <button key={k} onClick={() => navigator.clipboard.writeText(k)}
-                    className="bg-blue-50 text-navy text-xs font-medium px-3 py-1 rounded-full hover:bg-blue-100 transition-colors cursor-copy">
-                    {k}
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+
+              {messages.length === 0 && (
+                <div className="text-center py-8">
+                  <p className="text-4xl mb-3">✦</p>
+                  <p className="text-white/50 text-sm mb-5">
+                    Я можу змінити будь-яку частину картки.<br />
+                    Спробуй одну з підказок:
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    {SUGGESTIONS.map(s => (
+                      <button key={s} onClick={() => sendMessage(s)}
+                        className="text-xs px-4 py-2 rounded-xl border border-white/15 text-white/50 hover:border-gold/50 hover:text-gold transition-all text-left">
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {messages.map((m, i) => (
+                <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${
+                    m.role === 'user'
+                      ? 'bg-gold text-black rounded-br-sm'
+                      : 'bg-white/[0.08] text-white/90 rounded-bl-sm'
+                  }`}>
+                    <p className="leading-relaxed">{m.content}</p>
+                    {m.role === 'assistant' && m.changed && m.changed.length > 0 && (
+                      <p className="text-white/35 text-[10px] mt-1">
+                        Змінено: {m.changed.join(', ')}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {aiLoading && (
+                <div className="flex justify-start">
+                  <div className="bg-white/[0.08] rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-1.5">
+                    {[0, 150, 300].map(d => (
+                      <span key={d} className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce"
+                        style={{ animationDelay: `${d}ms` }} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Quick pills after first message */}
+            {messages.length > 0 && !aiLoading && (
+              <div className="px-4 py-2 flex gap-2 overflow-x-auto shrink-0 border-t border-white/[0.06]">
+                {SUGGESTIONS.slice(0, 3).map(s => (
+                  <button key={s} onClick={() => sendMessage(s)}
+                    className="text-[11px] whitespace-nowrap px-3 py-1 rounded-full border border-white/15 text-white/40 hover:border-gold/40 hover:text-gold transition-all shrink-0">
+                    {s}
                   </button>
                 ))}
               </div>
-            </div>
-          )}
-        </div>
+            )}
 
-        {/* Actions */}
-        <div className="px-5 sm:px-7 pb-6 grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <button onClick={copyAll}
-            className={`px-4 py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${allCopied ? 'bg-green-600 text-white' : 'bg-gray-900 text-white hover:bg-gray-700'}`}>
-            {allCopied ? '✓ Скопійовано!' : '📋 Копіювати все'}
-          </button>
-          <button onClick={downloadCSV}
-            className="bg-green-700 text-white px-4 py-3 rounded-xl text-sm font-semibold hover:bg-green-600 transition-colors flex items-center justify-center gap-2">
-            ⬇ Завантажити CSV
-          </button>
-          <Link href={`/generate`}
-            className="border border-gray-200 text-gray-500 px-4 py-3 rounded-xl text-sm font-semibold hover:border-gray-400 hover:text-gray-700 transition-colors flex items-center justify-center gap-2 text-center">
-            ✦ Нова картка
-          </Link>
-        </div>
+            {/* Input */}
+            <div className="px-4 pb-4 pt-2 shrink-0">
+              <div className="flex gap-2 items-end">
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Що змінити? (Enter — відправити)"
+                  rows={2}
+                  disabled={aiLoading}
+                  className="flex-1 bg-white/[0.06] border border-white/10 rounded-xl px-4 py-3 text-white text-sm placeholder:text-white/25 focus:outline-none focus:border-gold/40 resize-none disabled:opacity-50 transition-colors"
+                />
+                <button
+                  onClick={() => sendMessage(input)}
+                  disabled={!input.trim() || aiLoading}
+                  className="bg-gold text-black px-4 py-3 rounded-xl font-bold text-sm hover:bg-gold/90 transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
+                >
+                  ↑
+                </button>
+              </div>
+              <p className="text-white/20 text-[10px] mt-1.5 text-center">
+                Shift+Enter — новий рядок · зміни зберігаються автоматично
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

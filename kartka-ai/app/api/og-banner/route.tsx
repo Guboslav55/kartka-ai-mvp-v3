@@ -23,11 +23,20 @@ function lines(text: string, max: number): string[] {
 }
 
 export async function POST(req: NextRequest) {
-  const { productName='', price='', bullets=[], bgStyle='dark', template='benefits', productB64=null } = await req.json();
+  const {
+    productName='', price='', bullets=[], bgStyle='dark',
+    template='benefits',
+    photoUrl=null,   // Public Supabase URL — original quality
+    productB64=null, // Fallback: base64 (compressed)
+  } = await req.json();
+
   const T = THEMES[bgStyle as ThemeKey] ?? THEMES.dark;
-  const b = (bullets as string[]).filter((x:string)=>x.trim()).slice(0,3).map((x:string)=>x.replace(/^[✓•]\s*/,'').trim());
+  const b = (bullets as string[]).filter((x:string)=>x.trim()).slice(0,3)
+    .map((x:string)=>x.replace(/^[✓•]\s*/,'').trim());
   const W=1024, H=1024;
-  const photoSrc = productB64 as string | null;
+
+  // Prefer public URL (original quality) over base64 (compressed)
+  const photoSrc: string | null = photoUrl || productB64;
 
   let el: JSX.Element;
 
@@ -37,7 +46,7 @@ export async function POST(req: NextRequest) {
       <div style={{width:W,height:H,display:'flex',position:'relative',background:T.bg}}>
         {photoSrc && (
           <img src={photoSrc} width={614} height={1024}
-            style={{position:'absolute',left:0,top:0,width:'60%',height:'100%',objectFit:'cover'}} />
+            style={{position:'absolute',left:0,top:0,width:'60%',height:'100%',objectFit:'cover',objectPosition:'center'}} />
         )}
         <div style={{position:'absolute',left:0,top:0,width:'65%',height:'100%',
           background:`linear-gradient(to right, transparent 35%, ${T.bg} 90%)`,display:'flex'}} />
@@ -54,7 +63,9 @@ export async function POST(req: NextRequest) {
               const bL=lines(bull,28);
               return (
                 <div key={i} style={{display:'flex',alignItems:'flex-start',gap:12}}>
-                  <div style={{width:26,height:26,borderRadius:'50%',background:T.accent,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:13,fontWeight:700,color:'#000',marginTop:2}}>+</div>
+                  <div style={{width:26,height:26,borderRadius:'50%',background:T.accent,
+                    display:'flex',alignItems:'center',justifyContent:'center',
+                    flexShrink:0,fontSize:14,fontWeight:700,color:'#000',marginTop:2}}>✓</div>
                   <div style={{display:'flex',flexDirection:'column',gap:2}}>
                     {bL.map((l,li)=><div key={li} style={{fontSize:16,color:T.text,lineHeight:1.45,display:'flex'}}>{l}</div>)}
                   </div>
@@ -63,54 +74,68 @@ export async function POST(req: NextRequest) {
             })}
           </div>
           {price && (
-            <div style={{marginTop:24,padding:'14px 0',borderRadius:12,border:`1.5px solid ${T.accent}`,background:`${T.accent}18`,display:'flex',alignItems:'center',justifyContent:'center'}}>
-              <div style={{fontSize:34,fontWeight:700,color:T.accent,display:'flex'}}>{price} грн</div>
+            <div style={{marginTop:24,padding:'14px 0',borderRadius:12,
+              border:`1.5px solid ${T.accent}`,background:`${T.accent}18`,
+              display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <div style={{fontSize:34,fontWeight:700,color:T.accent,display:'flex'}}>{price} ₴</div>
             </div>
           )}
         </div>
       </div>
     );
+
   } else if (template === 'callout') {
     const callouts = [
-      {x:24,  y:140, text:b[0]||'Висока якiсть',       isLeft:true},
-      {x:670, y:200, text:b[1]||'Ергономiчний дизайн',  isLeft:false},
-      {x:648, y:630, text:b[2]||'Надiйна конструкцiя',  isLeft:false},
+      {x:24,  y:160, text:b[0]||'Висока якість',       isLeft:true},
+      {x:660, y:220, text:b[1]||'Ергономічний дизайн', isLeft:false},
+      {x:640, y:620, text:b[2]||'Надійна конструкція', isLeft:false},
     ].slice(0,Math.max(b.length,2));
+
     el = (
       <div style={{width:W,height:H,display:'flex',position:'relative',background:T.bg}}>
         {photoSrc && (
           <img src={photoSrc} width={1024} height={1024}
-            style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',opacity:0.82}} />
+            style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',opacity:0.9}} />
         )}
-        <div style={{position:'absolute',inset:0,background:'radial-gradient(ellipse at center, transparent 25%, rgba(0,0,0,0.55) 100%)',display:'flex'}} />
-        <div style={{position:'absolute',top:32,left:90,right:90,height:56,background:'rgba(0,0,0,0.78)',borderRadius:28,display:'flex',alignItems:'center',justifyContent:'center'}}>
-          <div style={{fontSize:21,fontWeight:700,color:T.accent,display:'flex'}}>{productName}</div>
+        <div style={{position:'absolute',inset:0,
+          background:'radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.6) 100%)',
+          display:'flex'}} />
+        <div style={{position:'absolute',top:32,left:80,right:80,height:58,
+          background:'rgba(0,0,0,0.75)',borderRadius:30,
+          display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{fontSize:20,fontWeight:700,color:T.accent,display:'flex'}}>{productName}</div>
         </div>
         {callouts.map((c,i)=>{
-          const cL=lines(c.text,22); const bh=cL.length*28+20;
+          const cL=lines(c.text,20); const bh=cL.length*26+20;
           return (
-            <div key={i} style={{position:'absolute',left:c.x,top:c.y,width:204,minHeight:bh,
-              background:'rgba(0,0,0,0.86)',borderRadius:10,borderLeft:`4px solid ${T.accent}`,
-              display:'flex',flexDirection:'column',padding:'10px 14px',gap:3}}>
+            <div key={i} style={{position:'absolute',left:c.x,top:c.y,width:196,minHeight:bh,
+              background:'rgba(0,0,0,0.88)',borderRadius:10,
+              borderLeft:`4px solid ${T.accent}`,
+              display:'flex',flexDirection:'column',padding:'10px 12px',gap:3}}>
               {cL.map((l,li)=><div key={li} style={{fontSize:14,color:'#fff',lineHeight:1.5,display:'flex'}}>{l}</div>)}
+              {/* Arrow line */}
               <div style={{position:'absolute',top:'50%',marginTop:-1,
-                ...(c.isLeft?{right:-48,width:44}:{left:-48,width:44}),
-                height:2,background:T.accent,opacity:0.8,display:'flex'}} />
-              <div style={{position:'absolute',top:'50%',marginTop:-6,width:12,height:12,
-                borderRadius:'50%',background:T.accent,
-                ...(c.isLeft?{right:-60}:{left:-60}),display:'flex'}} />
+                ...(c.isLeft?{right:-44,width:40}:{left:-44,width:40}),
+                height:2,background:T.accent,opacity:0.85,display:'flex'}} />
+              {/* Dot */}
+              <div style={{position:'absolute',top:'50%',marginTop:-5,
+                width:10,height:10,borderRadius:'50%',background:T.accent,
+                ...(c.isLeft?{right:-54}:{left:-54}),display:'flex'}} />
             </div>
           );
         })}
         {price && (
-          <div style={{position:'absolute',bottom:60,left:312,width:400,height:64,
-            background:'rgba(0,0,0,0.84)',borderRadius:12,display:'flex',alignItems:'center',justifyContent:'center'}}>
-            <div style={{fontSize:36,fontWeight:700,color:T.accent,display:'flex'}}>{price} грн</div>
+          <div style={{position:'absolute',bottom:56,left:300,width:424,height:66,
+            background:'rgba(0,0,0,0.85)',borderRadius:12,
+            display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <div style={{fontSize:38,fontWeight:700,color:T.accent,display:'flex'}}>{price} ₴</div>
           </div>
         )}
       </div>
     );
+
   } else {
+    // CTA
     const nameL = lines(productName, 18);
     el = (
       <div style={{width:W,height:H,display:'flex',position:'relative',background:T.bg}}>
@@ -121,29 +146,31 @@ export async function POST(req: NextRequest) {
         <div style={{position:'absolute',left:0,top:0,width:'56%',height:'100%',
           background:`linear-gradient(to right, transparent 25%, ${T.bg} 88%)`,display:'flex'}} />
         <div style={{position:'absolute',right:0,top:0,width:'52%',height:'100%',
-          display:'flex',flexDirection:'column',justifyContent:'center',padding:'60px 48px 60px 36px'}}>
-          <div style={{fontSize:11,fontWeight:700,color:T.accent,letterSpacing:2,marginBottom:14,display:'flex'}}>НОВА КОЛЕКЦIЯ</div>
-          <div style={{display:'flex',flexDirection:'column',gap:2,marginBottom:22}}>
-            {nameL.map((l,i)=><div key={i} style={{fontSize:nameL.length>1?25:29,fontWeight:700,color:T.text,lineHeight:1.25,display:'flex'}}>{l}</div>)}
+          display:'flex',flexDirection:'column',justifyContent:'center',
+          padding:'60px 44px 60px 32px'}}>
+          <div style={{fontSize:11,fontWeight:700,color:T.accent,letterSpacing:2,marginBottom:14,display:'flex'}}>НОВА КОЛЕКЦІЯ</div>
+          <div style={{display:'flex',flexDirection:'column',gap:3,marginBottom:22}}>
+            {nameL.map((l,i)=><div key={i} style={{fontSize:nameL.length>1?24:28,fontWeight:700,color:T.text,lineHeight:1.25,display:'flex'}}>{l}</div>)}
           </div>
           <div style={{display:'flex',flexDirection:'column',gap:10,marginBottom:26}}>
             {b.map((bull,i)=>(
               <div key={i} style={{display:'flex',alignItems:'center',gap:10}}>
-                <div style={{fontSize:15,fontWeight:700,color:T.accent,display:'flex'}}>+</div>
-                <div style={{fontSize:14,color:T.sub,display:'flex'}}>{bull.slice(0,42)}</div>
+                <div style={{fontSize:15,fontWeight:700,color:T.accent,display:'flex'}}>✓</div>
+                <div style={{fontSize:14,color:T.sub,display:'flex'}}>{bull.slice(0,40)}</div>
               </div>
             ))}
           </div>
-          {price && <div style={{fontSize:46,fontWeight:700,color:T.accent,marginBottom:18,display:'flex'}}>{price} грн</div>}
-          <div style={{width:340,height:60,borderRadius:12,background:T.accent,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          {price && <div style={{fontSize:46,fontWeight:700,color:T.accent,marginBottom:18,display:'flex'}}>{price} ₴</div>}
+          <div style={{width:330,height:60,borderRadius:12,background:T.accent,
+            display:'flex',alignItems:'center',justifyContent:'center'}}>
             <div style={{fontSize:17,fontWeight:700,color:'#000',display:'flex'}}>ЗАМОВИТИ ЗАРАЗ</div>
           </div>
+          <div style={{marginTop:10,fontSize:12,color:T.sub,display:'flex'}}>Доставка по всій Україні</div>
         </div>
       </div>
     );
   }
 
-  // No custom fonts - use system fonts to avoid empty response
   return new ImageResponse(el, { width: W, height: H });
 }
 

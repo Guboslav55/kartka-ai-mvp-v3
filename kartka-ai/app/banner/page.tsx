@@ -5,10 +5,11 @@ import { createClient } from '@/lib/supabase';
 import Link from 'next/link';
 
 const TEMPLATES = [
-  { id: 'benefits', name: '✓ Переваги справа', desc: 'Фото + панель переваг' },
-  { id: 'callout',  name: '◎ Callout стрілки', desc: 'Фото + підписи зі стрілками' },
-  { id: 'cta',      name: '💰 Ціна + CTA',     desc: 'Фото + заклик купити' },
-  { id: 'infographic', name: '📊 Інфографіка', desc: 'AI підбирає шаблон під товар' },
+  { id: 'smart',       name: '✦ AI Унікальний',   desc: 'Claude розробляє дизайн під товар' },
+  { id: 'benefits',    name: '✓ Переваги справа',  desc: 'Фото + панель переваг' },
+  { id: 'callout',     name: '◎ Callout стрілки',  desc: 'Фото + підписи зі стрілками' },
+  { id: 'cta',         name: '💰 Ціна + CTA',      desc: 'Фото + заклик купити' },
+  { id: 'infographic', name: '📊 Інфографіка',     desc: 'AI розробляє дизайн під категорію товару' },
 ];
 
 const BG_STYLES = [
@@ -55,7 +56,8 @@ export default function BannerPage() {
   const [finalUrl,    setFinalUrl]    = useState<string | null>(null);
   const [error,       setError]       = useState('');
   const [step,        setStep]        = useState('');
-  const [appliedStyle, setAppliedStyle] = useState('');
+  const [appliedStyle, setAppliedStyle]   = useState('');
+  const [aiDesignInfo, setAiDesignInfo]   = useState<{layout?: string; headline?: string} | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -120,7 +122,7 @@ export default function BannerPage() {
 
   async function generate() {
     if (!productName.trim() && !photoFile) return;
-    setGenerating(true); setError(''); setFinalUrl(null); setAppliedStyle('');
+    setGenerating(true); setError(''); setFinalUrl(null); setAppliedStyle(''); setAiDesignInfo(null);
 
     try {
       // Step 1: Upload original photo
@@ -150,23 +152,68 @@ export default function BannerPage() {
 
       // Step 3: Render
       const isInfographic = template === 'infographic';
-      setStep(isInfographic ? '📊 Генерую інфографіку...' : '🎨 Рендерю банер...');
+      const isSmart       = template === 'smart';
+      setStep(isSmart ? '✦ Claude розробляє дизайн...' : isInfographic ? '📊 Генерую інфографіку...' : '🎨 Рендерю банер...');
 
-      if (isInfographic) {
-        // Infographic uses og-banner (Next.js Edge Image Response)
-        const res = await fetch('/api/og-banner', {
+      if (isSmart) {
+        // ── Smart AI banner: Claude designs, sharp renders ──────────────────
+        const res = await fetch('/api/smart-banner', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
           body:    JSON.stringify({
-            productName, price, bullets, bgStyle, template,
-            photoUrl: uploadedUrl,
+            productName,
+            category: detectedCategory,
+            bullets,
+            price,
+            platform: 'general',
             productB64: finalPhotoB64,
           }),
         });
         if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Помилка генерації');
-        const blob = await res.blob();
-        if (blob.size === 0) throw new Error('Сервер повернув порожній файл');
-        setFinalUrl(URL.createObjectURL(new Blob([blob], { type: 'image/png' })));
+        const d = await res.json();
+        setFinalUrl(d.imageB64 || d.imageUrl);
+        if (d.design) setAiDesignInfo({ layout: d.design.layout, headline: d.design.headline });
+
+      } else if (isInfographic) {
+        // ── Smart infographic: analyze photo → category-aware layout ──────────
+        // Step A: analyze for accent color, callouts, extra specs
+        setStep('🔍 AI аналізує деталі товару...');
+        let infographicMeta = { detectedAccent: '', callouts: [], extraSpecs: [] as {key:string;val:string}[] };
+        try {
+          const analyzeRes = await fetch('/api/analyze-infographic', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+            body:    JSON.stringify({
+              imageBase64: photoPreview,
+              category: detectedCategory,
+              productName,
+              bullets: bullets.filter(Boolean),
+            }),
+          });
+          if (analyzeRes.ok) infographicMeta = await analyzeRes.json();
+        } catch { /* use defaults */ }
+
+        // Step B: render with new infographic route
+        setStep('🎨 Створюю інфографіку...');
+        const infRes = await fetch('/api/infographic', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body:    JSON.stringify({
+            productName,
+            bullets: bullets.filter(Boolean),
+            photoUrl:  uploadedUrl,
+            productB64: finalPhotoB64,
+            category:   detectedCategory,
+            detectedAccent: infographicMeta.detectedAccent,
+            callouts:       infographicMeta.callouts,
+            extraSpecs:     infographicMeta.extraSpecs,
+          }),
+        });
+        if (!infRes.ok) throw new Error((await infRes.json().catch(() => ({}))).error || 'Помилка інфографіки');
+        const infBlob = await infRes.blob();
+        if (infBlob.size === 0) throw new Error('Сервер повернув порожній файл');
+        setFinalUrl(URL.createObjectURL(new Blob([infBlob], { type: 'image/png' })));
+        if (infographicMeta.detectedAccent) setAppliedStyle('AI ДИЗАЙН');
 
       } else {
         // All other templates use render-banner (sharp compositing + category styles)
@@ -259,7 +306,7 @@ export default function BannerPage() {
                         setPhotoFile(null); setPhotoPreview(null);
                         setPhotoUrl(null); setPhotoName('');
                         setFinalUrl(null); setDetectedCategory('');
-                        setAppliedStyle('');
+                        setAppliedStyle(''); setAiDesignInfo(null);
                       }}
                       className="text-white/25 text-xs hover:text-red-400 mt-1 block"
                     >
@@ -449,6 +496,8 @@ export default function BannerPage() {
                 <span className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
                 {step || 'Завантажую...'}
               </>
+            ) : template === 'smart' ? (
+              '✦ AI — зробити унікальний банер'
             ) : template === 'infographic' ? (
               '📊 Згенерувати інфографіку'
             ) : (
@@ -466,7 +515,6 @@ export default function BannerPage() {
             <div className="px-5 py-3 border-b border-white/[0.08] flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-gold text-xs font-bold uppercase tracking-wider">Результат</span>
-                {/* Applied style badge after generation */}
                 {appliedStyle && (
                   <span
                     className="text-[10px] font-bold px-2 py-0.5 rounded-full"
@@ -476,6 +524,11 @@ export default function BannerPage() {
                     }}
                   >
                     {appliedStyle}
+                  </span>
+                )}
+                {aiDesignInfo && (
+                  <span className="text-[10px] text-white/40 font-mono">
+                    AI: {aiDesignInfo.layout}
                   </span>
                 )}
               </div>
@@ -514,6 +567,13 @@ export default function BannerPage() {
                 </div>
               )}
               {finalUrl && <img src={finalUrl} alt="Banner" className="w-full block" />}
+            {finalUrl && aiDesignInfo?.headline && (
+              <div className="px-4 py-2 bg-black/30 border-t border-white/[0.06]">
+                <p className="text-white/40 text-[11px]">
+                  AI headline: <span className="text-white/60 italic">&ldquo;{aiDesignInfo.headline}&rdquo;</span>
+                </p>
+              </div>
+            )}
             </div>
 
             {finalUrl && (
@@ -538,4 +598,3 @@ export default function BannerPage() {
     </div>
   );
 }
-

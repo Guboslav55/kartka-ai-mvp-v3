@@ -4,7 +4,11 @@ import { NextRequest } from 'next/server';
 export const runtime = 'edge';
 
 export async function POST(req: NextRequest) {
-  const { productName='', bullets=[], productB64=null, accent='#c8a84b', bg='#0d0d0d' } = await req.json();
+  const {
+    productName='', bullets=[], accent='#c8a84b', bg='#0d0d0d',
+    photoUrl=null,   // Public Supabase URL — original quality
+    productB64=null, // Fallback base64
+  } = await req.json();
 
   const W=1024, H=1024;
   const accentColor = accent || '#c8a84b';
@@ -32,7 +36,8 @@ export async function POST(req: NextRequest) {
   const titleWords = (productName || 'ТОВАР').toUpperCase().split(' ');
   const line1 = titleWords.slice(0,2).join(' ');
   const line2 = titleWords.slice(2,4).join(' ');
-  const photoSrc = productB64 as string | null;
+  // Prefer public URL (original quality) over base64
+  const photoSrc: string | null = photoUrl || productB64;
 
   const el = (
     <div style={{width:W,height:H,display:'flex',background:bgColor,position:'relative'}}>
@@ -84,4 +89,5 @@ export async function POST(req: NextRequest) {
   // No fonts - use system fonts to avoid empty response
   return new ImageResponse(el, { width: W, height: H });
 }
+
 

@@ -60,18 +60,7 @@ export default function GeneratePage() {
   const [lastChanged, setLastChanged] = useState<string[]>([]);
   const editEndRef = useRef<HTMLDivElement>(null);
 
-  // Infographic state
-  const [infOpen,     setInfOpen]     = useState(false);
-  const [infVariants, setInfVariants] = useState<{url:string;label:string;prompt:string}[]>([]);
-  const [infSelected, setInfSelected] = useState<number|null>(null);
-  const [infLoading,  setInfLoading]  = useState(false);
-  const [infStep,     setInfStep]     = useState('');
-  const [infError,    setInfError]    = useState('');
-  const [infEditOpen, setInfEditOpen] = useState(false);
-  const [infEditMsgs, setInfEditMsgs] = useState<{role:'user'|'assistant';content:string}[]>([]);
-  const [infEditInput,setInfEditInput]= useState('');
-  const [infEditing,  setInfEditing]  = useState(false);
-  const infEndRef = useRef<HTMLDivElement>(null);
+
  
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -110,10 +99,6 @@ export default function GeneratePage() {
       setResult(data);
       setCardId(data.cardId ?? null);
       setEditMsgs([]);
-      setInfVariants([]);
-      setInfSelected(null);
-      setEditOpen(false);
-      setInfOpen(false);
       setCardsLeft(c => Math.max(0, c - 1));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Помилка сервера. Спробуй ще раз.');
@@ -150,8 +135,6 @@ export default function GeneratePage() {
   }
  
   useEffect(() => { editEndRef.current?.scrollIntoView({ behavior:'smooth' }); }, [editMsgs, editLoading]);
-  useEffect(() => { infEndRef.current?.scrollIntoView({ behavior:'smooth' }); }, [infEditMsgs, infEditing]);
-
   // AI text edit
   async function sendEdit(text: string) {
     if (!text.trim() || !result || editLoading) return;
@@ -183,72 +166,7 @@ export default function GeneratePage() {
     setEditLoading(false);
   }
 
-  // Generate infographic
-  async function generateInfographic() {
-    if (!result) return;
-    setInfLoading(true);
-    setInfError('');
-    setInfVariants([]);
-    setInfSelected(null);
-    setInfEditOpen(false);
-    setInfEditMsgs([]);
-    try {
-      setInfStep('🔍 GPT-4o аналізує товар...');
-      await new Promise(r => setTimeout(r, 400));
-      setInfStep('🎨 DALL-E 3 генерує 3 варіанти паралельно...');
-      const res = await fetch('/api/generate-infographic', {
-        method:'POST',
-        headers:{'Content-Type':'application/json', Authorization:`Bearer ${accessToken}`},
-        body: JSON.stringify({
-          imageUrl: result.imageUrl || null,
-          imageBase64: !result.imageUrl ? uploadedPhoto : null,
-          productName: productName || result.title,
-          description: result.description,
-          bullets: result.bullets,
-          platform,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Помилка генерації');
-      setInfVariants(data.variants ?? []);
-      if (data.variants?.length > 0) setInfSelected(0);
-      setInfStep('');
-    } catch (err: unknown) {
-      setInfError(err instanceof Error ? err.message : 'Помилка');
-      setInfStep('');
-    }
-    setInfLoading(false);
-  }
 
-  // Edit infographic
-  async function sendInfEdit(text: string) {
-    if (!text.trim() || infSelected === null || infEditing) return;
-    const current = infVariants[infSelected];
-    if (!current) return;
-    setInfEditMsgs(prev => [...prev, { role:'user', content: text }]);
-    setInfEditInput('');
-    setInfEditing(true);
-    try {
-      const res = await fetch('/api/edit-infographic', {
-        method:'POST',
-        headers:{'Content-Type':'application/json', Authorization:`Bearer ${accessToken}`},
-        body: JSON.stringify({
-          userMessage: text,
-          currentImageUrl: current.url,
-          originalPrompt: current.prompt,
-          productName: productName || result?.title || '',
-          bullets: result?.bullets || [],
-          history: infEditMsgs.slice(-4),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Помилка');
-      setInfVariants(prev => prev.map((v,i) => i === infSelected ? {...v, url: data.imageUrl, prompt: data.newPrompt} : v));
-      setInfEditMsgs(prev => [...prev, { role:'assistant', content: data.explanation }]);
-    } catch (err: unknown) {
-      setInfEditMsgs(prev => [...prev, { role:'assistant', content:'⚠️ ' + (err instanceof Error ? err.message : 'Помилка') }]);
-    }
-    setInfEditing(false);
   }
 
   if (!ready) return (
@@ -580,114 +498,7 @@ export default function GeneratePage() {
           )}
         </div>
 
-        {/* ── INFOGRAPHIC ──────────────────────────────────────────── */}
-        <div className="mt-4 bg-white/[0.04] border border-white/10 rounded-2xl p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <h3 className="text-white font-bold text-sm">📊 AI Інфографіка</h3>
-              <p className="text-white/35 text-xs mt-0.5">3 унікальних варіанти · DALL-E 3 · 1024×1024</p>
-            </div>
-            <button onClick={generateInfographic} disabled={infLoading}
-              className="bg-gold text-black font-bold px-4 py-2 rounded-xl text-sm hover:bg-gold/80 transition-colors disabled:opacity-50 flex items-center gap-2">
-              {infLoading
-                ? <><span className="w-3.5 h-3.5 border-2 border-black/30 border-t-black rounded-full animate-spin"/>Генерую...</>
-                : infVariants.length > 0 ? '↺ Перегенерувати' : '✦ Згенерувати 3 варіанти'}
-            </button>
-          </div>
-
-          {infLoading && infStep && (
-            <div className="bg-white/[0.04] border border-white/10 rounded-xl px-4 py-2.5 mb-3 text-sm text-white/60">
-              {infStep}
-            </div>
-          )}
-
-          {infError && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-2.5 mb-3 text-red-400 text-sm">
-              ⚠️ {infError}
-            </div>
-          )}
-
-          {infVariants.length > 0 && (
-            <div className="space-y-3">
-              <div className="grid grid-cols-3 gap-3">
-                {infVariants.map((v, i) => (
-                  <div key={i} onClick={() => { setInfSelected(i); setInfEditOpen(false); setInfEditMsgs([]); }}
-                    className={`cursor-pointer rounded-xl overflow-hidden border-2 transition-all ${infSelected === i ? 'border-gold' : 'border-white/10 hover:border-white/30'}`}>
-                    <img src={v.url} alt={v.label} className="w-full aspect-square object-cover" />
-                    <div className={`px-2 py-1.5 text-xs font-bold text-center ${infSelected === i ? 'bg-gold text-black' : 'bg-white/[0.06] text-white/50'}`}>
-                      {infSelected === i ? '✓ ' : ''}{v.label}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {infSelected !== null && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => { if (infSelected !== null) { const url = infVariants[infSelected]?.url; if(url) Object.assign(document.createElement('a'),{href:url,download:`infographic-${Date.now()}.jpg`}).click(); } }}
-                    className="bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-green-600 transition-colors">
-                    ⬇ Завантажити
-                  </button>
-                  <button onClick={() => { setInfEditOpen(v => !v); }}
-                    className={`px-4 py-2 rounded-xl text-sm font-bold transition-colors ${infEditOpen ? 'bg-gold text-black' : 'border border-white/20 text-white/60 hover:border-gold/50 hover:text-gold'}`}>
-                    ✦ AI редагування
-                  </button>
-                </div>
-              )}
-
-              {infEditOpen && infSelected !== null && (
-                <div className="bg-white/[0.04] border border-white/10 rounded-2xl overflow-hidden">
-                  <div className="px-4 py-3 border-b border-white/[0.08] flex items-center justify-between">
-                    <span className="text-white font-bold text-sm">✦ Редагування: {infVariants[infSelected]?.label}</span>
-                    <button onClick={() => setInfEditOpen(false)} className="text-white/30 hover:text-white/70 text-lg">×</button>
-                  </div>
-                  <div className="p-3 space-y-2 max-h-52 overflow-y-auto">
-                    {infEditMsgs.length === 0 && (
-                      <div className="text-center py-3">
-                        <p className="text-white/40 text-xs mb-2">Що змінити?</p>
-                        <div className="flex flex-wrap gap-1.5 justify-center">
-                          {['Зроби текст крупнішим','Додай більше деталей','Зміни стиль на мінімалістичний','Зроби фон темнішим'].map(s => (
-                            <button key={s} onClick={() => sendInfEdit(s)}
-                              className="text-xs px-2.5 py-1 rounded-full border border-white/15 text-white/50 hover:border-gold/50 hover:text-gold transition-all">
-                              {s}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {infEditMsgs.map((msg, i) => (
-                      <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${msg.role === 'user' ? 'bg-gold text-black rounded-br-sm' : 'bg-white/[0.08] text-white/80 rounded-bl-sm'}`}>
-                          {msg.content}
-                        </div>
-                      </div>
-                    ))}
-                    {infEditing && (
-                      <div className="flex justify-start">
-                        <div className="bg-white/[0.08] rounded-xl rounded-bl-sm px-3 py-2">
-                          <div className="flex gap-1">
-                            <span className="w-1.5 h-1.5 bg-gold/60 rounded-full animate-bounce" style={{animationDelay:'0ms'}} />
-                            <span className="w-1.5 h-1.5 bg-gold/60 rounded-full animate-bounce" style={{animationDelay:'150ms'}} />
-                            <span className="w-1.5 h-1.5 bg-gold/60 rounded-full animate-bounce" style={{animationDelay:'300ms'}} />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    <div ref={infEndRef} />
-                  </div>
-                  <div className="p-3 border-t border-white/[0.08] flex gap-2">
-                    <input type="text" value={infEditInput} onChange={e => setInfEditInput(e.target.value)}
-                      onKeyDown={e => { if(e.key==='Enter') sendInfEdit(infEditInput); }}
-                      placeholder="Що змінити? (Enter)" disabled={infEditing}
-                      className="flex-1 bg-white/[0.06] border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none focus:border-gold/40 disabled:opacity-50" />
-                    <button onClick={() => sendInfEdit(infEditInput)} disabled={infEditing || !infEditInput.trim()}
-                      className="bg-gold text-black font-bold px-3 py-2 rounded-xl text-sm disabled:opacity-40">↑</button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        {/* Інфографіка доступна на сторінці картки */}
       )}
     </div>
   );

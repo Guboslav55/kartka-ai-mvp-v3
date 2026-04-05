@@ -47,6 +47,301 @@ const SUGGESTIONS = [
   'Більше SEO ключових слів',
 ];
 
+// ── Infographic Section ────────────────────────────────────────────────────────
+interface InfographicVariant {
+  url:    string;
+  label:  string;
+  prompt: string;
+}
+
+interface ChatMsg {
+  role:    'user' | 'assistant';
+  content: string;
+}
+
+const EDIT_SUGGESTIONS = [
+  'Додай більше деталей товару',
+  'Зроби текст крупнішим',
+  'Змін стиль на більш мінімалістичний',
+  'Додай ціну на інфографіку',
+  'Зроби фон світлішим',
+];
+
+function InfographicSection({ card, accessToken }: { card: SavedCard; accessToken: string }) {
+  const [generating,  setGenerating]  = useState(false);
+  const [variants,    setVariants]    = useState<InfographicVariant[]>([]);
+  const [selected,    setSelected]    = useState<number | null>(null);
+  const [error,       setError]       = useState('');
+  const [step,        setStep]        = useState('');
+
+  // Edit chat
+  const [chatOpen,    setChatOpen]    = useState(false);
+  const [messages,    setMessages]    = useState<ChatMsg[]>([]);
+  const [input,       setInput]       = useState('');
+  const [editing,     setEditing]     = useState(false);
+
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, editing]);
+
+  async function generate() {
+    setGenerating(true);
+    setError('');
+    setVariants([]);
+    setSelected(null);
+    setChatOpen(false);
+    setMessages([]);
+
+    try {
+      setStep('🔍 GPT-4o аналізує товар...');
+      await new Promise(r => setTimeout(r, 500));
+      setStep('🎨 DALL-E 3 генерує 3 варіанти паралельно...');
+
+      const res = await fetch('/api/generate-infographic', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body:    JSON.stringify({
+          imageBase64: card.image_url,
+          productName: card.product_name || card.title,
+          description: card.description,
+          bullets:     card.bullets,
+          platform:    card.platform,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Помилка генерації');
+
+      setVariants(data.variants ?? []);
+      if (data.variants?.length > 0) setSelected(0);
+      setStep('');
+
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Помилка сервера');
+      setStep('');
+    }
+
+    setGenerating(false);
+  }
+
+  async function sendEdit(text: string) {
+    if (!text.trim() || selected === null || editing) return;
+    const current = variants[selected];
+    if (!current) return;
+
+    setMessages(prev => [...prev, { role: 'user', content: text }]);
+    setInput('');
+    setEditing(true);
+
+    try {
+      const res = await fetch('/api/edit-infographic', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body:    JSON.stringify({
+          userMessage:    text,
+          currentImageUrl: current.url,
+          originalPrompt: current.prompt,
+          productName:    card.product_name || card.title,
+          bullets:        card.bullets,
+          history:        messages.slice(-4),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Помилка редагування');
+
+      // Update selected variant with new image
+      setVariants(prev => prev.map((v, i) =>
+        i === selected ? { ...v, url: data.imageUrl, prompt: data.newPrompt } : v
+      ));
+
+      setMessages(prev => [...prev, { role: 'assistant', content: data.explanation }]);
+
+    } catch (err: unknown) {
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: '⚠️ ' + (err instanceof Error ? err.message : 'Помилка'),
+      }]);
+    }
+
+    setEditing(false);
+  }
+
+  function download() {
+    if (selected === null) return;
+    const url = variants[selected]?.url;
+    if (!url) return;
+    Object.assign(document.createElement('a'), {
+      href:     url,
+      download: `infographic-${(card.product_name || card.title).replace(/\s+/g, '-').slice(0, 40)}.jpg`,
+    }).click();
+  }
+
+  return (
+    <div className="mt-8">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-white font-bold text-lg">📊 AI Інфографіка</h2>
+          <p className="text-white/40 text-xs mt-0.5">3 унікальних варіанти · DALL-E 3 · 1024×1024</p>
+        </div>
+        <button
+          onClick={generate}
+          disabled={generating}
+          className="bg-gold text-black font-bold px-5 py-2.5 rounded-xl text-sm hover:bg-gold/80 transition-colors disabled:opacity-50 flex items-center gap-2"
+        >
+          {generating ? (
+            <>
+              <span className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+              Генерую...
+            </>
+          ) : variants.length > 0 ? '↺ Перегенерувати' : '✦ Згенерувати 3 варіанти'}
+        </button>
+      </div>
+
+      {/* Step indicator */}
+      {generating && step && (
+        <div className="bg-white/[0.04] border border-white/10 rounded-xl px-4 py-3 mb-4 text-sm text-white/70">
+          {step}
+        </div>
+      )}
+
+      {/* Error */}
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 mb-4 text-red-400 text-sm">
+          ⚠️ {error}
+        </div>
+      )}
+
+      {/* Variants grid */}
+      {variants.length > 0 && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {variants.map((v, i) => (
+              <div
+                key={i}
+                onClick={() => { setSelected(i); setChatOpen(false); setMessages([]); }}
+                className={`cursor-pointer rounded-2xl overflow-hidden border-2 transition-all ${
+                  selected === i
+                    ? 'border-gold shadow-lg shadow-gold/20'
+                    : 'border-white/10 hover:border-white/30'
+                }`}
+              >
+                <img src={v.url} alt={v.label} className="w-full aspect-square object-cover" />
+                <div className={`px-3 py-2 text-xs font-bold text-center transition-colors ${
+                  selected === i ? 'bg-gold text-black' : 'bg-white/[0.06] text-white/60'
+                }`}>
+                  {selected === i ? '✓ ' : ''}{v.label}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Actions for selected */}
+          {selected !== null && (
+            <div className="flex gap-3">
+              <button
+                onClick={download}
+                className="bg-green-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-green-600 transition-colors flex items-center gap-2"
+              >
+                ⬇ Завантажити
+              </button>
+              <button
+                onClick={() => { setChatOpen(v => !v); if (!chatOpen) setMessages([]); }}
+                className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-colors flex items-center gap-2 ${
+                  chatOpen
+                    ? 'bg-gold text-black'
+                    : 'border border-white/20 text-white/70 hover:border-gold/50 hover:text-gold'
+                }`}
+              >
+                ✦ AI редагування
+              </button>
+            </div>
+          )}
+
+          {/* AI Edit Chat */}
+          {chatOpen && selected !== null && (
+            <div className="bg-white/[0.04] border border-white/10 rounded-2xl overflow-hidden">
+              <div className="px-5 py-3 border-b border-white/[0.08] flex items-center justify-between">
+                <div>
+                  <span className="text-white font-bold text-sm">✦ Редагування: {variants[selected]?.label}</span>
+                  <p className="text-white/35 text-xs mt-0.5">Опиши що змінити — AI перегенерує</p>
+                </div>
+                <button onClick={() => setChatOpen(false)} className="text-white/30 hover:text-white/70 text-lg">×</button>
+              </div>
+
+              {/* Messages */}
+              <div className="p-4 space-y-3 max-h-72 overflow-y-auto">
+                {messages.length === 0 && (
+                  <div className="text-center py-4">
+                    <p className="text-white/40 text-sm mb-3">Що змінити в цьому варіанті?</p>
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      {EDIT_SUGGESTIONS.map(s => (
+                        <button
+                          key={s}
+                          onClick={() => sendEdit(s)}
+                          className="text-xs px-3 py-1.5 rounded-full border border-white/15 text-white/50 hover:border-gold/50 hover:text-gold transition-all"
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {messages.map((msg, i) => (
+                  <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${
+                      msg.role === 'user'
+                        ? 'bg-gold text-black font-medium rounded-br-sm'
+                        : 'bg-white/[0.08] text-white/80 rounded-bl-sm'
+                    }`}>
+                      {msg.content}
+                    </div>
+                  </div>
+                ))}
+                {editing && (
+                  <div className="flex justify-start">
+                    <div className="bg-white/[0.08] rounded-2xl rounded-bl-sm px-4 py-3">
+                      <div className="flex gap-1">
+                        <span className="w-1.5 h-1.5 bg-gold/60 rounded-full animate-bounce" style={{animationDelay:'0ms'}} />
+                        <span className="w-1.5 h-1.5 bg-gold/60 rounded-full animate-bounce" style={{animationDelay:'150ms'}} />
+                        <span className="w-1.5 h-1.5 bg-gold/60 rounded-full animate-bounce" style={{animationDelay:'300ms'}} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div ref={chatEndRef} />
+              </div>
+
+              {/* Input */}
+              <div className="p-4 border-t border-white/[0.08] flex gap-2">
+                <textarea
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendEdit(input); } }}
+                  placeholder="Що змінити? (Enter — надіслати)"
+                  disabled={editing}
+                  rows={2}
+                  className="flex-1 bg-white/[0.06] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/25 resize-none focus:outline-none focus:border-gold/40 disabled:opacity-50"
+                />
+                <button
+                  onClick={() => sendEdit(input)}
+                  disabled={editing || !input.trim()}
+                  className="bg-gold text-black font-bold px-4 py-2.5 rounded-xl text-sm disabled:opacity-40 flex-shrink-0"
+                >
+                  ↑
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function CardPage() {
   const router   = useRouter();
   const params   = useParams();
@@ -416,6 +711,13 @@ export default function CardPage() {
           </div>
         )}
       </div>
+
+      {/* ══ INFOGRAPHIC SECTION ════════════════════════════════════════════ */}
+      <InfographicSection
+        card={card}
+        accessToken={accessToken}
+      />
+
     </div>
   );
 }

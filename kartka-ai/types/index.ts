@@ -4,6 +4,7 @@ export interface CardResult {
   bullets: string[];
   keywords: string[];
   imageUrl?: string;
+  cardId?: string;
 }
 
 export interface UserProfile {

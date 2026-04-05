@@ -133,21 +133,36 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const {
-      imageBase64,  // product photo (with or without bg — from card)
+      imageBase64,  // base64 OR url — we handle both
+      imageUrl,     // alternative: direct URL from Supabase
       productName = '',
       description = '',
       bullets = [],
       platform = 'general',
     } = await req.json();
 
-    if (!imageBase64) return NextResponse.json({ error: 'Потрібне фото товару' }, { status: 400 });
     if (!productName.trim()) return NextResponse.json({ error: 'Потрібна назва товару' }, { status: 400 });
+
+    // Resolve image — accept base64 or URL
+    let resolvedImage = imageBase64 || '';
+    if (!resolvedImage && imageUrl) {
+      try {
+        const res = await fetch(imageUrl);
+        const buf = Buffer.from(await res.arrayBuffer());
+        const mime = res.headers.get('content-type') || 'image/jpeg';
+        resolvedImage = `data:${mime};base64,${buf.toString('base64')}`;
+      } catch (e) {
+        console.warn('Could not fetch image URL:', e);
+      }
+    }
+
+    if (!resolvedImage) return NextResponse.json({ error: 'Потрібне фото товару' }, { status: 400 });
 
     const b = (bullets as string[]).filter((x: string) => x.trim()).slice(0, 4)
       .map((x: string) => x.replace(/^[✓•]\s*/, '').trim());
 
     // Step 1: GPT-4o builds 3 unique prompts
-    const prompts = await buildThreePrompts(imageBase64, productName, description, b, platform);
+    const prompts = await buildThreePrompts(resolvedImage, productName, description, b, platform);
 
     if (prompts.length === 0) {
       return NextResponse.json({ error: 'Не вдалося проаналізувати товар' }, { status: 500 });

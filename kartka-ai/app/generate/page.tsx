@@ -51,16 +51,12 @@ export default function GeneratePage() {
   const [error, setError] = useState('');
   const [allCopied, setAllCopied] = useState(false);
   const [cardId, setCardId] = useState<string | null>(null);
-
-  // AI Edit state
-  const [editOpen,    setEditOpen]    = useState(false);
-  const [editMsgs,    setEditMsgs]    = useState<{role:'user'|'assistant';content:string;changedFields?:string[]}[]>([]);
-  const [editInput,   setEditInput]   = useState('');
+  const [editOpen, setEditOpen] = useState(false);
+  const [editMsgs, setEditMsgs] = useState<{role:'user'|'assistant';content:string;changedFields?:string[]}[]>([]);
+  const [editInput, setEditInput] = useState('');
   const [editLoading, setEditLoading] = useState(false);
   const [lastChanged, setLastChanged] = useState<string[]>([]);
   const editEndRef = useRef<HTMLDivElement>(null);
-
-
  
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -99,6 +95,7 @@ export default function GeneratePage() {
       setResult(data);
       setCardId(data.cardId ?? null);
       setEditMsgs([]);
+      setEditOpen(false);
       setCardsLeft(c => Math.max(0, c - 1));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Помилка сервера. Спробуй ще раз.');
@@ -134,18 +131,17 @@ export default function GeneratePage() {
     a.click();
   }
  
-  useEffect(() => { editEndRef.current?.scrollIntoView({ behavior:'smooth' }); }, [editMsgs, editLoading]);
-  // AI text edit
-  async function sendEdit(text: string) {
+
+  const sendEdit = async (text: string) => {
     if (!text.trim() || !result || editLoading) return;
-    setEditMsgs(prev => [...prev, { role:'user', content: text }]);
+    setEditMsgs(prev => [...prev, { role: 'user' as const, content: text }]);
     setEditInput('');
     setEditLoading(true);
     setLastChanged([]);
     try {
       const res = await fetch('/api/edit-card', {
         method: 'POST',
-        headers: { 'Content-Type':'application/json', Authorization:`Bearer ${accessToken}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({
           cardId,
           userMessage: text,
@@ -159,15 +155,12 @@ export default function GeneratePage() {
         setResult(prev => prev ? { ...prev, ...data.diff } : prev);
         setLastChanged(data.changedFields ?? []);
       }
-      setEditMsgs(prev => [...prev, { role:'assistant', content: data.explanation ?? 'Готово', changedFields: data.changedFields }]);
+      setEditMsgs(prev => [...prev, { role: 'assistant' as const, content: data.explanation ?? 'Готово', changedFields: data.changedFields }]);
     } catch (err: unknown) {
-      setEditMsgs(prev => [...prev, { role:'assistant', content:'⚠️ ' + (err instanceof Error ? err.message : 'Помилка') }]);
+      setEditMsgs(prev => [...prev, { role: 'assistant' as const, content: '⚠️ ' + (err instanceof Error ? err.message : 'Помилка') }]);
     }
     setEditLoading(false);
-  }
-
-
-  }
+  };
 
   if (!ready) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -340,13 +333,13 @@ export default function GeneratePage() {
             <div className="flex items-center gap-3">
               <span className="text-white/40 text-xs">{result.title.length}/80 симв.</span>
               <button
-                onClick={() => { setEditOpen(v => !v); }}
+                onClick={() => setEditOpen(v => !v)}
                 className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-all ${editOpen ? 'bg-gold text-black' : 'bg-white/15 text-white hover:bg-white/25'}`}>
                 {editOpen ? '✕ Закрити' : '✦ AI редагування'}
               </button>
               <button onClick={copyAll}
                 className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-all ${allCopied ? 'bg-green-500 text-white' : 'bg-white/15 text-white hover:bg-white/25'}`}>
-                {allCopied ? '✓ Скопійовано!' : '📋 Все'}
+                {allCopied ? '✓ Скопійовано!' : '📋 Копіювати все'}
               </button>
             </div>
           </div>
@@ -364,7 +357,7 @@ export default function GeneratePage() {
             )}
  
             {/* Title */}
-            <div className={`rounded-xl p-4 transition-colors duration-500 ${lastChanged.includes('title') ? 'bg-amber-50 ring-1 ring-amber-200' : 'bg-gray-50'}`}>
+            <div className="bg-gray-50 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Заголовок</span>
                 <CopyBtn text={result.title} label="Копіювати" />
@@ -373,7 +366,7 @@ export default function GeneratePage() {
             </div>
  
             {/* Description */}
-            <div className={`rounded-xl p-4 transition-colors duration-500 ${lastChanged.includes('description') ? 'bg-amber-50 ring-1 ring-amber-200' : 'bg-gray-50'}`}>
+            <div className="bg-gray-50 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Опис</span>
                 <CopyBtn text={result.description} label="Копіювати" />
@@ -413,8 +406,69 @@ export default function GeneratePage() {
             </div>
           </div>
  
+          {/* AI Edit Panel */}
+          {editOpen && (
+            <div className="mx-5 sm:mx-7 mb-4 border border-gray-100 rounded-2xl overflow-hidden">
+              <div className="px-4 py-3 bg-navy/5 border-b border-gray-100">
+                <p className="text-navy font-bold text-sm">✦ AI редагування тексту</p>
+                <p className="text-gray-400 text-xs">Скажи що змінити — AI оновить картку</p>
+              </div>
+              <div className="p-3 space-y-2 max-h-60 overflow-y-auto">
+                {editMsgs.length === 0 && (
+                  <div className="text-center py-3">
+                    <div className="flex flex-wrap gap-1.5 justify-center">
+                      {['Зроби заголовок коротшим','Перепиши опис продаючим','Додай цифри в переваги','Більш емоційний текст'].map(s => (
+                        <button key={s} onClick={() => sendEdit(s)}
+                          className="text-xs px-2.5 py-1 rounded-full border border-gray-200 text-gray-500 hover:border-navy/40 hover:text-navy transition-all">
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {editMsgs.map((msg, i) => (
+                  <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${msg.role === 'user' ? 'bg-navy text-white' : 'bg-gray-50 text-gray-700 border border-gray-100'}`}>
+                      {msg.content}
+                      {msg.changedFields && msg.changedFields.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {msg.changedFields.map((f: string) => (
+                            <span key={f} className="text-[10px] px-1.5 py-0.5 rounded bg-gold/20 text-navy/70">
+                              {f === 'title' ? 'заголовок' : f === 'description' ? 'опис' : f === 'bullets' ? 'переваги' : 'ключ.слова'}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {editLoading && (
+                  <div className="flex justify-start">
+                    <div className="bg-gray-50 rounded-xl px-3 py-2 border border-gray-100">
+                      <div className="flex gap-1">
+                        <span className="w-1.5 h-1.5 bg-navy/40 rounded-full animate-bounce" style={{animationDelay:'0ms'}} />
+                        <span className="w-1.5 h-1.5 bg-navy/40 rounded-full animate-bounce" style={{animationDelay:'150ms'}} />
+                        <span className="w-1.5 h-1.5 bg-navy/40 rounded-full animate-bounce" style={{animationDelay:'300ms'}} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div ref={editEndRef} />
+              </div>
+              <div className="p-3 border-t border-gray-100 flex gap-2">
+                <input type="text" value={editInput}
+                  onChange={e => setEditInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') sendEdit(editInput); }}
+                  placeholder="Що змінити? (Enter)" disabled={editLoading}
+                  className="flex-1 bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-navy/40 disabled:opacity-50" />
+                <button onClick={() => sendEdit(editInput)} disabled={editLoading || !editInput.trim()}
+                  className="bg-navy text-white font-bold px-4 py-2 rounded-xl text-sm disabled:opacity-40">↑</button>
+              </div>
+            </div>
+          )}
+
           {/* Actions */}
-          <div className="px-5 sm:px-7 pb-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div className="px-5 sm:px-7 pb-6 grid grid-cols-1 sm:grid-cols-3 gap-2">
             <button onClick={copyAll}
               className={`px-4 py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${allCopied ? 'bg-green-600 text-white' : 'bg-gray-900 text-white hover:bg-gray-700'}`}>
               {allCopied ? '✓ Все скопійовано!' : '📋 Копіювати все'}
@@ -428,77 +482,7 @@ export default function GeneratePage() {
               ↺ Інший варіант
             </button>
           </div>
-
-          {/* ── AI EDIT CHAT ─────────────────────────────────────── */}
-          {editOpen && (
-            <div className="mx-5 sm:mx-7 mb-5 bg-black/5 rounded-2xl overflow-hidden border border-gray-100">
-              <div className="px-4 py-3 bg-navy/5 border-b border-gray-100 flex items-center justify-between">
-                <div>
-                  <span className="text-navy font-bold text-sm">✦ AI редагування тексту</span>
-                  <p className="text-gray-400 text-xs mt-0.5">Скажи що змінити — AI оновить картку</p>
-                </div>
-              </div>
-              <div className="p-3 space-y-2 max-h-64 overflow-y-auto">
-                {editMsgs.length === 0 && (
-                  <div className="text-center py-3">
-                    <p className="text-gray-400 text-xs mb-2">Швидкі запити:</p>
-                    <div className="flex flex-wrap gap-1.5 justify-center">
-                      {['Зроби заголовок коротшим','Перепиши опис продаючим','Додай цифри в переваги','Зроби більш емоційним'].map(s => (
-                        <button key={s} onClick={() => sendEdit(s)}
-                          className="text-xs px-2.5 py-1 rounded-full border border-gray-200 text-gray-500 hover:border-navy/40 hover:text-navy transition-all">
-                          {s}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {editMsgs.map((msg, i) => (
-                  <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${msg.role === 'user' ? 'bg-navy text-white rounded-br-sm' : 'bg-white text-gray-700 rounded-bl-sm border border-gray-100'}`}>
-                      {msg.content}
-                      {msg.changedFields && msg.changedFields.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1.5">
-                          {msg.changedFields.map(f => (
-                            <span key={f} className="text-[10px] px-1.5 py-0.5 rounded bg-gold/20 text-navy/70">
-                              {f === 'title' ? 'заголовок' : f === 'description' ? 'опис' : f === 'bullets' ? 'переваги' : f === 'keywords' ? 'ключ.слова' : f}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {editLoading && (
-                  <div className="flex justify-start">
-                    <div className="bg-white rounded-xl rounded-bl-sm px-3 py-2 border border-gray-100">
-                      <div className="flex gap-1">
-                        <span className="w-1.5 h-1.5 bg-navy/40 rounded-full animate-bounce" style={{animationDelay:'0ms'}} />
-                        <span className="w-1.5 h-1.5 bg-navy/40 rounded-full animate-bounce" style={{animationDelay:'150ms'}} />
-                        <span className="w-1.5 h-1.5 bg-navy/40 rounded-full animate-bounce" style={{animationDelay:'300ms'}} />
-                      </div>
-                    </div>
-                  </div>
-                )}
-                <div ref={editEndRef} />
-              </div>
-              <div className="p-3 border-t border-gray-100 flex gap-2">
-                <input
-                  type="text"
-                  value={editInput}
-                  onChange={e => setEditInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') sendEdit(editInput); }}
-                  placeholder="Що змінити? (Enter)"
-                  disabled={editLoading}
-                  className="flex-1 bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-navy/40 disabled:opacity-50"
-                />
-                <button onClick={() => sendEdit(editInput)} disabled={editLoading || !editInput.trim()}
-                  className="bg-navy text-white font-bold px-4 py-2 rounded-xl text-sm disabled:opacity-40">↑</button>
-              </div>
-            </div>
-          )}
         </div>
-
-        {/* Інфографіка доступна на сторінці картки */}
       )}
     </div>
   );

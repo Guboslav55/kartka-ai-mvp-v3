@@ -870,7 +870,6 @@ export default function GeneratePage() {
             </a>
           </div>
         )}
-      }
     </div>
   );
 }

@@ -186,7 +186,7 @@ STRICT: NO text, NO letters, NO words, NO watermarks anywhere in the image.`;
     }
 
     // ── Step 4: Save to Supabase ────────────────────────────────────────────────
-    const [insertResult] = await Promise.all([
+    const [insertResult] = const [insertResult] = await Promise.all([
       supabase.from('cards').insert({
         user_id:      user.id,
         product_name: productName,
@@ -196,7 +196,7 @@ STRICT: NO text, NO letters, NO words, NO watermarks anywhere in the image.`;
         bullets:      cardData.bullets,
         keywords:     cardData.keywords ?? [],
         image_url:    imageUrl,
-      }),
+      }).select('id').single(),
       supabase.from('users').update({
         cards_left:  profile.cards_left - 1,
         cards_total: (profile.cards_total ?? 0) + 1,
@@ -208,10 +208,12 @@ STRICT: NO text, NO letters, NO words, NO watermarks anywhere in the image.`;
       console.error('Card insert error:', insertResult.error);
     }
 
-    return NextResponse.json({ ...cardData, imageUrl });
+    const cardId = insertResult?.data?.id ?? null;
+    return NextResponse.json({ ...cardData, imageUrl, cardId });
 
   } catch (err: unknown) {
     console.error('Generate error:', err);
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Помилка сервера' }, { status: 500 });
   }
 }
+

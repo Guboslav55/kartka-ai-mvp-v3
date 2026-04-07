@@ -103,7 +103,8 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body:    JSON.stringify({
-          imageBase64: card.image_url,
+          imageUrl: card.image_url,
+          imageBase64: null,
           productName: card.product_name || card.title,
           description: card.description,
           bullets:     card.bullets,
@@ -514,10 +515,23 @@ export default function CardPage() {
               <div className="relative group">
                 <img src={card.image_url} alt={card.title}
                   className="w-full h-44 sm:h-52 object-contain bg-gray-50 rounded-xl" />
-                <a href={card.image_url} download target="_blank" rel="noreferrer"
-                  className="absolute bottom-3 right-3 bg-black/70 text-white text-xs px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity font-semibold">
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(card.image_url!);
+                      const blob = await res.blob();
+                      const url = URL.createObjectURL(blob);
+                      Object.assign(document.createElement('a'), {
+                        href: url,
+                        download: `product-${card.id.slice(0,8)}.jpg`,
+                      }).click();
+                      URL.revokeObjectURL(url);
+                    } catch { window.open(card.image_url, '_blank'); }
+                  }}
+                  className="absolute bottom-3 right-3 bg-black/70 text-white text-xs px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity font-semibold"
+                >
                   ⬇ Завантажити
-                </a>
+                </button>
               </div>
             )}
 
@@ -721,3 +735,4 @@ export default function CardPage() {
     </div>
   );
 }
+

@@ -856,7 +856,6 @@ export default function GeneratePage() {
               </div>
             </div>
           )}
-        </div>
 
         {/* AI Інфографіка — посилання на картку */}
         {cardId && (
@@ -870,6 +869,8 @@ export default function GeneratePage() {
             </a>
           </div>
         )}
+        </div>
+      )}
     </div>
   );
 }

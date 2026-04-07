@@ -109,6 +109,7 @@ export default function GeneratePage() {
   const [editInput,  setEditInput]  = useState('');
   const [editLoading,setEditLoading]= useState(false);
   const editEndRef = useRef<HTMLDivElement>(null);
+  const [lastChanged, setLastChanged] = useState<string[]>([]);
 
   // Auth
   useEffect(() => {

@@ -186,7 +186,7 @@ STRICT: NO text, NO letters, NO words, NO watermarks anywhere in the image.`;
     }
 
     // ── Step 4: Save to Supabase ────────────────────────────────────────────────
-    const [insertResult] = const [insertResult] = await Promise.all([
+    const [insertResult] = await Promise.all([
       supabase.from('cards').insert({
         user_id:      user.id,
         product_name: productName,

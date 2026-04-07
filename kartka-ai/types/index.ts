@@ -32,3 +32,4 @@ export interface SavedCard {
 export type Platform = 'prom' | 'rozetka' | 'olx' | 'general';
 export type Tone = 'professional' | 'friendly' | 'premium' | 'simple';
 export type Lang = 'uk' | 'ru' | 'en';
+

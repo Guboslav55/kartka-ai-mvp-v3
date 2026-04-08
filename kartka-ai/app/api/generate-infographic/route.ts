@@ -4,17 +4,27 @@ import { createClient } from '@supabase/supabase-js';
 import sharp from 'sharp';
 import fs from 'fs';
 import path from 'path';
+import { Resvg } from '@resvg/resvg-js';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// ── Load fonts from public/fonts/ ─────────────────────────────────────────
-function loadFont(filename: string): string {
+// ── Load font for resvg ────────────────────────────────────────────────────
+function loadFontBuffer(filename: string): Buffer | null {
   try {
-    const fontPath = path.join(process.cwd(), 'public', 'fonts', filename);
-    return fs.readFileSync(fontPath).toString('base64');
+    return fs.readFileSync(path.join(process.cwd(), 'public', 'fonts', filename));
   } catch {
-    return '';
+    return null;
   }
+}
+
+// ── Render SVG → PNG via resvg (supports custom fonts + Cyrillic) ──────────
+function svgToPng(svgStr: string, fontBufs: Buffer[]): Buffer {
+  const opts: Record<string, unknown> = { background: 'rgba(0,0,0,0)' };
+  if (fontBufs.length > 0) {
+    opts.font = { fontBuffers: fontBufs };
+  }
+  const resvg = new Resvg(svgStr, opts);
+  return Buffer.from(resvg.render().asPng());
 }
 
 // ── Upload to Supabase Storage ─────────────────────────────────────────────
@@ -85,11 +95,10 @@ Modern, energetic, abstract. Marketplace-ready.
 NO text, NO product.
 
 CRITICAL FOR ALL 3:
-- Absolutely NO text, NO letters, NO words anywhere in the image
-- NO product visible — pure background only
-- Center area should be slightly less busy (product placed there later)
-- Square 1024x1024 format
-- High quality photorealistic or semi-realistic rendering
+- Absolutely NO text, NO letters, NO words anywhere
+- NO product — pure background only
+- Center area slightly less busy (product placed there later)
+- Square 1024x1024 format, high quality
 
 Respond ONLY with JSON:
 {
@@ -108,11 +117,7 @@ Respond ONLY with JSON:
   const raw = response.choices[0]?.message?.content ?? '{}';
   try {
     const parsed = JSON.parse(raw);
-    return {
-      v1: parsed.v1 || '',
-      v2: parsed.v2 || '',
-      v3: parsed.v3 || '',
-    };
+    return { v1: parsed.v1 || '', v2: parsed.v2 || '', v3: parsed.v3 || '' };
   } catch {
     return { v1: '', v2: '', v3: '' };
   }
@@ -123,7 +128,7 @@ async function generateBackground(prompt: string): Promise<Buffer | null> {
   try {
     const res = await openai.images.generate({
       model: 'dall-e-3',
-      prompt: prompt + '\n\nCRITICAL: Absolutely NO text, NO letters, NO words anywhere. Pure background only. Square format.',
+      prompt: prompt + '\n\nCRITICAL: NO text, NO letters, NO words. Pure background only. Square format.',
       size: '1024x1024',
       quality: 'hd',
       style: 'vivid',
@@ -131,36 +136,36 @@ async function generateBackground(prompt: string): Promise<Buffer | null> {
       response_format: 'b64_json',
     });
     const b64 = res.data[0]?.b64_json;
-    if (!b64) return null;
-    return Buffer.from(b64, 'base64');
+    return b64 ? Buffer.from(b64, 'base64') : null;
   } catch (e) {
     console.error('Background generation failed:', e);
     return null;
   }
 }
 
-// ── Step 3: Composite product + background + text via sharp ────────────────
+// ── Step 3: Composite via sharp + resvg text overlay ──────────────────────
 async function compositeCard(
   backgroundBuf: Buffer,
   productBase64: string,
   productName: string,
   bullets: string[],
   variantStyle: 'lifestyle' | 'studio' | 'dynamic',
+  fontBufs: Buffer[],
 ): Promise<Buffer> {
   const SIZE = 1024;
 
-  // Resize background to 1024x1024
+  // Resize background
   const bg = await sharp(backgroundBuf)
     .resize(SIZE, SIZE, { fit: 'cover' })
     .toBuffer();
 
-  // Decode product image (bg already removed by remove-bg pipeline)
+  // Decode product (bg-removed)
   const rawProduct = productBase64.startsWith('data:')
     ? Buffer.from(productBase64.split(',')[1], 'base64')
     : Buffer.from(productBase64, 'base64');
 
-  // Resize product — 54% of card width, preserve transparency
-  const productSize = Math.round(SIZE * 0.54);
+  // Resize product — 52% of card, centered
+  const productSize = Math.round(SIZE * 0.52);
   const productBuf = await sharp(rawProduct)
     .resize(productSize, productSize, {
       fit: 'contain',
@@ -170,103 +175,67 @@ async function compositeCard(
     .toBuffer();
 
   const productLeft = Math.round((SIZE - productSize) / 2);
-  const productTop  = Math.round(SIZE * 0.18);
+  const productTop  = Math.round(SIZE * 0.20);
 
-  // Load DejaVu fonts (support Cyrillic)
-  const fontBoldB64    = loadFont('DejaVuSans-Bold.ttf');
-  const fontRegularB64 = loadFont('DejaVuSans.ttf');
-
-  const fontFace = fontBoldB64
-    ? `<style>
-        @font-face {
-          font-family: 'DVS';
-          src: url('data:font/truetype;base64,${fontBoldB64}');
-          font-weight: bold;
-        }
-        @font-face {
-          font-family: 'DVS';
-          src: url('data:font/truetype;base64,${fontRegularB64}');
-          font-weight: normal;
-        }
-      </style>`
-    : '';
-
-  const fontFamily = fontBoldB64 ? 'DVS' : 'sans-serif';
-
-  // Color schemes per variant
+  // Color schemes
   const schemes = {
-    lifestyle: {
-      accent:   '#FFD700',
-      headerBg: 'rgba(0,0,0,0.75)',
-      pillBg:   'rgba(0,0,0,0.62)',
-      text:     '#FFFFFF',
-    },
-    studio: {
-      accent:   '#4FC3F7',
-      headerBg: 'rgba(8,18,40,0.86)',
-      pillBg:   'rgba(8,18,40,0.70)',
-      text:     '#FFFFFF',
-    },
-    dynamic: {
-      accent:   '#FF6B35',
-      headerBg: 'rgba(20,8,0,0.82)',
-      pillBg:   'rgba(20,8,0,0.66)',
-      text:     '#FFFFFF',
-    },
+    lifestyle: { accent: '#FFD700', headerBg: 'rgba(0,0,0,0.78)', pillBg: 'rgba(0,0,0,0.65)', text: '#FFFFFF' },
+    studio:    { accent: '#4FC3F7', headerBg: 'rgba(8,18,40,0.88)', pillBg: 'rgba(8,18,40,0.72)', text: '#FFFFFF' },
+    dynamic:   { accent: '#FF6B35', headerBg: 'rgba(22,8,0,0.84)', pillBg: 'rgba(22,8,0,0.68)', text: '#FFFFFF' },
   };
   const s = schemes[variantStyle];
 
-  // Truncate product name
-  const shortName = productName.length > 40
-    ? productName.substring(0, 37) + '...'
+  // Truncate name
+  const shortName = productName.length > 42
+    ? productName.substring(0, 39) + '...'
     : productName;
 
   // Bullet pills
   const topBullets  = bullets.slice(0, 3);
-  const pillH       = 48;
+  const pillH       = 50;
   const pillGap     = 10;
   const totalPillsH = topBullets.length * (pillH + pillGap);
-  const pillsStartY = SIZE - 24 - totalPillsH;
+  const pillsStartY = SIZE - 20 - totalPillsH;
+
+  // Escape XML special chars
+  const esc = (s: string) => s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 
   const bulletsSvg = topBullets.map((b, i) => {
-    const text = b.length > 42 ? b.substring(0, 39) + '...' : b;
+    const text = b.length > 44 ? b.substring(0, 41) + '...' : b;
     const y    = pillsStartY + i * (pillH + pillGap);
     return `
-      <rect x="24" y="${y}" width="${SIZE - 48}" height="${pillH}" rx="12" fill="${s.pillBg}"/>
-      <rect x="24" y="${y}" width="6" height="${pillH}" rx="3" fill="${s.accent}"/>
-      <text x="46" y="${y + 32}"
-        font-family="${fontFamily}" font-size="21" font-weight="normal" fill="${s.text}">✓ ${text}</text>
+      <rect x="24" y="${y}" width="${SIZE - 48}" height="${pillH}" rx="14" fill="${s.pillBg}"/>
+      <rect x="24" y="${y}" width="7" height="${pillH}" rx="3" fill="${s.accent}"/>
+      <text x="48" y="${y + 33}" font-family="DVS" font-size="22" font-weight="400" fill="${s.text}">✓ ${esc(text)}</text>
     `;
   }).join('');
 
-  const svgOverlay = `<svg width="${SIZE}" height="${SIZE}" xmlns="http://www.w3.org/2000/svg">
-    <defs>${fontFace}</defs>
+  const svgStr = `<svg width="${SIZE}" height="${SIZE}" xmlns="http://www.w3.org/2000/svg">
+    <!-- Header -->
+    <rect x="0" y="0" width="${SIZE}" height="96" fill="${s.headerBg}"/>
+    <text x="${SIZE / 2}" y="62" font-family="DVS" font-size="28" font-weight="700"
+      fill="${s.text}" text-anchor="middle">${esc(shortName)}</text>
+    <rect x="0" y="96" width="${SIZE}" height="5" fill="${s.accent}"/>
 
-    <!-- Header bar -->
-    <rect x="0" y="0" width="${SIZE}" height="92" fill="${s.headerBg}"/>
-
-    <!-- Product name centered -->
-    <text x="${SIZE / 2}" y="60"
-      font-family="${fontFamily}" font-size="27" font-weight="bold"
-      fill="${s.text}" text-anchor="middle">${shortName}</text>
-
-    <!-- Accent line under header -->
-    <rect x="0" y="92" width="${SIZE}" height="5" fill="${s.accent}"/>
-
-    <!-- Bullet pills at bottom -->
+    <!-- Bullets -->
     ${bulletsSvg}
 
-    <!-- Bottom accent bar -->
-    <rect x="0" y="${SIZE - 7}" width="${SIZE}" height="7" fill="${s.accent}"/>
+    <!-- Bottom bar -->
+    <rect x="0" y="${SIZE - 8}" width="${SIZE}" height="8" fill="${s.accent}"/>
   </svg>`;
 
-  const svgBuf = Buffer.from(svgOverlay);
+  // Render SVG → PNG via resvg (with custom font)
+  const overlayPng = svgToPng(svgStr, fontBufs);
 
-  // Final composite: bg → product (transparent) → text overlay
+  // Final composite
   return await sharp(bg)
     .composite([
-      { input: productBuf, top: productTop, left: productLeft, blend: 'over' },
-      { input: svgBuf,     top: 0,          left: 0,           blend: 'over' },
+      { input: productBuf,  top: productTop, left: productLeft, blend: 'over' },
+      { input: overlayPng,  top: 0,          left: 0,           blend: 'over' },
     ])
     .jpeg({ quality: 92 })
     .toBuffer();
@@ -289,7 +258,7 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const {
-      imageBase64,  // processedPhoto (bg removed) preferred, fallback to original
+      imageBase64,
       imageUrl,
       productName = '',
       bullets = [],
@@ -299,7 +268,7 @@ export async function POST(req: NextRequest) {
     if (!productName.trim())
       return NextResponse.json({ error: 'Потрібна назва товару' }, { status: 400 });
 
-    // Resolve product image
+    // Resolve image
     let resolvedImage = imageBase64 || '';
     if (!resolvedImage && imageUrl) {
       try {
@@ -319,25 +288,26 @@ export async function POST(req: NextRequest) {
       .slice(0, 3)
       .map((x: string) => x.replace(/^[✓•]\s*/, '').trim());
 
-    // Step 1: GPT-4o → 3 background prompts
-    const prompts = await buildBackgroundPrompts(
-      resolvedImage,
-      productName,
-      cleanBullets,
-      category,
-    );
+    // Load fonts once
+    const fontBufs: Buffer[] = [];
+    const fontBold = loadFontBuffer('DejaVuSans-Bold.ttf');
+    const fontReg  = loadFontBuffer('DejaVuSans.ttf');
+    if (fontBold) fontBufs.push(fontBold);
+    if (fontReg)  fontBufs.push(fontReg);
 
+    // Step 1: GPT-4o → prompts
+    const prompts = await buildBackgroundPrompts(resolvedImage, productName, cleanBullets, category);
     if (!prompts.v1 && !prompts.v2 && !prompts.v3)
       return NextResponse.json({ error: 'Не вдалося проаналізувати товар' }, { status: 500 });
 
-    // Step 2: Generate all 3 backgrounds in parallel
+    // Step 2: Generate backgrounds in parallel
     const [bg1, bg2, bg3] = await Promise.all([
       prompts.v1 ? generateBackground(prompts.v1) : Promise.resolve(null),
       prompts.v2 ? generateBackground(prompts.v2) : Promise.resolve(null),
       prompts.v3 ? generateBackground(prompts.v3) : Promise.resolve(null),
     ]);
 
-    // Step 3: Composite all 3 cards in parallel
+    // Step 3: Composite
     const styles: Array<'lifestyle' | 'studio' | 'dynamic'> = ['lifestyle', 'studio', 'dynamic'];
     const bgs    = [bg1, bg2, bg3];
     const labels = ['Lifestyle', 'Студія', 'Динамічний'];
@@ -346,7 +316,7 @@ export async function POST(req: NextRequest) {
       bgs.map(async (bg, i) => {
         if (!bg) return null;
         try {
-          return await compositeCard(bg, resolvedImage, productName, cleanBullets, styles[i]);
+          return await compositeCard(bg, resolvedImage, productName, cleanBullets, styles[i], fontBufs);
         } catch (e) {
           console.error(`Composite ${i} failed:`, e);
           return null;
@@ -354,7 +324,7 @@ export async function POST(req: NextRequest) {
       }),
     );
 
-    // Step 4: Upload to storage
+    // Step 4: Upload
     const uploaded = await Promise.all(
       composited.map((buf, i) =>
         buf ? uploadToStorage(supabase, buf, user.id, i + 1) : Promise.resolve(null),
@@ -378,4 +348,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

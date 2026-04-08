@@ -2,8 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
 import sharp from 'sharp';
+import fs from 'fs';
+import path from 'path';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+// ── Load fonts from public/fonts/ ─────────────────────────────────────────
+function loadFont(filename: string): string {
+  try {
+    const fontPath = path.join(process.cwd(), 'public', 'fonts', filename);
+    return fs.readFileSync(fontPath).toString('base64');
+  } catch {
+    return '';
+  }
+}
 
 // ── Upload to Supabase Storage ─────────────────────────────────────────────
 async function uploadToStorage(
@@ -25,7 +37,7 @@ async function uploadToStorage(
   }
 }
 
-// ── Step 1: GPT-4o аналізує товар → 3 промпти ТІЛЬКИ для фону ────────────
+// ── Step 1: GPT-4o → 3 background prompts ─────────────────────────────────
 async function buildBackgroundPrompts(
   imageBase64: string,
   productName: string,
@@ -51,46 +63,44 @@ async function buildBackgroundPrompts(
         {
           type: 'text',
           text: `You are a professional product photography art director.
-Analyze this product image and create 3 DIFFERENT background prompts for DALL-E 3.
+Analyze this product and create 3 DIFFERENT background-only prompts for DALL-E 3.
 
 Product: "${productName}"
 Category: ${category}
 Key features: ${bulletText}
 
-Create 3 background-only prompts. The backgrounds will have the product photo composited on top later.
-
 VARIANT 1 — LIFESTYLE SCENE:
-A realistic lifestyle environment where this product would be used. 
-Example: for tactical gear → outdoor field, military environment, dramatic sky.
+A realistic environment where this product is used.
+Dramatic lighting, atmosphere matching the product category.
 NO text, NO product, NO people — just the environment/scene.
 
 VARIANT 2 — STUDIO GRADIENT:
-Clean professional studio background. Soft gradient from dark to light, 
-matching the product color palette. Subtle texture. Premium feel.
+Clean professional studio. Soft gradient matching product colors.
+Subtle texture, premium feel, soft shadow on floor.
 NO text, NO product.
 
-VARIANT 3 — DYNAMIC COMPOSITION:
-Bold graphic background with geometric shapes, color blocks, or abstract elements
-that complement the product category. Modern, energetic, marketplace-ready.
+VARIANT 3 — DYNAMIC GRAPHIC:
+Bold geometric shapes, color blocks complementing the product.
+Modern, energetic, abstract. Marketplace-ready.
 NO text, NO product.
 
-CRITICAL: 
-- Backgrounds must be 1024x1024 square
-- NO text, NO letters, NO words anywhere in the image
-- NO product visible — just pure background
-- Leave center area slightly less busy for product placement
-- High quality, photorealistic or semi-realistic
+CRITICAL FOR ALL 3:
+- Absolutely NO text, NO letters, NO words anywhere in the image
+- NO product visible — pure background only
+- Center area should be slightly less busy (product placed there later)
+- Square 1024x1024 format
+- High quality photorealistic or semi-realistic rendering
 
 Respond ONLY with JSON:
 {
   "v1": "DALL-E prompt for lifestyle background...",
-  "v2": "DALL-E prompt for studio gradient background...", 
-  "v3": "DALL-E prompt for dynamic composition background..."
+  "v2": "DALL-E prompt for studio gradient background...",
+  "v3": "DALL-E prompt for dynamic graphic background..."
 }`,
         },
       ],
     }],
-    max_tokens: 800,
+    max_tokens: 700,
     temperature: 0.7,
     response_format: { type: 'json_object' },
   });
@@ -113,7 +123,7 @@ async function generateBackground(prompt: string): Promise<Buffer | null> {
   try {
     const res = await openai.images.generate({
       model: 'dall-e-3',
-      prompt: prompt + '\n\nIMPORTANT: NO text, NO letters, NO words anywhere. Pure background only. Square 1024x1024.',
+      prompt: prompt + '\n\nCRITICAL: Absolutely NO text, NO letters, NO words anywhere. Pure background only. Square format.',
       size: '1024x1024',
       quality: 'hd',
       style: 'vivid',
@@ -132,7 +142,7 @@ async function generateBackground(prompt: string): Promise<Buffer | null> {
 // ── Step 3: Composite product + background + text via sharp ────────────────
 async function compositeCard(
   backgroundBuf: Buffer,
-  productBase64: string,        // already bg-removed
+  productBase64: string,
   productName: string,
   bullets: string[],
   variantStyle: 'lifestyle' | 'studio' | 'dynamic',
@@ -144,89 +154,122 @@ async function compositeCard(
     .resize(SIZE, SIZE, { fit: 'cover' })
     .toBuffer();
 
-  // Decode product image
+  // Decode product image (bg already removed by remove-bg pipeline)
   const rawProduct = productBase64.startsWith('data:')
     ? Buffer.from(productBase64.split(',')[1], 'base64')
     : Buffer.from(productBase64, 'base64');
 
-  // Resize product to fit nicely — 50% of card width, centered
-  const productSize = Math.round(SIZE * 0.52);
+  // Resize product — 54% of card width, preserve transparency
+  const productSize = Math.round(SIZE * 0.54);
   const productBuf = await sharp(rawProduct)
-    .resize(productSize, productSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .resize(productSize, productSize, {
+      fit: 'contain',
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
     .png()
     .toBuffer();
 
-  // Product position — center horizontally, slightly lower than center
   const productLeft = Math.round((SIZE - productSize) / 2);
-  const productTop = Math.round(SIZE * 0.22);
+  const productTop  = Math.round(SIZE * 0.18);
 
-  // ── Build text overlay as SVG ──────────────────────────────────────────
-  const topBullets = bullets.slice(0, 3);
-  const shortName = productName.length > 38
-    ? productName.substring(0, 35) + '...'
+  // Load DejaVu fonts (support Cyrillic)
+  const fontBoldB64    = loadFont('DejaVuSans-Bold.ttf');
+  const fontRegularB64 = loadFont('DejaVuSans.ttf');
+
+  const fontFace = fontBoldB64
+    ? `<style>
+        @font-face {
+          font-family: 'DVS';
+          src: url('data:font/truetype;base64,${fontBoldB64}');
+          font-weight: bold;
+        }
+        @font-face {
+          font-family: 'DVS';
+          src: url('data:font/truetype;base64,${fontRegularB64}');
+          font-weight: normal;
+        }
+      </style>`
+    : '';
+
+  const fontFamily = fontBoldB64 ? 'DVS' : 'sans-serif';
+
+  // Color schemes per variant
+  const schemes = {
+    lifestyle: {
+      accent:   '#FFD700',
+      headerBg: 'rgba(0,0,0,0.75)',
+      pillBg:   'rgba(0,0,0,0.62)',
+      text:     '#FFFFFF',
+    },
+    studio: {
+      accent:   '#4FC3F7',
+      headerBg: 'rgba(8,18,40,0.86)',
+      pillBg:   'rgba(8,18,40,0.70)',
+      text:     '#FFFFFF',
+    },
+    dynamic: {
+      accent:   '#FF6B35',
+      headerBg: 'rgba(20,8,0,0.82)',
+      pillBg:   'rgba(20,8,0,0.66)',
+      text:     '#FFFFFF',
+    },
+  };
+  const s = schemes[variantStyle];
+
+  // Truncate product name
+  const shortName = productName.length > 40
+    ? productName.substring(0, 37) + '...'
     : productName;
 
-  // Color scheme per variant
-  const schemes = {
-    lifestyle: { accent: '#FFD700', bg: 'rgba(0,0,0,0.72)', pill: 'rgba(0,0,0,0.55)' },
-    studio:    { accent: '#4FC3F7', bg: 'rgba(10,20,40,0.82)', pill: 'rgba(10,20,40,0.65)' },
-    dynamic:   { accent: '#FF6B35', bg: 'rgba(20,10,0,0.78)', pill: 'rgba(20,10,0,0.6)' },
-  };
-  const scheme = schemes[variantStyle];
-
-  // Build bullet pills SVG
-  const pillHeight = 44;
-  const pillGap = 12;
-  const pillY = SIZE - 20 - (topBullets.length * (pillHeight + pillGap));
+  // Bullet pills
+  const topBullets  = bullets.slice(0, 3);
+  const pillH       = 48;
+  const pillGap     = 10;
+  const totalPillsH = topBullets.length * (pillH + pillGap);
+  const pillsStartY = SIZE - 24 - totalPillsH;
 
   const bulletsSvg = topBullets.map((b, i) => {
-    const text = b.length > 36 ? b.substring(0, 33) + '...' : b;
-    const y = pillY + i * (pillHeight + pillGap);
+    const text = b.length > 42 ? b.substring(0, 39) + '...' : b;
+    const y    = pillsStartY + i * (pillH + pillGap);
     return `
-      <rect x="32" y="${y}" width="960" height="${pillHeight}" rx="10" fill="${scheme.pill}"/>
-      <text x="64" y="${y + 29}" font-family="Arial, sans-serif" font-size="20" font-weight="600" fill="white">✓ ${text}</text>
+      <rect x="24" y="${y}" width="${SIZE - 48}" height="${pillH}" rx="12" fill="${s.pillBg}"/>
+      <rect x="24" y="${y}" width="6" height="${pillH}" rx="3" fill="${s.accent}"/>
+      <text x="46" y="${y + 32}"
+        font-family="${fontFamily}" font-size="21" font-weight="normal" fill="${s.text}">✓ ${text}</text>
     `;
   }).join('');
 
-  const svgOverlay = `
-    <svg width="${SIZE}" height="${SIZE}" xmlns="http://www.w3.org/2000/svg">
-      <!-- Top header bar -->
-      <rect x="0" y="0" width="${SIZE}" height="90" fill="${scheme.bg}"/>
-      
-      <!-- Product name -->
-      <text 
-        x="${SIZE / 2}" y="58" 
-        font-family="Arial, sans-serif" 
-        font-size="26" 
-        font-weight="800" 
-        fill="white" 
-        text-anchor="middle"
-        dominant-baseline="middle"
-      >${shortName}</text>
+  const svgOverlay = `<svg width="${SIZE}" height="${SIZE}" xmlns="http://www.w3.org/2000/svg">
+    <defs>${fontFace}</defs>
 
-      <!-- Accent line under header -->
-      <rect x="0" y="90" width="${SIZE}" height="4" fill="${scheme.accent}"/>
+    <!-- Header bar -->
+    <rect x="0" y="0" width="${SIZE}" height="92" fill="${s.headerBg}"/>
 
-      <!-- Bullet pills at bottom -->
-      ${bulletsSvg}
+    <!-- Product name centered -->
+    <text x="${SIZE / 2}" y="60"
+      font-family="${fontFamily}" font-size="27" font-weight="bold"
+      fill="${s.text}" text-anchor="middle">${shortName}</text>
 
-      <!-- Bottom accent line -->
-      <rect x="0" y="${SIZE - 6}" width="${SIZE}" height="6" fill="${scheme.accent}"/>
-    </svg>
-  `;
+    <!-- Accent line under header -->
+    <rect x="0" y="92" width="${SIZE}" height="5" fill="${s.accent}"/>
+
+    <!-- Bullet pills at bottom -->
+    ${bulletsSvg}
+
+    <!-- Bottom accent bar -->
+    <rect x="0" y="${SIZE - 7}" width="${SIZE}" height="7" fill="${s.accent}"/>
+  </svg>`;
 
   const svgBuf = Buffer.from(svgOverlay);
 
-  // Composite: bg → product → text overlay
-  const result = await sharp(bg)
+  // Final composite: bg → product (transparent) → text overlay
+  return await sharp(bg)
     .composite([
       { input: productBuf, top: productTop, left: productLeft, blend: 'over' },
       { input: svgBuf,     top: 0,          left: 0,           blend: 'over' },
     ])
     .jpeg({ quality: 92 })
     .toBuffer();
-
-  return result;
 }
 
 // ── Main handler ────────────────────────────────────────────────────────────
@@ -246,7 +289,7 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const {
-      imageBase64,
+      imageBase64,  // processedPhoto (bg removed) preferred, fallback to original
       imageUrl,
       productName = '',
       bullets = [],
@@ -261,8 +304,8 @@ export async function POST(req: NextRequest) {
     if (!resolvedImage && imageUrl) {
       try {
         const imgRes = await fetch(imageUrl);
-        const buf = await imgRes.arrayBuffer();
-        const mime = imgRes.headers.get('content-type') || 'image/jpeg';
+        const buf    = await imgRes.arrayBuffer();
+        const mime   = imgRes.headers.get('content-type') || 'image/jpeg';
         resolvedImage = `data:${mime};base64,${Buffer.from(buf).toString('base64')}`;
       } catch (e) {
         console.warn('Failed to fetch imageUrl:', e);
@@ -294,9 +337,9 @@ export async function POST(req: NextRequest) {
       prompts.v3 ? generateBackground(prompts.v3) : Promise.resolve(null),
     ]);
 
-    // Step 3: Composite cards in parallel
+    // Step 3: Composite all 3 cards in parallel
     const styles: Array<'lifestyle' | 'studio' | 'dynamic'> = ['lifestyle', 'studio', 'dynamic'];
-    const bgs = [bg1, bg2, bg3];
+    const bgs    = [bg1, bg2, bg3];
     const labels = ['Lifestyle', 'Студія', 'Динамічний'];
 
     const composited = await Promise.all(
@@ -311,7 +354,7 @@ export async function POST(req: NextRequest) {
       }),
     );
 
-    // Step 4: Upload all to storage
+    // Step 4: Upload to storage
     const uploaded = await Promise.all(
       composited.map((buf, i) =>
         buf ? uploadToStorage(supabase, buf, user.id, i + 1) : Promise.resolve(null),

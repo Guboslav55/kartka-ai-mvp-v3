@@ -17,7 +17,7 @@
     "openai": "^4.47.0",
     "xlsx": "^0.18.5",
     "sharp": "^0.33.0",
-    "@resvg/resvg-js": "^2.6.2"
+    "satori": "^0.10.14"
   },
   "devDependencies": {
     "typescript": "^5",

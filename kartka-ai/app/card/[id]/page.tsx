@@ -82,14 +82,12 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Завантажуємо збережені інфографіки при відкритті карточки
+  // Load saved infographics on open
   useEffect(() => {
     const saved = (card as any).infographic_urls;
     if (Array.isArray(saved) && saved.length > 0) {
       setVariants(saved.map((v: { url: string; label: string }) => ({
-        url:    v.url,
-        label:  v.label,
-        prompt: '',
+        url: v.url, label: v.label, prompt: '',
       })));
       setSelected(0);
     }
@@ -99,6 +97,24 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, editing]);
 
+  async function generateVariant(variant: 'lifestyle' | 'benefits'): Promise<{ url: string; label: string } | null> {
+    const res = await fetch('/api/generate-infographic', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({
+        imageUrl:    (card as any).processed_image_url || card.image_url,
+        imageBase64: null,
+        productName: card.product_name || card.title,
+        bullets:     card.bullets,
+        category:    (card as any).category || 'general',
+        variant,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.url) return null;
+    return { url: data.url, label: data.label };
+  }
+
   async function generate() {
     setGenerating(true);
     setError('');
@@ -107,31 +123,42 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
     setChatOpen(false);
     setMessages([]);
 
+    const results: { url: string; label: string; prompt: string }[] = [];
+
     try {
-      setStep('analyzing');
-      await new Promise(r => setTimeout(r, 500));
-      setStep('generating');
+      // Variant 1: Lifestyle
+      setStep('variant1');
+      const v1 = await generateVariant('lifestyle');
+      if (v1) {
+        results.push({ ...v1, prompt: '' });
+        setVariants([...results]);
+        setSelected(0);
+      }
 
-      const res = await fetch('/api/generate-infographic', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-        body:    JSON.stringify({
-          imageUrl:    (card as any).processed_image_url || card.image_url,
-          imageBase64: null,
-          productName: card.product_name || card.title,
-          bullets:     card.bullets,
-          category:    (card as any).category || 'general',
-          cardId:      card.id,
-        }),
-      });
+      // Variant 2: Benefits
+      setStep('variant2');
+      const v2 = await generateVariant('benefits');
+      if (v2) {
+        results.push({ ...v2, prompt: '' });
+        setVariants([...results]);
+      }
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Помилка генерації');
+      if (results.length === 0) throw new Error('Не вдалося згенерувати жоден варіант');
 
-      setVariants(data.variants ?? []);
-      if (data.variants?.length > 0) setSelected(0);
+      // Save all to DB
+      if (card.id) {
+        await fetch('/api/generate-infographic', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({
+            cardId: card.id,
+            allVariants: results.map(r => ({ url: r.url, label: r.label })),
+            productName: card.product_name || card.title,
+          }),
+        });
+      }
+
       setStep('');
-
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Помилка сервера');
       setStep('');
@@ -199,7 +226,7 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-white font-bold text-lg">📊 AI Інфографіка</h2>
-          <p className="text-white/40 text-xs mt-0.5">3 унікальних варіанти · Flux AI · 1024×1024</p>
+          <p className="text-white/40 text-xs mt-0.5">2 унікальних варіанти · Flux AI · 1024×1024</p>
         </div>
         <button
           onClick={generate}
@@ -218,28 +245,38 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
       {/* Step indicator */}
       {generating && (
         <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-5 mb-4">
-          {/* Progress steps */}
-          <div className="flex flex-col gap-3 mb-4">
+          <div className="flex flex-col gap-3 mb-3">
             {[
-              { label: '🔍 GPT-4o аналізує товар та пише промпти', done: step.includes('Flux') || step.includes('варіант') },
-              { label: '🎨 Flux AI генерує Lifestyle варіант...', done: step.includes('варіант 2') || step.includes('варіант 3') },
-              { label: '🎨 Flux AI генерує Технічний варіант...', done: step.includes('варіант 3') },
-              { label: '🎨 Flux AI генерує Переваги варіант...', done: false },
-            ].map((s, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
-                  s.done ? 'bg-green-500' : 'bg-white/10'
-                }`}>
-                  {s.done
-                    ? <span className="text-white text-xs">✓</span>
-                    : <span className="w-3 h-3 border border-white/30 border-t-white/80 rounded-full animate-spin block" />
-                  }
+              { key: 'variant1', label: '🎨 Flux AI генерує Lifestyle варіант...' },
+              { key: 'variant2', label: '🎨 Flux AI генерує Переваги варіант...' },
+            ].map((s, i) => {
+              const isActive = step === s.key;
+              const isDone = (step === 'variant2' && i === 0) || (!generating && i < 2);
+              return (
+                <div key={s.key} className="flex items-center gap-3">
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
+                    isDone ? 'bg-green-500' : isActive ? 'bg-gold/20 border border-gold' : 'bg-white/10'
+                  }`}>
+                    {isDone
+                      ? <span className="text-white text-xs font-bold">✓</span>
+                      : isActive
+                        ? <span className="w-3 h-3 border-2 border-gold border-t-transparent rounded-full animate-spin block" />
+                        : <span className="w-2 h-2 bg-white/20 rounded-full block" />
+                    }
+                  </div>
+                  <span className={`text-sm transition-colors ${
+                    isDone ? 'text-green-400' : isActive ? 'text-gold' : 'text-white/30'
+                  }`}>{s.label}</span>
                 </div>
-                <span className={`text-sm ${s.done ? 'text-green-400' : 'text-white/60'}`}>{s.label}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
-          <p className="text-white/30 text-xs text-center">Flux AI генерує по одному варіанту · Очікуйте 2-3 хвилини</p>
+          <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden">
+            <div className={`h-full bg-gold rounded-full transition-all duration-1000 ${
+              step === 'variant1' ? 'w-1/2' : step === 'variant2' ? 'w-full' : 'w-0'
+            }`} />
+          </div>
+          <p className="text-white/25 text-xs text-center mt-2">~1 хвилина на варіант</p>
         </div>
       )}
 
@@ -769,4 +806,3 @@ export default function CardPage() {
     </div>
   );
 }
-

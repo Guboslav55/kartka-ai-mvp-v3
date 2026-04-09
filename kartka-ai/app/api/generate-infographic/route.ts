@@ -1,91 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
-import sharp from 'sharp';
-import fs from 'fs';
-import path from 'path';
-import satori from 'satori';
-import React from 'react';
 
 export const maxDuration = 300;
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const REPLICATE_TOKEN = process.env.REPLICATE_API_TOKEN;
-
-// ── Load font ──────────────────────────────────────────────────────────────
-function loadFont(filename: string): ArrayBuffer | null {
-  try {
-    const buf = fs.readFileSync(path.join(process.cwd(), 'public', 'fonts', filename));
-    return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
-  } catch { return null; }
-}
-
-// ── Generate background via Flux (Replicate) ───────────────────────────────
-async function generateBackgroundFlux(prompt: string): Promise<Buffer | null> {
-  if (!REPLICATE_TOKEN) {
-    console.error('REPLICATE_API_TOKEN not set');
-    return null;
-  }
-  try {
-    // Create prediction
-    const createRes = await fetch('https://api.replicate.com/v1/models/black-forest-labs/flux-1.1-pro/predictions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${REPLICATE_TOKEN}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'wait',
-      },
-      body: JSON.stringify({
-        input: {
-          prompt: prompt + ' Professional product photography background. No text, no letters, no words.',
-          width: 1024,
-          height: 1024,
-          output_format: 'webp',
-          output_quality: 90,
-          safety_tolerance: 2,
-        },
-      }),
-    });
-
-    const prediction = await createRes.json();
-
-    // If not done yet — poll
-    if (prediction.status !== 'succeeded') {
-      let pollUrl = prediction.urls?.get || `https://api.replicate.com/v1/predictions/${prediction.id}`;
-      let attempts = 0;
-      while (attempts < 30) {
-        await new Promise(r => setTimeout(r, 2000));
-        const pollRes = await fetch(pollUrl, {
-          headers: { 'Authorization': `Bearer ${REPLICATE_TOKEN}` },
-        });
-        const polled = await pollRes.json();
-        if (polled.status === 'succeeded') {
-          const imageUrl = Array.isArray(polled.output) ? polled.output[0] : polled.output;
-          if (!imageUrl) return null;
-          const imgRes = await fetch(imageUrl);
-          return Buffer.from(await imgRes.arrayBuffer());
-        }
-        if (polled.status === 'failed' || polled.status === 'canceled') {
-          console.error('Flux prediction failed:', polled.error);
-          return null;
-        }
-        attempts++;
-        pollUrl = `https://api.replicate.com/v1/predictions/${polled.id}`;
-      }
-      return null;
-    }
-
-    // Succeeded immediately
-    const imageUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
-    if (!imageUrl) return null;
-    const imgRes = await fetch(imageUrl);
-    return Buffer.from(await imgRes.arrayBuffer());
-
-  } catch (e) {
-    console.error('Flux generation failed:', e);
-    return null;
-  }
-}
 
 // ── Upload to Supabase ─────────────────────────────────────────────────────
 async function uploadToStorage(
@@ -103,10 +23,34 @@ async function uploadToStorage(
   }
 }
 
-// ── GPT-4o → 3 background prompts ─────────────────────────────────────────
-async function buildBackgroundPrompts(
-  imageBase64: string, productName: string, bullets: string[], category: string,
+// ── Upload base64 image to Supabase (needed for Flux — requires public URL) ─
+async function uploadImageForFlux(
+  supabase: ReturnType<typeof createClient>,
+  base64: string, userId: string,
+): Promise<string | null> {
+  try {
+    const match = base64.match(/^data:(image\/\w+);base64,(.+)$/s);
+    if (!match) return null;
+    const mimeType = match[1];
+    const ext = mimeType.split('/')[1] || 'jpg';
+    const buffer = Buffer.from(match[2], 'base64');
+    const fileName = `temp/${userId}/${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from('card-images')
+      .upload(fileName, buffer, { contentType: mimeType, upsert: true });
+    if (error) return null;
+    return supabase.storage.from('card-images').getPublicUrl(fileName).data.publicUrl;
+  } catch { return null; }
+}
+
+// ── GPT-4o → build 3 infographic prompts for Flux Kontext ─────────────────
+async function buildKontextPrompts(
+  imageBase64: string,
+  productName: string,
+  bullets: string[],
+  category: string,
 ): Promise<{ v1: string; v2: string; v3: string }> {
+  const bulletText = bullets.slice(0, 4).map((b, i) => `${i + 1}. ${b}`).join('\n');
+
   const response = await openai.chat.completions.create({
     model: 'gpt-4o',
     messages: [{
@@ -121,121 +65,122 @@ async function buildBackgroundPrompts(
         },
         {
           type: 'text',
-          text: `Product photography art director. Create 3 background prompts for Flux AI image generator.
-Product: "${productName}", Category: ${category}, Features: ${bullets.slice(0,3).join(', ')}
+          text: `You are a professional Ukrainian marketplace infographic designer.
+Analyze this product photo and create 3 different editing prompts for Flux Kontext (an image editing AI).
+Flux Kontext will take the product photo and transform it into a professional infographic while keeping the product visible.
 
-V1 LIFESTYLE: Photorealistic outdoor/indoor scene where this product is used. Rich atmosphere, cinematic lighting. No text, no product, no people.
-V2 STUDIO: Premium studio photography background. Elegant gradient, subtle texture, professional soft lighting with gentle floor reflection. No text, no product.
-V3 DYNAMIC: Bold modern graphic background. Geometric shapes, vibrant color blocks matching product palette. Abstract, energetic. No text, no product.
+Product: "${productName}"
+Category: ${category}
+Key features:
+${bulletText}
 
-ALL VARIANTS: No text, no letters, no product. Center area less busy. Square format. Hyper-realistic or stylized — very high quality.
+Create 3 DIFFERENT infographic style prompts. Each prompt instructs Flux Kontext how to transform the product photo:
 
-JSON only: {"v1":"...","v2":"...","v3":"..."}`,
+VARIANT 1 — LIFESTYLE CALLOUT:
+Transform the product photo into a professional lifestyle infographic. 
+Add a dramatic atmospheric background matching the product category (outdoor scene, studio, etc).
+Add 3-4 annotation callout lines pointing to key product features with short Ukrainian text labels.
+Keep the product clearly visible and centered. Add bold Ukrainian title at top.
+Style: professional marketplace photography, cinematic lighting.
+
+VARIANT 2 — TECHNICAL DIAGRAM:
+Transform into a clean technical infographic on dark gradient background.
+Add annotation arrows pointing to product details with Ukrainian feature labels.
+Add feature icons or badges in corners. Clean minimal design.
+Bold Ukrainian title at top, feature pills at bottom.
+Style: technical product diagram, dark premium look.
+
+VARIANT 3 — BENEFITS GRID:
+Transform into bold graphic infographic with vibrant colored background.
+Surround the product with 3-4 benefit blocks/badges showing Ukrainian feature text.
+Dynamic composition with geometric elements. Modern energetic marketplace style.
+Product hero in center, benefits around it.
+
+CRITICAL FOR ALL:
+- Keep the ORIGINAL product from the photo — do NOT replace it
+- All text labels must be in Ukrainian language
+- Professional marketplace quality
+- Square 1024x1024 format
+
+Respond ONLY with JSON:
+{
+  "v1": "Flux Kontext editing prompt for lifestyle callout...",
+  "v2": "Flux Kontext editing prompt for technical diagram...",
+  "v3": "Flux Kontext editing prompt for benefits grid..."
+}`,
         },
       ],
     }],
-    max_tokens: 600, temperature: 0.7, response_format: { type: 'json_object' },
+    max_tokens: 800,
+    temperature: 0.7,
+    response_format: { type: 'json_object' },
   });
+
   try {
     const p = JSON.parse(response.choices[0]?.message?.content ?? '{}');
     return { v1: p.v1 || '', v2: p.v2 || '', v3: p.v3 || '' };
   } catch { return { v1: '', v2: '', v3: '' }; }
 }
 
-// ── Render text overlay via satori → PNG ───────────────────────────────────
-async function renderTextOverlay(
-  productName: string, bullets: string[],
-  style: 'lifestyle' | 'studio' | 'dynamic',
-  fontRegular: ArrayBuffer, fontBold: ArrayBuffer,
-): Promise<Buffer> {
-  const SIZE = 1024;
-  const schemes = {
-    lifestyle: { accent: '#FFD700', headerBg: '#000000c8', pillBg: '#000000a8', text: '#ffffff' },
-    studio:    { accent: '#4FC3F7', headerBg: '#08123ac8', pillBg: '#08123aa0', text: '#ffffff' },
-    dynamic:   { accent: '#FF6B35', headerBg: '#160800c8', pillBg: '#160800a8', text: '#ffffff' },
-  };
-  const s = schemes[style];
-  const shortName = productName.length > 42 ? productName.slice(0, 39) + '...' : productName;
-  const topBullets = bullets.slice(0, 3);
-  const pillH = 50, pillGap = 10;
+// ── Run Flux Kontext (image editing) ──────────────────────────────────────
+async function runFluxKontext(
+  imageUrl: string,
+  prompt: string,
+): Promise<Buffer | null> {
+  if (!REPLICATE_TOKEN) { console.error('No REPLICATE_API_TOKEN'); return null; }
 
-  const element = React.createElement('div', {
-    style: { width: SIZE, height: SIZE, display: 'flex', flexDirection: 'column', backgroundColor: 'transparent' },
-  },
-    // Header
-    React.createElement('div', {
-      style: {
-        width: '100%', height: 96, backgroundColor: s.headerBg,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        borderBottom: `5px solid ${s.accent}`, padding: '0 20px',
-      },
-    },
-      React.createElement('span', {
-        style: { fontFamily: 'DVS', fontSize: 27, fontWeight: 700, color: s.text, textAlign: 'center' },
-      }, shortName),
-    ),
-    // Spacer
-    React.createElement('div', { style: { flex: 1 } }),
-    // Bullets
-    React.createElement('div', {
-      style: { display: 'flex', flexDirection: 'column', gap: pillGap, padding: '0 24px 16px 24px' },
-    },
-      ...topBullets.map(b =>
-        React.createElement('div', {
-          style: {
-            height: pillH, backgroundColor: s.pillBg, borderRadius: 14,
-            display: 'flex', alignItems: 'center',
-            borderLeft: `7px solid ${s.accent}`, paddingLeft: 18, paddingRight: 12,
-          },
+  try {
+    const createRes = await fetch(
+      'https://api.replicate.com/v1/models/black-forest-labs/flux-kontext-pro/predictions',
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${REPLICATE_TOKEN}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'wait',
         },
-          React.createElement('span', {
-            style: { fontFamily: 'DVS', fontSize: 21, color: s.text, fontWeight: 400 },
-          }, `✓ ${b.length > 44 ? b.slice(0, 41) + '...' : b}`),
-        ),
-      ),
-    ),
-    // Bottom bar
-    React.createElement('div', { style: { width: '100%', height: 8, backgroundColor: s.accent } }),
-  );
+        body: JSON.stringify({
+          input: {
+            prompt,
+            input_image: imageUrl,
+            output_format: 'jpg',
+            output_quality: 90,
+            safety_tolerance: 2,
+            aspect_ratio: '1:1',
+          },
+        }),
+      },
+    );
 
-  const svg = await satori(element, {
-    width: SIZE, height: SIZE,
-    fonts: [
-      { name: 'DVS', data: fontRegular, weight: 400, style: 'normal' },
-      { name: 'DVS', data: fontBold,    weight: 700, style: 'normal' },
-    ],
-  });
+    let prediction = await createRes.json();
 
-  return await sharp(Buffer.from(svg)).png().toBuffer();
-}
+    // Poll if not done
+    let attempts = 0;
+    while (prediction.status !== 'succeeded' && prediction.status !== 'failed' && prediction.status !== 'canceled' && attempts < 60) {
+      await new Promise(r => setTimeout(r, 3000));
+      const pollRes = await fetch(
+        `https://api.replicate.com/v1/predictions/${prediction.id}`,
+        { headers: { 'Authorization': `Bearer ${REPLICATE_TOKEN}` } },
+      );
+      prediction = await pollRes.json();
+      attempts++;
+    }
 
-// ── Composite card ─────────────────────────────────────────────────────────
-async function compositeCard(
-  bgBuf: Buffer, productBase64: string,
-  productName: string, bullets: string[],
-  style: 'lifestyle' | 'studio' | 'dynamic',
-  fontRegular: ArrayBuffer, fontBold: ArrayBuffer,
-): Promise<Buffer> {
-  const SIZE = 1024;
-  const bg = await sharp(bgBuf).resize(SIZE, SIZE, { fit: 'cover' }).toBuffer();
+    if (prediction.status !== 'succeeded') {
+      console.error('Flux Kontext failed:', prediction.error);
+      return null;
+    }
 
-  const rawProduct = productBase64.startsWith('data:')
-    ? Buffer.from(productBase64.split(',')[1], 'base64')
-    : Buffer.from(productBase64, 'base64');
+    const outputUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
+    if (!outputUrl) return null;
 
-  const productSize = Math.round(SIZE * 0.52);
-  const productBuf = await sharp(rawProduct)
-    .resize(productSize, productSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-    .png().toBuffer();
+    const imgRes = await fetch(outputUrl);
+    return Buffer.from(await imgRes.arrayBuffer());
 
-  const overlayPng = await renderTextOverlay(productName, bullets, style, fontRegular, fontBold);
-
-  return await sharp(bg)
-    .composite([
-      { input: productBuf, top: Math.round(SIZE * 0.20), left: Math.round((SIZE - productSize) / 2), blend: 'over' },
-      { input: overlayPng, top: 0, left: 0, blend: 'over' },
-    ])
-    .jpeg({ quality: 92 }).toBuffer();
+  } catch (e) {
+    console.error('Flux Kontext error:', e);
+    return null;
+  }
 }
 
 // ── Main handler ────────────────────────────────────────────────────────────
@@ -252,68 +197,72 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser(token);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { imageBase64, imageUrl, productName = '', bullets = [], category = 'general' } = await req.json();
-    if (!productName.trim()) return NextResponse.json({ error: 'Потрібна назва товару' }, { status: 400 });
+    const {
+      imageBase64,
+      imageUrl,
+      productName = '',
+      bullets = [],
+      category = 'general',
+    } = await req.json();
 
-    let resolvedImage = imageBase64 || '';
-    if (!resolvedImage && imageUrl) {
+    if (!productName.trim())
+      return NextResponse.json({ error: 'Потрібна назва товару' }, { status: 400 });
+
+    // Resolve product image
+    let resolvedBase64 = imageBase64 || '';
+    if (!resolvedBase64 && imageUrl) {
       try {
         const r = await fetch(imageUrl);
         const buf = await r.arrayBuffer();
         const mime = r.headers.get('content-type') || 'image/jpeg';
-        resolvedImage = `data:${mime};base64,${Buffer.from(buf).toString('base64')}`;
+        resolvedBase64 = `data:${mime};base64,${Buffer.from(buf).toString('base64')}`;
       } catch (e) { console.warn('fetch imageUrl failed:', e); }
     }
-    if (!resolvedImage) return NextResponse.json({ error: 'Потрібне фото товару' }, { status: 400 });
+    if (!resolvedBase64)
+      return NextResponse.json({ error: 'Потрібне фото товару' }, { status: 400 });
 
     const cleanBullets = (bullets as string[])
-      .filter(x => x.trim()).slice(0, 3)
+      .filter(x => x.trim()).slice(0, 4)
       .map(x => x.replace(/^[✓•]\s*/, '').trim());
 
-    const fontRegular = loadFont('DejaVuSans.ttf');
-    const fontBold    = loadFont('DejaVuSans-Bold.ttf');
-    if (!fontRegular || !fontBold)
-      return NextResponse.json({ error: 'Шрифти не знайдено' }, { status: 500 });
+    // Upload product image to get public URL for Flux
+    const publicImageUrl = await uploadImageForFlux(supabase, resolvedBase64, user.id);
+    if (!publicImageUrl)
+      return NextResponse.json({ error: 'Не вдалося завантажити фото' }, { status: 500 });
 
-    // Step 1: prompts
-    const prompts = await buildBackgroundPrompts(resolvedImage, productName, cleanBullets, category);
+    // Step 1: GPT-4o → 3 Kontext prompts
+    const prompts = await buildKontextPrompts(resolvedBase64, productName, cleanBullets, category);
     if (!prompts.v1 && !prompts.v2 && !prompts.v3)
       return NextResponse.json({ error: 'Не вдалося проаналізувати товар' }, { status: 500 });
 
-    // Step 2: Flux backgrounds in parallel
-    const [bg1, bg2, bg3] = await Promise.all([
-      prompts.v1 ? generateBackgroundFlux(prompts.v1) : Promise.resolve(null),
-      prompts.v2 ? generateBackgroundFlux(prompts.v2) : Promise.resolve(null),
-      prompts.v3 ? generateBackgroundFlux(prompts.v3) : Promise.resolve(null),
-    ]);
+    // Step 2: Run Flux Kontext SEQUENTIALLY (avoid rate limits)
+    const labels = ['Lifestyle', 'Технічний', 'Переваги'];
+    const promptList = [prompts.v1, prompts.v2, prompts.v3];
+    const results: { url: string; label: string }[] = [];
 
-    // Step 3: composite
-    const styles = ['lifestyle', 'studio', 'dynamic'] as const;
-    const labels = ['Lifestyle', 'Студія', 'Динамічний'];
+    for (let i = 0; i < 3; i++) {
+      if (!promptList[i]) continue;
+      try {
+        const buf = await runFluxKontext(publicImageUrl, promptList[i]);
+        if (buf) {
+          const url = await uploadToStorage(supabase, buf, user.id, i + 1);
+          results.push({ url, label: labels[i] });
+        }
+      } catch (e) {
+        console.error(`Variant ${i} failed:`, e);
+      }
+    }
 
-    const composited = await Promise.all(
-      [bg1, bg2, bg3].map(async (bg, i) => {
-        if (!bg) return null;
-        try {
-          return await compositeCard(bg, resolvedImage, productName, cleanBullets, styles[i], fontRegular, fontBold);
-        } catch (e) { console.error(`Composite ${i} failed:`, e); return null; }
-      }),
-    );
-
-    const uploaded = await Promise.all(
-      composited.map((buf, i) =>
-        buf ? uploadToStorage(supabase, buf, user.id, i + 1) : Promise.resolve(null),
-      ),
-    );
-
-    const variants = uploaded.map((url, i) => url ? ({ url, label: labels[i] }) : null).filter(Boolean);
-    if (variants.length === 0)
+    if (results.length === 0)
       return NextResponse.json({ error: 'Не вдалося згенерувати жоден варіант' }, { status: 500 });
 
-    return NextResponse.json({ variants });
+    return NextResponse.json({ variants: results });
 
   } catch (err: unknown) {
     console.error('Infographic error:', err);
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Помилка генерації' }, { status: 500 });
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Помилка генерації' },
+      { status: 500 },
+    );
   }
 }

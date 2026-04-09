@@ -124,15 +124,24 @@ async function runFluxKontext(imageUrl: string, prompt: string): Promise<Buffer 
         }),
       },
     );
-    let prediction = await createRes.json();
+    const rawText = await createRes.text();
+    console.log('Replicate raw response status:', createRes.status, rawText.slice(0, 500));
+    let prediction: Record<string, unknown>;
+    try {
+      prediction = JSON.parse(rawText);
+    } catch {
+      console.error('Replicate returned non-JSON:', rawText.slice(0, 500));
+      return null;
+    }
     let attempts = 0;
-    while (prediction.status !== 'succeeded' && prediction.status !== 'failed' && prediction.status !== 'canceled' && attempts < 60) {
+    while (prediction['status'] !== 'succeeded' && prediction['status'] !== 'failed' && prediction['status'] !== 'canceled' && attempts < 60) {
       await new Promise(r => setTimeout(r, 3000));
       const pollRes = await fetch(
-        `https://api.replicate.com/v1/predictions/${prediction.id}`,
+        `https://api.replicate.com/v1/predictions/${prediction.id as string}`,
         { headers: { 'Authorization': `Bearer ${REPLICATE_TOKEN}` } },
       );
-      prediction = await pollRes.json();
+      const pollText = await pollRes.text();
+      try { prediction = JSON.parse(pollText); } catch { console.error('Poll non-JSON:', pollText.slice(0,200)); break; }
       attempts++;
     }
     if (prediction.status !== 'succeeded') { console.error('Flux Kontext failed:', prediction.error); return null; }
@@ -228,4 +237,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

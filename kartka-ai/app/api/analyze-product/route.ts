@@ -3,6 +3,9 @@ import OpenAI from 'openai';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+// Збільшуємо ліміт тіла запиту до 20MB для великих фото
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get('authorization');
@@ -25,9 +28,7 @@ export async function POST(req: NextRequest) {
           {
             type: 'text',
             text: `Ти — експерт з e-commerce та SEO для українських маркетплейсів Prom.ua та Rozetka.
-
 Уважно розглянь фото товару${productName ? ` (${productName})` : ''}.
-
 Відповідай ${langHint} ТІЛЬКИ валідним JSON:
 {
   "productName": "ПРОДАЮЧА SEO назва для Prom.ua. Формула: [Тип] [Характеристика] [Об'єм/Розмір якщо видно] [Колір] / [Призначення] для [ЦА]. Приклади: 'Рюкзак тактичний військовий 45л чорний / армійський похідний для ЗСУ', 'Кросівки тактичні шкіряні чорні / берці для військових та активного відпочинку'. Назва 60-80 символів, з ключовими словами які шукають покупці.",
@@ -42,14 +43,8 @@ export async function POST(req: NextRequest) {
   "material": "матеріал якщо видно або null",
   "color": "колір або null",
   "keepBackground": false,
-  "bbox": {
-    "x": 0.1,
-    "y": 0.05,
-    "w": 0.8,
-    "h": 0.9
-  }
+  "bbox": { "x": 0.1, "y": 0.05, "w": 0.8, "h": 0.9 }
 }
-
 bbox — відносні координати (0.0–1.0) де знаходиться товар на фото.
 Якщо товар займає весь кадр або фон вже білий — встанови keepBackground: true та bbox: {"x":0,"y":0,"w":1,"h":1}.`,
           },
@@ -62,7 +57,9 @@ bbox — відносні координати (0.0–1.0) де знаходит
 
   } catch (err: unknown) {
     console.error('Analyze error:', err);
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Error' }, { status: 500 });
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Error' },
+      { status: 500 },
+    );
   }
 }
-

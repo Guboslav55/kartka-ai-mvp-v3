@@ -27,61 +27,51 @@ const CTA: Record<string, string> = {
   en: 'Order now — fast delivery across Ukraine!',
 };
 
-// ── Upload helpers ────────────────────────────────────────────────────────────
-
-/** Upload a DALL-E temp URL (https://...) to Supabase Storage */
+// ── Upload helpers ─────────────────────────────────────────────────────────
 async function uploadDalleUrl(
   supabase: ReturnType<typeof createClient>,
-  tempUrl: string,
-  userId: string,
+  tempUrl: string, userId: string,
 ): Promise<string> {
   try {
-    const res = await fetch(tempUrl);
+    const res  = await fetch(tempUrl);
     const blob = await res.arrayBuffer();
     const fileName = `${userId}/${Date.now()}.jpg`;
-    const { error } = await supabase.storage
-      .from('card-images')
+    const { error } = await supabase.storage.from('card-images')
       .upload(fileName, blob, { contentType: 'image/jpeg', upsert: false });
-    if (error) { console.warn('Storage upload error:', error); return tempUrl; }
-    const { data } = supabase.storage.from('card-images').getPublicUrl(fileName);
-    return data.publicUrl;
+    if (error) return tempUrl;
+    return supabase.storage.from('card-images').getPublicUrl(fileName).data.publicUrl;
   } catch (e) {
-    console.warn('Image upload failed, using temp URL:', e);
+    console.warn('Image upload failed:', e);
     return tempUrl;
   }
 }
 
-/** Upload a base64 data URI (data:image/...;base64,...) to Supabase Storage */
 async function uploadBase64Photo(
   supabase: ReturnType<typeof createClient>,
-  base64DataUri: string,
-  userId: string,
+  base64DataUri: string, userId: string,
+  suffix = '',
 ): Promise<string | null> {
   try {
     const match = base64DataUri.match(/^data:(image\/\w+);base64,(.+)$/s);
     if (!match) return null;
-    const mimeType = match[1];                        // e.g. "image/png"
-    const ext      = mimeType.split('/')[1] || 'jpg'; // "png" | "jpeg" | "jpg"
+    const mimeType = match[1];
+    const ext      = mimeType.split('/')[1] || 'jpg';
     const buffer   = Buffer.from(match[2], 'base64');
-
-    const fileName = `${userId}/${Date.now()}.${ext}`;
-    const { error } = await supabase.storage
-      .from('card-images')
+    const fileName = `${userId}/${Date.now()}${suffix}.${ext}`;
+    const { error } = await supabase.storage.from('card-images')
       .upload(fileName, buffer, { contentType: mimeType, upsert: false });
     if (error) { console.warn('Photo storage error:', error); return null; }
-    const { data } = supabase.storage.from('card-images').getPublicUrl(fileName);
-    return data.publicUrl;
+    return supabase.storage.from('card-images').getPublicUrl(fileName).data.publicUrl;
   } catch (e) {
     console.warn('Base64 upload failed:', e);
     return null;
   }
 }
 
-// ── Main handler ──────────────────────────────────────────────────────────────
+// ── Main handler ───────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
-    const authHeader = req.headers.get('authorization');
-    const token = authHeader?.replace('Bearer ', '');
+    const token = req.headers.get('authorization')?.replace('Bearer ', '');
     if (!token) return NextResponse.json({ error: 'Необхідна авторизація' }, { status: 401 });
 
     const supabase = createClient(
@@ -94,54 +84,57 @@ export async function POST(req: NextRequest) {
     if (authError || !user) return NextResponse.json({ error: 'Необхідна авторизація' }, { status: 401 });
 
     const { data: profile } = await supabase.from('users').select('*').eq('id', user.id).single();
-    if (!profile)               return NextResponse.json({ error: 'Профіль не знайдено' },             { status: 404 });
-    if (profile.cards_left <= 0) return NextResponse.json({ error: 'Ліміт карточок вичерпано. Підвищ тариф.' }, { status: 403 });
+    if (!profile) return NextResponse.json({ error: 'Профіль не знайдено' }, { status: 404 });
+    if (profile.cards_left <= 0)
+      return NextResponse.json({ error: 'Ліміт карточок вичерпано. Підвищ тариф.' }, { status: 403 });
 
     const {
-      productName,
-      category,
-      features,
-      platform,
-      tone,
-      lang,
-      generateImage,    // boolean — user wants DALL-E image (only when no photo)
-      uploadedPhoto,    // base64 data URI — processed photo (cropped + no bg) from frontend
+      productName, category, features, platform, tone, lang,
+      generateImage,
+      uploadedPhoto,      // base64 — processed photo (bg removed) from frontend
+      originalPhoto,      // base64 — original photo (with bg) — optional
     } = await req.json();
 
-    if (!productName?.trim()) return NextResponse.json({ error: "Назва товару обов'язкова" }, { status: 400 });
+    if (!productName?.trim())
+      return NextResponse.json({ error: "Назва товару обов'язкова" }, { status: 400 });
 
-    // ── Step 1: Save uploaded photo to permanent Supabase URL ──────────────────
-    // Do this BEFORE text generation so we have a stable URL for the card record.
-    let persistedPhotoUrl: string | null = null;
-    const hasUploadedPhoto = typeof uploadedPhoto === 'string' && uploadedPhoto.startsWith('data:');
+    // ── Step 1: Upload both photos to Supabase ─────────────────────────────
+    // processedPhoto (bg removed) — used for infographics
+    // originalPhoto — fallback display image
+    let processedImageUrl: string | null = null;
+    let persistedPhotoUrl: string | null  = null;
 
-    if (hasUploadedPhoto) {
-      persistedPhotoUrl = await uploadBase64Photo(supabase, uploadedPhoto, user.id);
+    const hasProcessed = typeof uploadedPhoto === 'string' && uploadedPhoto.startsWith('data:');
+    const hasOriginal  = typeof originalPhoto === 'string' && originalPhoto.startsWith('data:');
+
+    if (hasProcessed) {
+      // Upload processed (bg-removed) photo
+      processedImageUrl = await uploadBase64Photo(supabase, uploadedPhoto, user.id, '-processed');
+      persistedPhotoUrl = processedImageUrl;
+    }
+    if (hasOriginal && !persistedPhotoUrl) {
+      // Fallback — upload original if no processed
+      persistedPhotoUrl = await uploadBase64Photo(supabase, originalPhoto, user.id, '-original');
     }
 
-    // ── Step 2: Generate text (GPT-4o) ─────────────────────────────────────────
+    // ── Step 2: Generate text (GPT-4o) ─────────────────────────────────────
     const cta = CTA[lang] ?? CTA.uk;
     const userContent: OpenAI.Chat.ChatCompletionContentPart[] = [];
 
-    if (hasUploadedPhoto) {
-      // Pass base64 to GPT-4o vision — it reads the actual product
+    if (hasProcessed) {
       userContent.push({ type: 'image_url', image_url: { url: uploadedPhoto, detail: 'high' } });
     }
-
     userContent.push({
       type: 'text',
       text: `Ти — експерт-копірайтер для українських маркетплейсів.
 ${LANG_HINTS[lang] ?? LANG_HINTS.uk}
 ${PLATFORM_HINTS[platform] ?? PLATFORM_HINTS.general}
 ${TONE_HINTS[tone] ?? TONE_HINTS.professional}
-${hasUploadedPhoto ? 'На фото — товар клієнта. Уважно опиши деталі з фото.' : ''}
-
+${hasProcessed ? 'На фото — товар клієнта. Уважно опиши деталі з фото.' : ''}
 Товар: ${productName}
 ${category ? `Категорія: ${category}` : ''}
 ${features ? `Характеристики: ${features}` : ''}
-
 ВАЖЛИВО: В кінці опису ОБОВ'ЯЗКОВО додай: "${cta}"
-
 Відповідай ТІЛЬКИ валідним JSON без markdown:
 {"title":"SEO-заголовок","description":"Опис 3-5 речень + заклик до дії","bullets":["Перевага 1","Перевага 2","Перевага 3","Перевага 4","Перевага 5"],"keywords":["слово1","слово2","слово3","слово4","слово5","слово6"]}`,
     });
@@ -154,48 +147,36 @@ ${features ? `Характеристики: ${features}` : ''}
     });
 
     const cardData = JSON.parse(completion.choices[0]?.message?.content ?? '{}');
-    if (!cardData.title || !cardData.description) throw new Error('Неповна відповідь від AI. Спробуй ще раз.');
+    if (!cardData.title || !cardData.description)
+      throw new Error('Неповна відповідь від AI. Спробуй ще раз.');
 
-    // ── Step 3: Determine final imageUrl ───────────────────────────────────────
-    // Priority: persistedPhotoUrl > DALL-E generated > null
+    // ── Step 3: Determine display imageUrl ─────────────────────────────────
     let imageUrl: string | null = persistedPhotoUrl;
 
     if (!imageUrl && generateImage) {
-      // Only generate DALL-E image when user explicitly asked AND no photo was uploaded
       try {
-        const imgPrompt = `Ultra-high quality professional product photography of "${productName}"${category ? ` (${category})` : ''}.
-Pure white seamless background. Soft studio lighting. Sharp focus. Commercial e-commerce style.
-STRICT: NO text, NO letters, NO words, NO watermarks anywhere in the image.`;
-
+        const imgPrompt = `Ultra-high quality professional product photography of "${productName}"${category ? ` (${category})` : ''}. Pure white seamless background. Soft studio lighting. Sharp focus. Commercial e-commerce style. STRICT: NO text, NO letters, NO words.`;
         const imgRes = await openai.images.generate({
-          model: 'dall-e-3',
-          prompt: imgPrompt,
-          size: '1024x1024',
-          quality: 'hd',
-          style: 'natural',
-          n: 1,
+          model: 'dall-e-3', prompt: imgPrompt,
+          size: '1024x1024', quality: 'hd', style: 'natural', n: 1,
         });
-
         const tempUrl = imgRes.data[0]?.url;
-        if (tempUrl) {
-          imageUrl = await uploadDalleUrl(supabase, tempUrl, user.id);
-        }
-      } catch (e) {
-        console.warn('Image generation failed:', e);
-      }
+        if (tempUrl) imageUrl = await uploadDalleUrl(supabase, tempUrl, user.id);
+      } catch (e) { console.warn('Image generation failed:', e); }
     }
 
-    // ── Step 4: Save to Supabase ────────────────────────────────────────────────
+    // ── Step 4: Save to Supabase ───────────────────────────────────────────
     const [insertResult] = await Promise.all([
       supabase.from('cards').insert({
-        user_id:      user.id,
-        product_name: productName,
-        platform:     platform ?? 'general',
-        title:        cardData.title,
-        description:  cardData.description,
-        bullets:      cardData.bullets,
-        keywords:     cardData.keywords ?? [],
-        image_url:    imageUrl,
+        user_id:             user.id,
+        product_name:        productName,
+        platform:            platform ?? 'general',
+        title:               cardData.title,
+        description:         cardData.description,
+        bullets:             cardData.bullets,
+        keywords:            cardData.keywords ?? [],
+        image_url:           imageUrl,
+        processed_image_url: processedImageUrl,  // ← NEW: bg-removed photo URL
       }).select('id').single(),
       supabase.from('users').update({
         cards_left:  profile.cards_left - 1,
@@ -203,16 +184,17 @@ STRICT: NO text, NO letters, NO words, NO watermarks anywhere in the image.`;
       }).eq('id', user.id),
     ]);
 
-    if (insertResult.error) {
-      // Log but don't fail the request — user still gets the card content
-      console.error('Card insert error:', insertResult.error);
-    }
+    if (insertResult.error) console.error('Card insert error:', insertResult.error);
 
     const cardId = insertResult?.data?.id ?? null;
     return NextResponse.json({ ...cardData, imageUrl, cardId });
 
   } catch (err: unknown) {
     console.error('Generate error:', err);
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Помилка сервера' }, { status: 500 });
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Помилка сервера' },
+      { status: 500 },
+    );
   }
 }
+

@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-// Збільшуємо ліміт тіла запиту до 20MB для великих фото
 export const maxDuration = 60;
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function POST(req: NextRequest) {
   try {
@@ -31,8 +30,8 @@ export async function POST(req: NextRequest) {
 Уважно розглянь фото товару${productName ? ` (${productName})` : ''}.
 Відповідай ${langHint} ТІЛЬКИ валідним JSON:
 {
-  "productName": "ПРОДАЮЧА SEO назва для Prom.ua. Формула: [Тип] [Характеристика] [Об'єм/Розмір якщо видно] [Колір] / [Призначення] для [ЦА]. Приклади: 'Рюкзак тактичний військовий 45л чорний / армійський похідний для ЗСУ', 'Кросівки тактичні шкіряні чорні / берці для військових та активного відпочинку'. Назва 60-80 символів, з ключовими словами які шукають покупці.",
-  "category": "одна з категорій: Електроніка | Одяг та взуття | Тактичне спорядження | Дім та сад | Краса та здоров'я | Спорт та хобі | Авто та мото | Іграшки | Інше",
+  "productName": "ПРОДАЮЧА SEO назва для Prom.ua. Формула: [Тип] [Характеристика] [Об'єм/Розмір якщо видно] [Колір] / [Призначення] для [ЦА]. Назва 60-80 символів.",
+  "category": "одна з: Електроніка | Одяг та взуття | Тактичне спорядження | Дім та сад | Краса та здоров'я | Спорт та хобі | Авто та мото | Іграшки | Інше",
   "bullets": [
     "Конкретна перевага 1 що ПРОДАЄ — з матеріалом/цифрою/фактом",
     "Перевага 2 що знімає головне заперечення покупця",
@@ -45,14 +44,19 @@ export async function POST(req: NextRequest) {
   "keepBackground": false,
   "bbox": { "x": 0.1, "y": 0.05, "w": 0.8, "h": 0.9 }
 }
-bbox — відносні координати (0.0–1.0) де знаходиться товар на фото.
-Якщо товар займає весь кадр або фон вже білий — встанови keepBackground: true та bbox: {"x":0,"y":0,"w":1,"h":1}.`,
+
+ВАЖЛИВО: keepBackground ЗАВЖДИ має бути false — ми завжди видаляємо фон.
+bbox — відносні координати (0.0–1.0) де знаходиться товар на фото.`,
           },
         ],
       }],
     });
 
-    const data = JSON.parse(completion.choices[0]?.message?.content ?? '{}');
+    const raw = completion.choices[0]?.message?.content ?? '{}';
+    const data = JSON.parse(raw);
+    // Force keepBackground false regardless of GPT response
+    data.keepBackground = false;
+
     return NextResponse.json(data);
 
   } catch (err: unknown) {

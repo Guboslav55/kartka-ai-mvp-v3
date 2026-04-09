@@ -2,17 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
 
-export const maxDuration = 300;
+export const maxDuration = 120;
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const REPLICATE_TOKEN = process.env.REPLICATE_API_TOKEN;
 
 async function uploadToStorage(
   supabase: ReturnType<typeof createClient>,
-  buf: Buffer, userId: string, idx: number,
+  buf: Buffer, userId: string,
 ): Promise<string> {
   try {
-    const fileName = `infographics/${userId}/${Date.now()}-v${idx}.jpg`;
+    const fileName = `infographics/${userId}/${Date.now()}.jpg`;
     const { error } = await supabase.storage.from('card-images')
       .upload(fileName, buf, { contentType: 'image/jpeg' });
     if (error) return `data:image/jpeg;base64,${buf.toString('base64')}`;
@@ -40,11 +40,25 @@ async function uploadImageForFlux(
   } catch { return null; }
 }
 
-async function buildKontextPrompts(
+async function buildPrompt(
   imageBase64: string, productName: string,
-  bullets: string[], category: string,
-): Promise<{ v1: string; v2: string }> {
+  bullets: string[], category: string, variant: 'lifestyle' | 'benefits',
+): Promise<string> {
   const bulletText = bullets.slice(0, 4).map((b, i) => `${i + 1}. ${b}`).join('\n');
+
+  const variantInstructions = variant === 'lifestyle'
+    ? `LIFESTYLE CALLOUT STYLE:
+Transform into professional lifestyle marketplace infographic.
+Add dramatic atmospheric background matching the product category (outdoor scene, studio, etc).
+Add 3-4 annotation callout lines with arrows pointing to key product features with short Ukrainian text labels.
+Keep product clearly visible and centered. Add bold Ukrainian title at top on dark semi-transparent bar.
+Style: professional marketplace photography, cinematic lighting.`
+    : `BENEFITS GRID STYLE:
+Transform into bold graphic infographic with vibrant colored background matching the product.
+Surround product with 3-4 benefit badge blocks showing Ukrainian feature text.
+Dynamic modern composition with geometric elements. Energetic marketplace style.
+Product hero centered, Ukrainian title at top, benefits arranged around it.`;
+
   const response = await openai.chat.completions.create({
     model: 'gpt-4o',
     messages: [{
@@ -60,38 +74,29 @@ async function buildKontextPrompts(
         {
           type: 'text',
           text: `You are a professional Ukrainian marketplace infographic designer.
-Analyze this product photo and create 2 different editing prompts for Flux Kontext.
-Flux Kontext will transform the product photo into a professional infographic while keeping the product visible.
+Analyze this product and create ONE editing prompt for Flux Kontext image editor.
 
 Product: "${productName}"
 Category: ${category}
 Key features:
 ${bulletText}
 
-VARIANT 1 — LIFESTYLE CALLOUT:
-Transform into professional lifestyle infographic. Add dramatic atmospheric background matching product category (outdoor/indoor scene).
-Add 3-4 annotation callout lines with arrows pointing to key product features with short Ukrainian text labels.
-Keep product clearly visible and centered. Add bold Ukrainian title at top on dark semi-transparent bar.
-Style: professional marketplace photography, cinematic lighting. Square 1024x1024.
+${variantInstructions}
 
-VARIANT 2 — BENEFITS GRID:
-Transform into bold graphic infographic with vibrant colored background matching product.
-Surround product with 3-4 benefit badge blocks showing Ukrainian feature text.
-Dynamic modern composition with geometric elements. Energetic marketplace style.
-Product hero centered, Ukrainian title at top, benefits around it. Square 1024x1024.
+CRITICAL RULES:
+- Keep the ORIGINAL product from the photo — do NOT replace or alter it
+- All text labels must be in Ukrainian language
+- Professional marketplace quality, square 1024x1024
+- Write the prompt in English for Flux Kontext
 
-CRITICAL: Keep the ORIGINAL product from the photo visible. All text in Ukrainian. High professional quality.
-
-JSON only: {"v1":"...","v2":"..."}`,
+Return ONLY the prompt text, no JSON, no explanation.`,
         },
       ],
     }],
-    max_tokens: 600, temperature: 0.7, response_format: { type: 'json_object' },
+    max_tokens: 400, temperature: 0.7,
   });
-  try {
-    const p = JSON.parse(response.choices[0]?.message?.content ?? '{}');
-    return { v1: p.v1 || '', v2: p.v2 || '' };
-  } catch { return { v1: '', v2: '' }; }
+
+  return response.choices[0]?.message?.content?.trim() || '';
 }
 
 async function runFluxKontext(imageUrl: string, prompt: string): Promise<Buffer | null> {
@@ -130,7 +135,7 @@ async function runFluxKontext(imageUrl: string, prompt: string): Promise<Buffer 
 
     let current = prediction;
     let attempts = 0;
-    while (current.status !== 'succeeded' && current.status !== 'failed' && current.status !== 'canceled' && attempts < 80) {
+    while (current.status !== 'succeeded' && current.status !== 'failed' && current.status !== 'canceled' && attempts < 30) {
       await new Promise(r => setTimeout(r, 3000));
       const pollRes = await fetch(
         `https://api.replicate.com/v1/predictions/${current.id}`,
@@ -141,7 +146,7 @@ async function runFluxKontext(imageUrl: string, prompt: string): Promise<Buffer 
     }
 
     if (current.status !== 'succeeded') {
-      console.error('Flux Kontext failed:', current.error, 'status:', current.status);
+      console.error('Flux failed:', current.error);
       return null;
     }
 
@@ -151,7 +156,7 @@ async function runFluxKontext(imageUrl: string, prompt: string): Promise<Buffer 
     return Buffer.from(await imgRes.arrayBuffer());
 
   } catch (e) {
-    console.error('Flux Kontext error:', e);
+    console.error('Flux error:', e);
     return null;
   }
 }
@@ -171,8 +176,22 @@ export async function POST(req: NextRequest) {
 
     const {
       imageBase64, imageUrl, productName = '',
-      bullets = [], category = 'general', cardId,
+      bullets = [], category = 'general',
+      variant = 'lifestyle', // 'lifestyle' | 'benefits'
+      cardId,
+      allVariants, // масив вже згенерованих варіантів для збереження в DB
     } = await req.json();
+
+    // Якщо передано allVariants — просто зберігаємо в DB і виходимо
+    if (allVariants && cardId) {
+      const { error } = await supabase
+        .from('cards')
+        .update({ infographic_urls: allVariants })
+        .eq('id', cardId)
+        .eq('user_id', user.id);
+      if (error) console.error('Save error:', error);
+      return NextResponse.json({ saved: true });
+    }
 
     if (!productName.trim())
       return NextResponse.json({ error: 'Потрібна назва товару' }, { status: 400 });
@@ -197,38 +216,21 @@ export async function POST(req: NextRequest) {
     if (!publicImageUrl)
       return NextResponse.json({ error: 'Не вдалося завантажити фото' }, { status: 500 });
 
-    const prompts = await buildKontextPrompts(resolvedBase64, productName, cleanBullets, category);
-    if (!prompts.v1 && !prompts.v2)
-      return NextResponse.json({ error: 'Не вдалося проаналізувати товар' }, { status: 500 });
+    const prompt = await buildPrompt(
+      resolvedBase64, productName, cleanBullets, category,
+      variant as 'lifestyle' | 'benefits',
+    );
+    if (!prompt)
+      return NextResponse.json({ error: 'Не вдалося побудувати промпт' }, { status: 500 });
 
-    const labels = ['Lifestyle', 'Переваги'];
-    const promptList = [prompts.v1, prompts.v2];
-    const results: { url: string; label: string }[] = [];
+    const buf = await runFluxKontext(publicImageUrl, prompt);
+    if (!buf)
+      return NextResponse.json({ error: 'Flux Kontext не зміг згенерувати зображення' }, { status: 500 });
 
-    for (let i = 0; i < 2; i++) {
-      if (!promptList[i]) continue;
-      try {
-        const buf = await runFluxKontext(publicImageUrl, promptList[i]);
-        if (buf) {
-          const url = await uploadToStorage(supabase, buf, user.id, i + 1);
-          results.push({ url, label: labels[i] });
-        }
-      } catch (e) { console.error(`Variant ${i} failed:`, e); }
-    }
+    const url = await uploadToStorage(supabase, buf, user.id);
+    const label = variant === 'lifestyle' ? 'Lifestyle' : 'Переваги';
 
-    if (results.length === 0)
-      return NextResponse.json({ error: 'Не вдалося згенерувати жоден варіант' }, { status: 500 });
-
-    if (cardId) {
-      const { error } = await supabase
-        .from('cards')
-        .update({ infographic_urls: results.map(r => ({ url: r.url, label: r.label })) })
-        .eq('id', cardId)
-        .eq('user_id', user.id);
-      if (error) console.error('Failed to save infographics:', error);
-    }
-
-    return NextResponse.json({ variants: results });
+    return NextResponse.json({ url, label });
 
   } catch (err: unknown) {
     console.error('Infographic error:', err);

@@ -124,32 +124,44 @@ async function runFluxKontext(imageUrl: string, prompt: string): Promise<Buffer 
         }),
       },
     );
-    const rawText = await createRes.text();
-    console.log('Replicate raw response status:', createRes.status, rawText.slice(0, 500));
-    let prediction: Record<string, unknown>;
-    try {
-      prediction = JSON.parse(rawText);
-    } catch {
-      console.error('Replicate returned non-JSON:', rawText.slice(0, 500));
-      return null;
+
+    const prediction = await createRes.json();
+
+    // If succeeded immediately (Prefer: wait)
+    if (prediction.status === 'succeeded') {
+      const outputUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
+      if (!outputUrl) return null;
+      const imgRes = await fetch(outputUrl);
+      return Buffer.from(await imgRes.arrayBuffer());
     }
+
+    // Poll if not done yet
+    let current = prediction;
     let attempts = 0;
-    while (prediction['status'] !== 'succeeded' && prediction['status'] !== 'failed' && prediction['status'] !== 'canceled' && attempts < 60) {
+    while (current.status !== 'succeeded' && current.status !== 'failed' && current.status !== 'canceled' && attempts < 80) {
       await new Promise(r => setTimeout(r, 3000));
       const pollRes = await fetch(
-        `https://api.replicate.com/v1/predictions/${prediction.id as string}`,
+        `https://api.replicate.com/v1/predictions/${current.id}`,
         { headers: { 'Authorization': `Bearer ${REPLICATE_TOKEN}` } },
       );
-      const pollText = await pollRes.text();
-      try { prediction = JSON.parse(pollText); } catch { console.error('Poll non-JSON:', pollText.slice(0,200)); break; }
+      current = await pollRes.json();
       attempts++;
     }
-    if (prediction.status !== 'succeeded') { console.error('Flux Kontext failed:', prediction.error); return null; }
-    const outputUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
+
+    if (current.status !== 'succeeded') {
+      console.error('Flux Kontext failed:', current.error, 'status:', current.status);
+      return null;
+    }
+
+    const outputUrl = Array.isArray(current.output) ? current.output[0] : current.output;
     if (!outputUrl) return null;
     const imgRes = await fetch(outputUrl);
     return Buffer.from(await imgRes.arrayBuffer());
-  } catch (e) { console.error('Flux Kontext error:', e); return null; }
+
+  } catch (e) {
+    console.error('Flux Kontext error:', e);
+    return null;
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -167,8 +179,7 @@ export async function POST(req: NextRequest) {
 
     const {
       imageBase64, imageUrl, productName = '',
-      bullets = [], category = 'general',
-      cardId,  // ← ID карточки для збереження інфографік
+      bullets = [], category = 'general', cardId,
     } = await req.json();
 
     if (!productName.trim())
@@ -190,14 +201,17 @@ export async function POST(req: NextRequest) {
       .filter(x => x.trim()).slice(0, 4)
       .map(x => x.replace(/^[✓•]\s*/, '').trim());
 
+    // Upload to get public URL for Flux
     const publicImageUrl = await uploadImageForFlux(supabase, resolvedBase64, user.id);
     if (!publicImageUrl)
       return NextResponse.json({ error: 'Не вдалося завантажити фото' }, { status: 500 });
 
+    // Step 1: GPT-4o → prompts
     const prompts = await buildKontextPrompts(resolvedBase64, productName, cleanBullets, category);
     if (!prompts.v1 && !prompts.v2 && !prompts.v3)
       return NextResponse.json({ error: 'Не вдалося проаналізувати товар' }, { status: 500 });
 
+    // Step 2: Flux Kontext — sequentially
     const labels = ['Lifestyle', 'Технічний', 'Переваги'];
     const promptList = [prompts.v1, prompts.v2, prompts.v3];
     const results: { url: string; label: string }[] = [];
@@ -216,12 +230,11 @@ export async function POST(req: NextRequest) {
     if (results.length === 0)
       return NextResponse.json({ error: 'Не вдалося згенерувати жоден варіант' }, { status: 500 });
 
-    // ── Зберігаємо інфографіки в базу даних ───────────────────────────────
+    // Step 3: Save to DB
     if (cardId) {
-      const urls = results.map(r => ({ url: r.url, label: r.label }));
       const { error } = await supabase
         .from('cards')
-        .update({ infographic_urls: urls })
+        .update({ infographic_urls: results.map(r => ({ url: r.url, label: r.label })) })
         .eq('id', cardId)
         .eq('user_id', user.id);
       if (error) console.error('Failed to save infographics:', error);

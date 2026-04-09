@@ -7,6 +7,8 @@ import path from 'path';
 import satori from 'satori';
 import React from 'react';
 
+export const maxDuration = 300;
+
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const REPLICATE_TOKEN = process.env.REPLICATE_API_TOKEN;
 

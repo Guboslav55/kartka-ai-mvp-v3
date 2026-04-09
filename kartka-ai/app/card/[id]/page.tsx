@@ -97,18 +97,19 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
     try {
       setStep('🔍 GPT-4o аналізує товар...');
       await new Promise(r => setTimeout(r, 500));
-      setStep('🎨 DALL-E 3 генерує 3 варіанти паралельно...');
+      setStep('🎨 Flux AI генерує 3 варіанти паралельно...');
 
       const res = await fetch('/api/generate-infographic', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body:    JSON.stringify({
-          imageUrl: card.image_url,
+          imageUrl: (card as any).processed_image_url || card.image_url,
           imageBase64: null,
           productName: card.product_name || card.title,
           description: card.description,
           bullets:     card.bullets,
           platform:    card.platform,
+          category:    (card as any).category || 'general',
         }),
       });
 
@@ -186,7 +187,7 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-white font-bold text-lg">📊 AI Інфографіка</h2>
-          <p className="text-white/40 text-xs mt-0.5">3 унікальних варіанти · DALL-E 3 · 1024×1024</p>
+          <p className="text-white/40 text-xs mt-0.5">3 унікальних варіанти · Flux AI · 1024×1024</p>
         </div>
         <button
           onClick={generate}
@@ -735,3 +736,4 @@ export default function CardPage() {
     </div>
   );
 }
+

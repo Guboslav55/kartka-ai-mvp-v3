@@ -108,20 +108,20 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
     setMessages([]);
 
     try {
-      setStep('🔍 GPT-4o аналізує товар...');
+      setStep('analyzing');
       await new Promise(r => setTimeout(r, 500));
-      setStep('🎨 DALL-E 3 генерує 3 варіанти паралельно...');
+      setStep('generating');
 
       const res = await fetch('/api/generate-infographic', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body:    JSON.stringify({
-          imageUrl: card.image_url,
+          imageUrl:    (card as any).processed_image_url || card.image_url,
           imageBase64: null,
           productName: card.product_name || card.title,
-          description: card.description,
           bullets:     card.bullets,
-          platform:    card.platform,
+          category:    (card as any).category || 'general',
+          cardId:      card.id,
         }),
       });
 
@@ -199,7 +199,7 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-white font-bold text-lg">📊 AI Інфографіка</h2>
-          <p className="text-white/40 text-xs mt-0.5">3 унікальних варіанти · DALL-E 3 · 1024×1024</p>
+          <p className="text-white/40 text-xs mt-0.5">3 унікальних варіанти · Flux AI · 1024×1024</p>
         </div>
         <button
           onClick={generate}
@@ -216,9 +216,30 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
       </div>
 
       {/* Step indicator */}
-      {generating && step && (
-        <div className="bg-white/[0.04] border border-white/10 rounded-xl px-4 py-3 mb-4 text-sm text-white/70">
-          {step}
+      {generating && (
+        <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-5 mb-4">
+          {/* Progress steps */}
+          <div className="flex flex-col gap-3 mb-4">
+            {[
+              { label: '🔍 GPT-4o аналізує товар та пише промпти', done: step.includes('Flux') || step.includes('варіант') },
+              { label: '🎨 Flux AI генерує Lifestyle варіант...', done: step.includes('варіант 2') || step.includes('варіант 3') },
+              { label: '🎨 Flux AI генерує Технічний варіант...', done: step.includes('варіант 3') },
+              { label: '🎨 Flux AI генерує Переваги варіант...', done: false },
+            ].map((s, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  s.done ? 'bg-green-500' : 'bg-white/10'
+                }`}>
+                  {s.done
+                    ? <span className="text-white text-xs">✓</span>
+                    : <span className="w-3 h-3 border border-white/30 border-t-white/80 rounded-full animate-spin block" />
+                  }
+                </div>
+                <span className={`text-sm ${s.done ? 'text-green-400' : 'text-white/60'}`}>{s.label}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-white/30 text-xs text-center">Flux AI генерує по одному варіанту · Очікуйте 2-3 хвилини</p>
         </div>
       )}
 

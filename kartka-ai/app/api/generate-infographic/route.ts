@@ -43,7 +43,7 @@ async function uploadImageForFlux(
 async function buildKontextPrompts(
   imageBase64: string, productName: string,
   bullets: string[], category: string,
-): Promise<{ v1: string; v2: string; v3: string }> {
+): Promise<{ v1: string; v2: string }> {
   const bulletText = bullets.slice(0, 4).map((b, i) => `${i + 1}. ${b}`).join('\n');
   const response = await openai.chat.completions.create({
     model: 'gpt-4o',
@@ -60,7 +60,7 @@ async function buildKontextPrompts(
         {
           type: 'text',
           text: `You are a professional Ukrainian marketplace infographic designer.
-Analyze this product photo and create 3 different editing prompts for Flux Kontext.
+Analyze this product photo and create 2 different editing prompts for Flux Kontext.
 Flux Kontext will transform the product photo into a professional infographic while keeping the product visible.
 
 Product: "${productName}"
@@ -69,35 +69,29 @@ Key features:
 ${bulletText}
 
 VARIANT 1 — LIFESTYLE CALLOUT:
-Transform into professional lifestyle infographic. Add dramatic atmospheric background matching product category.
-Add 3-4 annotation callout lines pointing to key product features with short Ukrainian text labels.
-Keep product clearly visible and centered. Bold Ukrainian title at top.
-Style: professional marketplace photography, cinematic lighting.
+Transform into professional lifestyle infographic. Add dramatic atmospheric background matching product category (outdoor/indoor scene).
+Add 3-4 annotation callout lines with arrows pointing to key product features with short Ukrainian text labels.
+Keep product clearly visible and centered. Add bold Ukrainian title at top on dark semi-transparent bar.
+Style: professional marketplace photography, cinematic lighting. Square 1024x1024.
 
-VARIANT 2 — TECHNICAL DIAGRAM:
-Transform into clean technical infographic on dark gradient background.
-Add annotation arrows pointing to product details with Ukrainian feature labels.
-Add feature icons or badges. Clean minimal design. Bold Ukrainian title at top, feature pills at bottom.
-Style: technical product diagram, dark premium look.
+VARIANT 2 — BENEFITS GRID:
+Transform into bold graphic infographic with vibrant colored background matching product.
+Surround product with 3-4 benefit badge blocks showing Ukrainian feature text.
+Dynamic modern composition with geometric elements. Energetic marketplace style.
+Product hero centered, Ukrainian title at top, benefits around it. Square 1024x1024.
 
-VARIANT 3 — BENEFITS GRID:
-Transform into bold graphic infographic with vibrant colored background.
-Surround product with 3-4 benefit blocks/badges showing Ukrainian feature text.
-Dynamic composition with geometric elements. Modern energetic marketplace style.
-Product hero in center, benefits around it.
+CRITICAL: Keep the ORIGINAL product from the photo visible. All text in Ukrainian. High professional quality.
 
-CRITICAL: Keep the ORIGINAL product from the photo. All text in Ukrainian. Professional quality. Square 1024x1024.
-
-JSON only: {"v1":"...","v2":"...","v3":"..."}`,
+JSON only: {"v1":"...","v2":"..."}`,
         },
       ],
     }],
-    max_tokens: 800, temperature: 0.7, response_format: { type: 'json_object' },
+    max_tokens: 600, temperature: 0.7, response_format: { type: 'json_object' },
   });
   try {
     const p = JSON.parse(response.choices[0]?.message?.content ?? '{}');
-    return { v1: p.v1 || '', v2: p.v2 || '', v3: p.v3 || '' };
-  } catch { return { v1: '', v2: '', v3: '' }; }
+    return { v1: p.v1 || '', v2: p.v2 || '' };
+  } catch { return { v1: '', v2: '' }; }
 }
 
 async function runFluxKontext(imageUrl: string, prompt: string): Promise<Buffer | null> {
@@ -127,7 +121,6 @@ async function runFluxKontext(imageUrl: string, prompt: string): Promise<Buffer 
 
     const prediction = await createRes.json();
 
-    // If succeeded immediately (Prefer: wait)
     if (prediction.status === 'succeeded') {
       const outputUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
       if (!outputUrl) return null;
@@ -135,7 +128,6 @@ async function runFluxKontext(imageUrl: string, prompt: string): Promise<Buffer 
       return Buffer.from(await imgRes.arrayBuffer());
     }
 
-    // Poll if not done yet
     let current = prediction;
     let attempts = 0;
     while (current.status !== 'succeeded' && current.status !== 'failed' && current.status !== 'canceled' && attempts < 80) {
@@ -201,22 +193,19 @@ export async function POST(req: NextRequest) {
       .filter(x => x.trim()).slice(0, 4)
       .map(x => x.replace(/^[✓•]\s*/, '').trim());
 
-    // Upload to get public URL for Flux
     const publicImageUrl = await uploadImageForFlux(supabase, resolvedBase64, user.id);
     if (!publicImageUrl)
       return NextResponse.json({ error: 'Не вдалося завантажити фото' }, { status: 500 });
 
-    // Step 1: GPT-4o → prompts
     const prompts = await buildKontextPrompts(resolvedBase64, productName, cleanBullets, category);
-    if (!prompts.v1 && !prompts.v2 && !prompts.v3)
+    if (!prompts.v1 && !prompts.v2)
       return NextResponse.json({ error: 'Не вдалося проаналізувати товар' }, { status: 500 });
 
-    // Step 2: Flux Kontext — sequentially
-    const labels = ['Lifestyle', 'Технічний', 'Переваги'];
-    const promptList = [prompts.v1, prompts.v2, prompts.v3];
+    const labels = ['Lifestyle', 'Переваги'];
+    const promptList = [prompts.v1, prompts.v2];
     const results: { url: string; label: string }[] = [];
 
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 2; i++) {
       if (!promptList[i]) continue;
       try {
         const buf = await runFluxKontext(publicImageUrl, promptList[i]);
@@ -230,7 +219,6 @@ export async function POST(req: NextRequest) {
     if (results.length === 0)
       return NextResponse.json({ error: 'Не вдалося згенерувати жоден варіант' }, { status: 500 });
 
-    // Step 3: Save to DB
     if (cardId) {
       const { error } = await supabase
         .from('cards')

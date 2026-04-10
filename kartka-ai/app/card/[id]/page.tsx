@@ -192,10 +192,7 @@ function InfographicSection({ card, accessToken, inline = false }: { card: Saved
       a.click();
       setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(blobUrl); }, 1000);
     } catch {
-      const a = document.createElement('a');
-      a.href = url;
-      a.target = '_blank';
-      a.click();
+      window.open(url, '_blank');
     }
   }
 

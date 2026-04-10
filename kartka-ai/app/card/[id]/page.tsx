@@ -74,7 +74,6 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
   const [error,       setError]       = useState('');
   const [step,        setStep]        = useState('');
 
-  // Edit chat
   const [chatOpen,    setChatOpen]    = useState(false);
   const [messages,    setMessages]    = useState<ChatMsg[]>([]);
   const [input,       setInput]       = useState('');
@@ -82,10 +81,13 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Load saved infographics when card opens
+  // Load saved infographics on card open
   useEffect(() => {
-    if (Array.isArray(card.infographic_urls) && card.infographic_urls.length > 0) {
-      setVariants(card.infographic_urls.map(v => ({ url: v.url, label: v.label, prompt: '' })));
+    const saved = (card as any).infographic_urls;
+    if (Array.isArray(saved) && saved.length > 0) {
+      setVariants(saved.map((v: { url: string; label: string }) => ({
+        url: v.url, label: v.label, prompt: '',
+      })));
       setSelected(0);
     }
   }, [card.id]);
@@ -99,8 +101,7 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify({
-        imageUrl:    card.processed_image_url || card.image_url,
-        imageBase64: null,
+        imageUrl:    (card as any).processed_image_url || card.image_url,
         productName: card.product_name || card.title,
         bullets:     card.bullets,
         category:    'general',
@@ -110,22 +111,6 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
     const data = await res.json();
     if (!res.ok || !data.url) return null;
     return { url: data.url, label: data.label };
-  }
-
-  async function saveToDb(results: { url: string; label: string }[]) {
-    if (!card.id || results.length === 0) return;
-    try {
-      await fetch('/api/generate-infographic', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify({
-          cardId:      card.id,
-          allVariants: results,
-          productName: card.product_name || card.title,
-          imageUrl:    card.image_url || '',
-        }),
-      });
-    } catch (e) { console.error('Save failed:', e); }
   }
 
   async function generate() {
@@ -139,7 +124,6 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
     const results: { url: string; label: string; prompt: string }[] = [];
 
     try {
-      // Variant 1: Lifestyle
       setStep('variant1');
       const v1 = await generateVariant('lifestyle');
       if (v1) {
@@ -148,7 +132,6 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
         setSelected(0);
       }
 
-      // Variant 2: Benefits
       setStep('variant2');
       const v2 = await generateVariant('benefits');
       if (v2) {
@@ -158,8 +141,17 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
 
       if (results.length === 0) throw new Error('Не вдалося згенерувати жоден варіант');
 
-      // Save to DB
-      await saveToDb(results.map(r => ({ url: r.url, label: r.label })));
+      // Save to DB — окремий запит тільки для збереження
+      if (card.id) {
+        fetch('/api/save-infographics', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({
+            cardId: card.id,
+            variants: results.map(r => ({ url: r.url, label: r.label })),
+          }),
+        }).catch(e => console.error('Save failed:', e));
+      }
 
       setStep('');
     } catch (err: unknown) {
@@ -174,53 +166,55 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
     if (!text.trim() || selected === null || editing) return;
     const current = variants[selected];
     if (!current) return;
-
     setMessages(prev => [...prev, { role: 'user', content: text }]);
     setInput('');
     setEditing(true);
-
     try {
       const res = await fetch('/api/edit-infographic', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body:    JSON.stringify({
-          userMessage:    text,
+          userMessage:     text,
           currentImageUrl: current.url,
-          originalPrompt: current.prompt,
-          productName:    card.product_name || card.title,
-          bullets:        card.bullets,
-          history:        messages.slice(-4),
+          originalPrompt:  current.prompt,
+          productName:     card.product_name || card.title,
+          bullets:         card.bullets,
+          history:         messages.slice(-4),
         }),
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Помилка редагування');
-
-      // Update selected variant with new image
       setVariants(prev => prev.map((v, i) =>
         i === selected ? { ...v, url: data.imageUrl, prompt: data.newPrompt } : v
       ));
-
       setMessages(prev => [...prev, { role: 'assistant', content: data.explanation }]);
-
     } catch (err: unknown) {
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: '⚠️ ' + (err instanceof Error ? err.message : 'Помилка'),
       }]);
     }
-
     setEditing(false);
   }
 
-  function download() {
+  async function download() {
     if (selected === null) return;
     const url = variants[selected]?.url;
     if (!url) return;
-    Object.assign(document.createElement('a'), {
-      href:     url,
-      download: `infographic-${(card.product_name || card.title).replace(/\s+/g, '-').slice(0, 40)}.jpg`,
-    }).click();
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = `infographic-${(card.product_name || card.title).replace(/\s+/g, '-').slice(0, 40)}.jpg`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      window.open(url, '_blank');
+    }
   }
 
   return (

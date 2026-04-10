@@ -67,34 +67,23 @@ const EDIT_SUGGESTIONS = [
   'Зроби фон світлішим',
 ];
 
-function InfographicSection({ card, accessToken }: { card: SavedCard; accessToken: string }) {
-  const [generating,  setGenerating]  = useState(false);
-  const [variants,    setVariants]    = useState<InfographicVariant[]>([]);
-  const [selected,    setSelected]    = useState<number | null>(null);
-  const [error,       setError]       = useState('');
-  const [step,        setStep]        = useState('');
-
-  const [chatOpen,    setChatOpen]    = useState(false);
-  const [messages,    setMessages]    = useState<ChatMsg[]>([]);
-  const [input,       setInput]       = useState('');
-  const [editing,     setEditing]     = useState(false);
+function InfographicSection({ card, accessToken, inline = false }: { card: SavedCard; accessToken: string; inline?: boolean }) {
+  const [generating, setGenerating] = useState(false);
+  const [variants,   setVariants]   = useState<InfographicVariant[]>([]);
+  const [selected,   setSelected]   = useState<number | null>(null);
+  const [error,      setError]      = useState('');
+  const [step,       setStep]       = useState('');
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Load saved infographics on card open
+  // Load saved infographics on open
   useEffect(() => {
     const saved = (card as any).infographic_urls;
     if (Array.isArray(saved) && saved.length > 0) {
-      setVariants(saved.map((v: { url: string; label: string }) => ({
-        url: v.url, label: v.label, prompt: '',
-      })));
+      setVariants(saved.map((v: { url: string; label: string }) => ({ url: v.url, label: v.label, prompt: '' })));
       setSelected(0);
     }
   }, [card.id]);
-
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, editing]);
 
   async function generateVariant(variant: 'lifestyle' | 'benefits'): Promise<{ url: string; label: string } | null> {
     const res = await fetch('/api/generate-infographic', {
@@ -118,88 +107,41 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
     setError('');
     setVariants([]);
     setSelected(null);
-    setChatOpen(false);
-    setMessages([]);
 
     const results: { url: string; label: string; prompt: string }[] = [];
-
     try {
       setStep('variant1');
       const v1 = await generateVariant('lifestyle');
-      if (v1) {
-        results.push({ ...v1, prompt: '' });
-        setVariants([...results]);
-        setSelected(0);
-      }
+      if (v1) { results.push({ ...v1, prompt: '' }); setVariants([...results]); setSelected(0); }
 
       setStep('variant2');
       const v2 = await generateVariant('benefits');
-      if (v2) {
-        results.push({ ...v2, prompt: '' });
-        setVariants([...results]);
-      }
+      if (v2) { results.push({ ...v2, prompt: '' }); setVariants([...results]); }
 
       if (results.length === 0) throw new Error('Не вдалося згенерувати жоден варіант');
 
-      // Save to DB — окремий запит тільки для збереження
+      // Save to DB
       if (card.id) {
         fetch('/api/save-infographics', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-          body: JSON.stringify({
-            cardId: card.id,
-            variants: results.map(r => ({ url: r.url, label: r.label })),
-          }),
+          body: JSON.stringify({ cardId: card.id, variants: results.map(r => ({ url: r.url, label: r.label })) }),
         }).catch(e => console.error('Save failed:', e));
       }
-
       setStep('');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Помилка сервера');
       setStep('');
     }
-
     setGenerating(false);
   }
 
-  async function sendEdit(text: string) {
-    if (!text.trim() || selected === null || editing) return;
-    const current = variants[selected];
-    if (!current) return;
-    setMessages(prev => [...prev, { role: 'user', content: text }]);
-    setInput('');
-    setEditing(true);
-    try {
-      const res = await fetch('/api/edit-infographic', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-        body:    JSON.stringify({
-          userMessage:     text,
-          currentImageUrl: current.url,
-          originalPrompt:  current.prompt,
-          productName:     card.product_name || card.title,
-          bullets:         card.bullets,
-          history:         messages.slice(-4),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Помилка редагування');
-      setVariants(prev => prev.map((v, i) =>
-        i === selected ? { ...v, url: data.imageUrl, prompt: data.newPrompt } : v
-      ));
-      setMessages(prev => [...prev, { role: 'assistant', content: data.explanation }]);
-    } catch (err: unknown) {
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: '⚠️ ' + (err instanceof Error ? err.message : 'Помилка'),
-      }]);
-    }
-    setEditing(false);
-  }
+  async function sendEdit(text: string) { /* placeholder */ }
 
-  async function download() {
-    if (selected === null) return;
-    const url = variants[selected]?.url;
+  async function download(idx?: number) {
+    const i = idx !== undefined ? idx : selected;
+    if (i === null || i === undefined) return;
+    const url = variants[i]?.url;
     if (!url) return;
     try {
       const res = await fetch(url);
@@ -212,9 +154,37 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(blobUrl);
-    } catch {
-      window.open(url, '_blank');
-    }
+    } catch { window.open(url, '_blank'); }
+  }
+
+  // Inline view — compact strip inside white card
+  if (inline) {
+    if (variants.length === 0) return null;
+    return (
+      <div className="border-t border-gray-100 pt-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">📊 Інфографіка</span>
+          <span className="text-xs text-gray-400">{variants.length} варіант(и)</span>
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {variants.map((v, i) => (
+            <div key={i} className="flex-shrink-0 relative group">
+              <img
+                src={v.url}
+                alt={v.label}
+                className="w-20 h-20 object-cover rounded-lg border border-gray-200 cursor-pointer hover:border-navy transition-colors"
+                onClick={() => download(i)}
+                title={`Натисни щоб завантажити: ${v.label}`}
+              />
+              <div className="absolute inset-0 bg-black/50 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <span className="text-white text-xs font-bold">⬇</span>
+              </div>
+              <p className="text-center text-xs text-gray-400 mt-1 truncate w-20">{v.label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -251,27 +221,18 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
               const isDone = step === 'variant2' && i === 0;
               return (
                 <div key={s.key} className="flex items-center gap-3">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
-                    isDone ? 'bg-green-500' : isActive ? 'bg-gold/20 border border-gold' : 'bg-white/10'
-                  }`}>
-                    {isDone
-                      ? <span className="text-white text-xs font-bold">✓</span>
-                      : isActive
-                        ? <span className="w-3 h-3 border-2 border-gold border-t-transparent rounded-full animate-spin block" />
-                        : <span className="w-2 h-2 bg-white/20 rounded-full block" />
-                    }
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${isDone ? 'bg-green-500' : isActive ? 'bg-gold/20 border border-gold' : 'bg-white/10'}`}>
+                    {isDone ? <span className="text-white text-xs font-bold">✓</span>
+                      : isActive ? <span className="w-3 h-3 border-2 border-gold border-t-transparent rounded-full animate-spin block" />
+                      : <span className="w-2 h-2 bg-white/20 rounded-full block" />}
                   </div>
-                  <span className={`text-sm transition-colors ${
-                    isDone ? 'text-green-400' : isActive ? 'text-gold' : 'text-white/30'
-                  }`}>{s.label}</span>
+                  <span className={`text-sm ${isDone ? 'text-green-400' : isActive ? 'text-gold' : 'text-white/30'}`}>{s.label}</span>
                 </div>
               );
             })}
           </div>
           <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden">
-            <div className={`h-full bg-gold rounded-full transition-all duration-1000 ${
-              step === 'variant1' ? 'w-1/2' : step === 'variant2' ? 'w-full' : 'w-0'
-            }`} />
+            <div className={`h-full bg-gold rounded-full transition-all duration-1000 ${step === 'variant1' ? 'w-1/2' : step === 'variant2' ? 'w-full' : 'w-0'}`} />
           </div>
           <p className="text-white/25 text-xs text-center mt-2">~1 хвилина на варіант</p>
         </div>
@@ -603,6 +564,9 @@ export default function CardPage() {
               </div>
             )}
 
+            {/* ── Inline Infographic History ── */}
+            <InfographicSection card={card} accessToken={accessToken} inline />
+
             {/* Title */}
             <div className={`rounded-xl p-4 transition-colors ${lastChanged.includes('title') ? 'bg-yellow-50 ring-1 ring-yellow-200' : 'bg-gray-50'}`}>
               <div className="flex items-center justify-between mb-2">
@@ -795,10 +759,7 @@ export default function CardPage() {
       </div>
 
       {/* ══ INFOGRAPHIC SECTION ════════════════════════════════════════════ */}
-      <InfographicSection
-        card={card}
-        accessToken={accessToken}
-      />
+      <InfographicSection card={card} accessToken={accessToken} />
 
     </div>
   );

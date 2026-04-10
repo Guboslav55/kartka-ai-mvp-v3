@@ -175,19 +175,12 @@ function InfographicSection({ card, accessToken, inline = false }: { card: Saved
     setEditing(false);
   }
 
-  async function download(idx?: number) {
-    const i = idx !== undefined ? idx : selected;
-    if (i === null || i === undefined) return;
+  function download(idx?: number) {
+    const i = idx !== undefined ? idx : (selected ?? 0);
     const url = variants[i]?.url;
     if (!url) return;
-    // Route download through our proxy to avoid CORS issues
-    const proxyUrl = `/api/download-image?url=${encodeURIComponent(url)}&filename=infographic-${(card.product_name || card.title).replace(/[^a-zA-Z0-9]/g, '-').slice(0, 40)}.jpg`;
-    const a = document.createElement('a');
-    a.href = proxyUrl;
-    a.download = `infographic.jpg`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    const name = (card.product_name || card.title).replace(/[^a-zA-Z0-9]/g, '-').slice(0, 40);
+    window.open(`/api/download-image?url=${encodeURIComponent(url)}&filename=${name}.jpg`, '_blank');
   }
 
   // Inline view — compact strip inside white card
@@ -207,7 +200,7 @@ function InfographicSection({ card, accessToken, inline = false }: { card: Saved
                 alt={v.label}
                 className="w-20 h-20 object-cover rounded-lg border border-gray-200 cursor-pointer hover:border-navy transition-colors"
                 onClick={() => download(i)}
-                title={`Натисни щоб завантажити: ${v.label}`}
+                title={`Завантажити: ${v.label}`}
               />
               <div className="absolute inset-0 bg-black/50 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                 <span className="text-white text-xs font-bold">⬇</span>

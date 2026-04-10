@@ -74,6 +74,10 @@ function InfographicSection({ card, accessToken, inline = false }: { card: Saved
   const [error,      setError]      = useState('');
   const [step,       setStep]       = useState('');
 
+  const [chatOpen, setChatOpen] = useState(false);
+  const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [input, setInput] = useState('');
+  const [editing, setEditing] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Load saved infographics on open
@@ -136,7 +140,40 @@ function InfographicSection({ card, accessToken, inline = false }: { card: Saved
     setGenerating(false);
   }
 
-  async function sendEdit(text: string) { /* placeholder */ }
+  async function sendEdit(text: string) {
+    if (!text.trim() || selected === null || editing) return;
+    const current = variants[selected];
+    if (!current) return;
+    setMessages(prev => [...prev, { role: 'user', content: text }]);
+    setInput('');
+    setEditing(true);
+    try {
+      const res = await fetch('/api/edit-infographic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({
+          userMessage: text,
+          currentImageUrl: current.url,
+          originalPrompt: current.prompt,
+          productName: card.product_name || card.title,
+          bullets: card.bullets,
+          history: messages.slice(-4),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Помилка редагування');
+      setVariants(prev => prev.map((v, i) =>
+        i === selected ? { ...v, url: data.imageUrl, prompt: data.newPrompt } : v
+      ));
+      setMessages(prev => [...prev, { role: 'assistant', content: data.explanation }]);
+    } catch (err: unknown) {
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: '⚠️ ' + (err instanceof Error ? err.message : 'Помилка'),
+      }]);
+    }
+    setEditing(false);
+  }
 
   async function download(idx?: number) {
     const i = idx !== undefined ? idx : selected;

@@ -180,18 +180,14 @@ function InfographicSection({ card, accessToken, inline = false }: { card: Saved
     if (i === null || i === undefined) return;
     const url = variants[i]?.url;
     if (!url) return;
-    try {
-      const res = await fetch(url);
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = `infographic-${(card.product_name || card.title).replace(/\s+/g, '-').slice(0, 40)}.jpg`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
-    } catch { window.open(url, '_blank'); }
+    // Route download through our proxy to avoid CORS issues
+    const proxyUrl = `/api/download-image?url=${encodeURIComponent(url)}&filename=infographic-${(card.product_name || card.title).replace(/[^a-zA-Z0-9]/g, '-').slice(0, 40)}.jpg`;
+    const a = document.createElement('a');
+    a.href = proxyUrl;
+    a.download = `infographic.jpg`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   }
 
   // Inline view — compact strip inside white card

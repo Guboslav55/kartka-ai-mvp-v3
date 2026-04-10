@@ -82,13 +82,10 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Load saved infographics on open
+  // Load saved infographics when card opens
   useEffect(() => {
-    const saved = (card as any).infographic_urls;
-    if (Array.isArray(saved) && saved.length > 0) {
-      setVariants(saved.map((v: { url: string; label: string }) => ({
-        url: v.url, label: v.label, prompt: '',
-      })));
+    if (Array.isArray(card.infographic_urls) && card.infographic_urls.length > 0) {
+      setVariants(card.infographic_urls.map(v => ({ url: v.url, label: v.label, prompt: '' })));
       setSelected(0);
     }
   }, [card.id]);
@@ -102,17 +99,33 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify({
-        imageUrl:    (card as any).processed_image_url || card.image_url,
+        imageUrl:    card.processed_image_url || card.image_url,
         imageBase64: null,
         productName: card.product_name || card.title,
         bullets:     card.bullets,
-        category:    (card as any).category || 'general',
+        category:    'general',
         variant,
       }),
     });
     const data = await res.json();
     if (!res.ok || !data.url) return null;
     return { url: data.url, label: data.label };
+  }
+
+  async function saveToDb(results: { url: string; label: string }[]) {
+    if (!card.id || results.length === 0) return;
+    try {
+      await fetch('/api/generate-infographic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({
+          cardId:      card.id,
+          allVariants: results,
+          productName: card.product_name || card.title,
+          imageUrl:    card.image_url || '',
+        }),
+      });
+    } catch (e) { console.error('Save failed:', e); }
   }
 
   async function generate() {
@@ -145,18 +158,8 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
 
       if (results.length === 0) throw new Error('Не вдалося згенерувати жоден варіант');
 
-      // Save all to DB
-      if (card.id) {
-        await fetch('/api/generate-infographic', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-          body: JSON.stringify({
-            cardId: card.id,
-            allVariants: results.map(r => ({ url: r.url, label: r.label })),
-            productName: card.product_name || card.title,
-          }),
-        });
-      }
+      // Save to DB
+      await saveToDb(results.map(r => ({ url: r.url, label: r.label })));
 
       setStep('');
     } catch (err: unknown) {
@@ -238,7 +241,7 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
               <span className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
               Генерую...
             </>
-          ) : variants.length > 0 ? '↺ Перегенерувати' : '✦ Згенерувати 3 варіанти'}
+          ) : variants.length > 0 ? '↺ Перегенерувати' : '✦ Згенерувати варіанти'}
         </button>
       </div>
 
@@ -251,7 +254,7 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
               { key: 'variant2', label: '🎨 Flux AI генерує Переваги варіант...' },
             ].map((s, i) => {
               const isActive = step === s.key;
-              const isDone = (step === 'variant2' && i === 0) || (!generating && i < 2);
+              const isDone = step === 'variant2' && i === 0;
               return (
                 <div key={s.key} className="flex items-center gap-3">
                   <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${

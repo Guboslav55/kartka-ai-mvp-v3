@@ -6,7 +6,7 @@ import Link from 'next/link';
 import type { SavedCard } from '@/types';
 
 const PLATFORM_LABELS: Record<string, string> = {
-  prom: 'Prom.ua', rozetka: 'Rozetka', olx: 'OLX', general: 'Загальний',
+  prom: 'Prom.ua', rozetka: 'Rozetka', olx: 'OLX', general: 'ÐÐ°Ð³Ð°Ð»ÑÐ½Ð¸Ð¹',
 };
 
 interface ChatMsg {
@@ -24,7 +24,7 @@ function CopyBtn({ text, label }: { text: string; label: string }) {
         ok ? 'bg-green-600 text-white border-green-600' : 'border-gray-200 text-gray-400 hover:border-gray-400 hover:text-gray-700'
       }`}
     >
-      {ok ? '✓ Скопійовано!' : label}
+      {ok ? 'â Ð¡ÐºÐ¾Ð¿ÑÐ¹Ð¾Ð²Ð°Ð½Ð¾!' : label}
     </button>
   );
 }
@@ -34,20 +34,20 @@ function AIBadge({ show }: { show: boolean }) {
   return (
     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded"
       style={{ background: 'rgba(200,168,75,0.15)', color: '#c8a84b' }}>
-      AI змінив
+      AI Ð·Ð¼ÑÐ½Ð¸Ð²
     </span>
   );
 }
 
 const SUGGESTIONS = [
-  'Зроби заголовок коротшим',
-  'Перепиши опис більш продаючим',
-  'Додай цифри у переваги',
-  'Додай заклик до дії',
-  'Більше SEO ключових слів',
+  'ÐÑÐ¾Ð±Ð¸ Ð·Ð°Ð³Ð¾Ð»Ð¾Ð²Ð¾Ðº ÐºÐ¾ÑÐ¾ÑÑÐ¸Ð¼',
+  'ÐÐµÑÐµÐ¿Ð¸ÑÐ¸ Ð¾Ð¿Ð¸Ñ Ð±ÑÐ»ÑÑ Ð¿ÑÐ¾Ð´Ð°ÑÑÐ¸Ð¼',
+  'ÐÐ¾Ð´Ð°Ð¹ ÑÐ¸ÑÑÐ¸ Ñ Ð¿ÐµÑÐµÐ²Ð°Ð³Ð¸',
+  'ÐÐ¾Ð´Ð°Ð¹ Ð·Ð°ÐºÐ»Ð¸Ðº Ð´Ð¾ Ð´ÑÑ',
+  'ÐÑÐ»ÑÑÐµ SEO ÐºÐ»ÑÑÐ¾Ð²Ð¸Ñ ÑÐ»ÑÐ²',
 ];
 
-// ── Infographic Section ────────────────────────────────────────────────────────
+// ââ Infographic Section ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 interface InfographicVariant {
   url:    string;
   label:  string;
@@ -60,11 +60,11 @@ interface ChatMsg {
 }
 
 const EDIT_SUGGESTIONS = [
-  'Додай більше деталей товару',
-  'Зроби текст крупнішим',
-  'Змін стиль на більш мінімалістичний',
-  'Додай ціну на інфографіку',
-  'Зроби фон світлішим',
+  'ÐÐ¾Ð´Ð°Ð¹ Ð±ÑÐ»ÑÑÐµ Ð´ÐµÑÐ°Ð»ÐµÐ¹ ÑÐ¾Ð²Ð°ÑÑ',
+  'ÐÑÐ¾Ð±Ð¸ ÑÐµÐºÑÑ ÐºÑÑÐ¿Ð½ÑÑÐ¸Ð¼',
+  'ÐÐ¼ÑÐ½ ÑÑÐ¸Ð»Ñ Ð½Ð° Ð±ÑÐ»ÑÑ Ð¼ÑÐ½ÑÐ¼Ð°Ð»ÑÑÑÐ¸ÑÐ½Ð¸Ð¹',
+  'ÐÐ¾Ð´Ð°Ð¹ ÑÑÐ½Ñ Ð½Ð° ÑÐ½ÑÐ¾Ð³ÑÐ°ÑÑÐºÑ',
+  'ÐÑÐ¾Ð±Ð¸ ÑÐ¾Ð½ ÑÐ²ÑÑÐ»ÑÑÐ¸Ð¼',
 ];
 
 function InfographicSection({ card, accessToken, inline = false }: { card: SavedCard; accessToken: string; inline?: boolean }) {
@@ -122,7 +122,7 @@ function InfographicSection({ card, accessToken, inline = false }: { card: Saved
       const v2 = await generateVariant('benefits');
       if (v2) { results.push({ ...v2, prompt: '' }); setVariants([...results]); }
 
-      if (results.length === 0) throw new Error('Не вдалося згенерувати жоден варіант');
+      if (results.length === 0) throw new Error('ÐÐµ Ð²Ð´Ð°Ð»Ð¾ÑÑ Ð·Ð³ÐµÐ½ÐµÑÑÐ²Ð°ÑÐ¸ Ð¶Ð¾Ð´ÐµÐ½ Ð²Ð°ÑÑÐ°Ð½Ñ');
 
       // Save to DB
       if (card.id) {
@@ -134,7 +134,7 @@ function InfographicSection({ card, accessToken, inline = false }: { card: Saved
       }
       setStep('');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Помилка сервера');
+      setError(err instanceof Error ? err.message : 'ÐÐ¾Ð¼Ð¸Ð»ÐºÐ° ÑÐµÑÐ²ÐµÑÐ°');
       setStep('');
     }
     setGenerating(false);
@@ -161,7 +161,7 @@ function InfographicSection({ card, accessToken, inline = false }: { card: Saved
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Помилка редагування');
+      if (!res.ok) throw new Error(data.error || 'ÐÐ¾Ð¼Ð¸Ð»ÐºÐ° ÑÐµÐ´Ð°Ð³ÑÐ²Ð°Ð½Ð½Ñ');
       setVariants(prev => prev.map((v, i) =>
         i === selected ? { ...v, url: data.imageUrl, prompt: data.newPrompt } : v
       ));
@@ -169,7 +169,7 @@ function InfographicSection({ card, accessToken, inline = false }: { card: Saved
     } catch (err: unknown) {
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: '⚠️ ' + (err instanceof Error ? err.message : 'Помилка'),
+        content: 'â ï¸ ' + (err instanceof Error ? err.message : 'ÐÐ¾Ð¼Ð¸Ð»ÐºÐ°'),
       }]);
     }
     setEditing(false);
@@ -181,18 +181,17 @@ function InfographicSection({ card, accessToken, inline = false }: { card: Saved
     if (!url) return;
     const name = (card.product_name || card.title).replace(/[^a-zA-Z0-9]/g, '-').slice(0, 40);
     try {
-      const res = await fetch(`/api/download-image?url=${encodeURIComponent(url)}&filename=${name}.jpg`);
+      const res = await fetch(url);
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = blobUrl;
-      a.download = `${name}.jpg`;
+      a.download = name + '.jpg';
       a.style.display = 'none';
       document.body.appendChild(a);
       a.click();
       setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(blobUrl); }, 1000);
     } catch {
-      // Fallback — open in new tab
       const a = document.createElement('a');
       a.href = url;
       a.target = '_blank';
@@ -200,14 +199,14 @@ function InfographicSection({ card, accessToken, inline = false }: { card: Saved
     }
   }
 
-  // Inline view — compact strip inside white card
+  // Inline view â compact strip inside white card
   if (inline) {
     if (variants.length === 0) return null;
     return (
       <div className="border-t border-gray-100 pt-3">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">📊 Інфографіка</span>
-          <span className="text-xs text-gray-400">{variants.length} варіант(и)</span>
+          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">ð ÐÐ½ÑÐ¾Ð³ÑÐ°ÑÑÐºÐ°</span>
+          <span className="text-xs text-gray-400">{variants.length} Ð²Ð°ÑÑÐ°Ð½Ñ(Ð¸)</span>
         </div>
         <div className="flex gap-2 overflow-x-auto pb-1">
           {variants.map((v, i) => (
@@ -217,10 +216,10 @@ function InfographicSection({ card, accessToken, inline = false }: { card: Saved
                 alt={v.label}
                 className="w-20 h-20 object-cover rounded-lg border border-gray-200 cursor-pointer hover:border-navy transition-colors"
                 onClick={() => download(i)}
-                title={`Завантажити: ${v.label}`}
+                title={`ÐÐ°Ð²Ð°Ð½ÑÐ°Ð¶Ð¸ÑÐ¸: ${v.label}`}
               />
               <div className="absolute inset-0 bg-black/50 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                <span className="text-white text-xs font-bold">⬇</span>
+                <span className="text-white text-xs font-bold">â¬</span>
               </div>
               <p className="text-center text-xs text-gray-400 mt-1 truncate w-20">{v.label}</p>
             </div>
@@ -235,8 +234,8 @@ function InfographicSection({ card, accessToken, inline = false }: { card: Saved
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-white font-bold text-lg">📊 AI Інфографіка</h2>
-          <p className="text-white/40 text-xs mt-0.5">2 унікальних варіанти · Flux AI · 1024×1024</p>
+          <h2 className="text-white font-bold text-lg">ð AI ÐÐ½ÑÐ¾Ð³ÑÐ°ÑÑÐºÐ°</h2>
+          <p className="text-white/40 text-xs mt-0.5">2 ÑÐ½ÑÐºÐ°Ð»ÑÐ½Ð¸Ñ Ð²Ð°ÑÑÐ°Ð½ÑÐ¸ Â· Flux AI Â· 1024Ã1024</p>
         </div>
         <button
           onClick={generate}
@@ -246,9 +245,9 @@ function InfographicSection({ card, accessToken, inline = false }: { card: Saved
           {generating ? (
             <>
               <span className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-              Генерую...
+              ÐÐµÐ½ÐµÑÑÑ...
             </>
-          ) : variants.length > 0 ? '↺ Перегенерувати' : '✦ Згенерувати варіанти'}
+          ) : variants.length > 0 ? 'âº ÐÐµÑÐµÐ³ÐµÐ½ÐµÑÑÐ²Ð°ÑÐ¸' : 'â¦ ÐÐ³ÐµÐ½ÐµÑÑÐ²Ð°ÑÐ¸ Ð²Ð°ÑÑÐ°Ð½ÑÐ¸'}
         </button>
       </div>
 
@@ -257,15 +256,15 @@ function InfographicSection({ card, accessToken, inline = false }: { card: Saved
         <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-5 mb-4">
           <div className="flex flex-col gap-3 mb-3">
             {[
-              { key: 'variant1', label: '🎨 Flux AI генерує Lifestyle варіант...' },
-              { key: 'variant2', label: '🎨 Flux AI генерує Переваги варіант...' },
+              { key: 'variant1', label: 'ð¨ Flux AI Ð³ÐµÐ½ÐµÑÑÑ Lifestyle Ð²Ð°ÑÑÐ°Ð½Ñ...' },
+              { key: 'variant2', label: 'ð¨ Flux AI Ð³ÐµÐ½ÐµÑÑÑ ÐÐµÑÐµÐ²Ð°Ð³Ð¸ Ð²Ð°ÑÑÐ°Ð½Ñ...' },
             ].map((s, i) => {
               const isActive = step === s.key;
               const isDone = step === 'variant2' && i === 0;
               return (
                 <div key={s.key} className="flex items-center gap-3">
                   <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${isDone ? 'bg-green-500' : isActive ? 'bg-gold/20 border border-gold' : 'bg-white/10'}`}>
-                    {isDone ? <span className="text-white text-xs font-bold">✓</span>
+                    {isDone ? <span className="text-white text-xs font-bold">â</span>
                       : isActive ? <span className="w-3 h-3 border-2 border-gold border-t-transparent rounded-full animate-spin block" />
                       : <span className="w-2 h-2 bg-white/20 rounded-full block" />}
                   </div>
@@ -277,14 +276,14 @@ function InfographicSection({ card, accessToken, inline = false }: { card: Saved
           <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden">
             <div className={`h-full bg-gold rounded-full transition-all duration-1000 ${step === 'variant1' ? 'w-1/2' : step === 'variant2' ? 'w-full' : 'w-0'}`} />
           </div>
-          <p className="text-white/25 text-xs text-center mt-2">~1 хвилина на варіант</p>
+          <p className="text-white/25 text-xs text-center mt-2">~1 ÑÐ²Ð¸Ð»Ð¸Ð½Ð° Ð½Ð° Ð²Ð°ÑÑÐ°Ð½Ñ</p>
         </div>
       )}
 
       {/* Error */}
       {error && (
         <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 mb-4 text-red-400 text-sm">
-          ⚠️ {error}
+          â ï¸ {error}
         </div>
       )}
 
@@ -306,7 +305,7 @@ function InfographicSection({ card, accessToken, inline = false }: { card: Saved
                 <div className={`px-3 py-2 text-xs font-bold text-center transition-colors ${
                   selected === i ? 'bg-gold text-black' : 'bg-white/[0.06] text-white/60'
                 }`}>
-                  {selected === i ? '✓ ' : ''}{v.label}
+                  {selected === i ? 'â ' : ''}{v.label}
                 </div>
               </div>
             ))}
@@ -319,7 +318,7 @@ function InfographicSection({ card, accessToken, inline = false }: { card: Saved
                 onClick={download}
                 className="bg-green-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-green-600 transition-colors flex items-center gap-2"
               >
-                ⬇ Завантажити
+                â¬ ÐÐ°Ð²Ð°Ð½ÑÐ°Ð¶Ð¸ÑÐ¸
               </button>
               <button
                 onClick={() => { setChatOpen(v => !v); if (!chatOpen) setMessages([]); }}
@@ -329,7 +328,7 @@ function InfographicSection({ card, accessToken, inline = false }: { card: Saved
                     : 'border border-white/20 text-white/70 hover:border-gold/50 hover:text-gold'
                 }`}
               >
-                ✦ AI редагування
+                â¦ AI ÑÐµÐ´Ð°Ð³ÑÐ²Ð°Ð½Ð½Ñ
               </button>
             </div>
           )}
@@ -339,17 +338,17 @@ function InfographicSection({ card, accessToken, inline = false }: { card: Saved
             <div className="bg-white/[0.04] border border-white/10 rounded-2xl overflow-hidden">
               <div className="px-5 py-3 border-b border-white/[0.08] flex items-center justify-between">
                 <div>
-                  <span className="text-white font-bold text-sm">✦ Редагування: {variants[selected]?.label}</span>
-                  <p className="text-white/35 text-xs mt-0.5">Опиши що змінити — AI перегенерує</p>
+                  <span className="text-white font-bold text-sm">â¦ Ð ÐµÐ´Ð°Ð³ÑÐ²Ð°Ð½Ð½Ñ: {variants[selected]?.label}</span>
+                  <p className="text-white/35 text-xs mt-0.5">ÐÐ¿Ð¸ÑÐ¸ ÑÐ¾ Ð·Ð¼ÑÐ½Ð¸ÑÐ¸ â AI Ð¿ÐµÑÐµÐ³ÐµÐ½ÐµÑÑÑ</p>
                 </div>
-                <button onClick={() => setChatOpen(false)} className="text-white/30 hover:text-white/70 text-lg">×</button>
+                <button onClick={() => setChatOpen(false)} className="text-white/30 hover:text-white/70 text-lg">Ã</button>
               </div>
 
               {/* Messages */}
               <div className="p-4 space-y-3 max-h-72 overflow-y-auto">
                 {messages.length === 0 && (
                   <div className="text-center py-4">
-                    <p className="text-white/40 text-sm mb-3">Що змінити в цьому варіанті?</p>
+                    <p className="text-white/40 text-sm mb-3">Ð©Ð¾ Ð·Ð¼ÑÐ½Ð¸ÑÐ¸ Ð² ÑÑÐ¾Ð¼Ñ Ð²Ð°ÑÑÐ°Ð½ÑÑ?</p>
                     <div className="flex flex-wrap gap-2 justify-center">
                       {EDIT_SUGGESTIONS.map(s => (
                         <button
@@ -394,7 +393,7 @@ function InfographicSection({ card, accessToken, inline = false }: { card: Saved
                   value={input}
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendEdit(input); } }}
-                  placeholder="Що змінити? (Enter — надіслати)"
+                  placeholder="Ð©Ð¾ Ð·Ð¼ÑÐ½Ð¸ÑÐ¸? (Enter â Ð½Ð°Ð´ÑÑÐ»Ð°ÑÐ¸)"
                   disabled={editing}
                   rows={2}
                   className="flex-1 bg-white/[0.06] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/25 resize-none focus:outline-none focus:border-gold/40 disabled:opacity-50"
@@ -404,7 +403,7 @@ function InfographicSection({ card, accessToken, inline = false }: { card: Saved
                   disabled={editing || !input.trim()}
                   className="bg-gold text-black font-bold px-4 py-2.5 rounded-xl text-sm disabled:opacity-40 flex-shrink-0"
                 >
-                  ↑
+                  â
                 </button>
               </div>
             </div>
@@ -481,18 +480,18 @@ export default function CardPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Помилка AI');
+      if (!res.ok) throw new Error(data.error || 'ÐÐ¾Ð¼Ð¸Ð»ÐºÐ° AI');
       if (data.diff && Object.keys(data.diff).length > 0) {
         setCard(prev => prev ? { ...prev, ...data.diff } : prev);
         setLastChanged(data.changedFields ?? []);
       }
       setMessages(prev => [
         ...prev,
-        { role: 'assistant', content: data.explanation ?? 'Готово', changed: data.changedFields },
+        { role: 'assistant', content: data.explanation ?? 'ÐÐ¾ÑÐ¾Ð²Ð¾', changed: data.changedFields },
       ]);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Помилка сервера';
-      setMessages(prev => [...prev, { role: 'assistant', content: '⚠️ ' + msg }]);
+      const msg = err instanceof Error ? err.message : 'ÐÐ¾Ð¼Ð¸Ð»ÐºÐ° ÑÐµÑÐ²ÐµÑÐ°';
+      setMessages(prev => [...prev, { role: 'assistant', content: 'â ï¸ ' + msg }]);
     }
     setAiLoading(false);
   }, [card, messages, accessToken, aiLoading]);
@@ -506,9 +505,9 @@ export default function CardPage() {
     const text = [
       card.title, '',
       card.description, '',
-      'Переваги:',
-      ...(card.bullets as string[]).map(b => '• ' + b), '',
-      'Ключові слова: ' + (card.keywords as string[]).join(', '),
+      'ÐÐµÑÐµÐ²Ð°Ð³Ð¸:',
+      ...(card.bullets as string[]).map(b => 'â¢ ' + b), '',
+      'ÐÐ»ÑÑÐ¾Ð²Ñ ÑÐ»Ð¾Ð²Ð°: ' + (card.keywords as string[]).join(', '),
     ].join('\n');
     navigator.clipboard.writeText(text);
     setAllCopied(true);
@@ -518,7 +517,7 @@ export default function CardPage() {
   function downloadCSV() {
     if (!card) return;
     const rows = [
-      ['Назва', 'Опис', 'Переваги', 'Ключові слова', 'Платформа'],
+      ['ÐÐ°Ð·Ð²Ð°', 'ÐÐ¿Ð¸Ñ', 'ÐÐµÑÐµÐ²Ð°Ð³Ð¸', 'ÐÐ»ÑÑÐ¾Ð²Ñ ÑÐ»Ð¾Ð²Ð°', 'ÐÐ»Ð°ÑÑÐ¾ÑÐ¼Ð°'],
       [card.title, card.description, (card.bullets as string[]).join(' | '), (card.keywords as string[]).join(', '), card.platform],
     ];
     const csv = '\uFEFF' + rows.map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(';')).join('\n');
@@ -546,7 +545,7 @@ export default function CardPage() {
     <div className="min-h-screen px-4 sm:px-6 py-8 max-w-5xl mx-auto">
 
       <div className="flex items-center justify-between mb-8">
-        <Link href="/dashboard" className="text-white/40 text-sm hover:text-white transition-colors">← Кабінет</Link>
+        <Link href="/dashboard" className="text-white/40 text-sm hover:text-white transition-colors">â ÐÐ°Ð±ÑÐ½ÐµÑ</Link>
         <div className="flex items-center gap-3">
           <span className="text-white/25 text-xs">{date}</span>
           <span className="text-xs bg-white/[0.08] text-white/40 px-2.5 py-1 rounded-full">{platform}</span>
@@ -555,7 +554,7 @@ export default function CardPage() {
 
       <div className={`grid gap-6 ${chatOpen ? 'lg:grid-cols-2' : 'max-w-3xl mx-auto'}`}>
 
-        {/* ── Card ── */}
+        {/* ââ Card ââ */}
         <div className="bg-white rounded-2xl overflow-hidden shadow-2xl">
 
           <div className="bg-navy px-5 py-4 flex items-center justify-between gap-3">
@@ -567,7 +566,7 @@ export default function CardPage() {
                   chatOpen ? 'bg-gold text-black' : 'bg-white/15 text-white hover:bg-white/25'
                 }`}
               >
-                ✦ AI редагування
+                â¦ AI ÑÐµÐ´Ð°Ð³ÑÐ²Ð°Ð½Ð½Ñ
               </button>
               <span className="text-white/40 text-xs">{card.title.length}/80</span>
               <button
@@ -576,7 +575,7 @@ export default function CardPage() {
                   allCopied ? 'bg-green-500 text-white' : 'bg-white/15 text-white hover:bg-white/25'
                 }`}
               >
-                {allCopied ? '✓ Все скопійовано!' : '📋 Копіювати все'}
+                {allCopied ? 'â ÐÑÐµ ÑÐºÐ¾Ð¿ÑÐ¹Ð¾Ð²Ð°Ð½Ð¾!' : 'ð ÐÐ¾Ð¿ÑÑÐ²Ð°ÑÐ¸ Ð²ÑÐµ'}
               </button>
             </div>
           </div>
@@ -602,22 +601,22 @@ export default function CardPage() {
                   }}
                   className="absolute bottom-3 right-3 bg-black/70 text-white text-xs px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity font-semibold"
                 >
-                  ⬇ Завантажити
+                  â¬ ÐÐ°Ð²Ð°Ð½ÑÐ°Ð¶Ð¸ÑÐ¸
                 </button>
               </div>
             )}
 
-            {/* ── Inline Infographic History ── */}
+            {/* ââ Inline Infographic History ââ */}
             <InfographicSection card={card} accessToken={accessToken} inline />
 
             {/* Title */}
             <div className={`rounded-xl p-4 transition-colors ${lastChanged.includes('title') ? 'bg-yellow-50 ring-1 ring-yellow-200' : 'bg-gray-50'}`}>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Заголовок</span>
+                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">ÐÐ°Ð³Ð¾Ð»Ð¾Ð²Ð¾Ðº</span>
                   <AIBadge show={lastChanged.includes('title')} />
                 </div>
-                <CopyBtn text={card.title} label="Копіювати" />
+                <CopyBtn text={card.title} label="ÐÐ¾Ð¿ÑÑÐ²Ð°ÑÐ¸" />
               </div>
               <h2 className="font-bold text-lg text-navy leading-tight">{card.title}</h2>
             </div>
@@ -626,10 +625,10 @@ export default function CardPage() {
             <div className={`rounded-xl p-4 transition-colors ${lastChanged.includes('description') ? 'bg-yellow-50 ring-1 ring-yellow-200' : 'bg-gray-50'}`}>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Опис</span>
+                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">ÐÐ¿Ð¸Ñ</span>
                   <AIBadge show={lastChanged.includes('description')} />
                 </div>
-                <CopyBtn text={card.description} label="Копіювати" />
+                <CopyBtn text={card.description} label="ÐÐ¾Ð¿ÑÑÐ²Ð°ÑÐ¸" />
               </div>
               <p className="text-gray-700 text-sm leading-relaxed">{card.description}</p>
             </div>
@@ -639,15 +638,15 @@ export default function CardPage() {
               <div className={`rounded-xl p-4 transition-colors ${lastChanged.includes('bullets') ? 'bg-yellow-50 ring-1 ring-yellow-200' : 'bg-gray-50'}`}>
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Переваги</span>
+                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">ÐÐµÑÐµÐ²Ð°Ð³Ð¸</span>
                     <AIBadge show={lastChanged.includes('bullets')} />
                   </div>
-                  <CopyBtn text={bullets.map(b => '• ' + b).join('\n')} label="Копіювати" />
+                  <CopyBtn text={bullets.map(b => 'â¢ ' + b).join('\n')} label="ÐÐ¾Ð¿ÑÑÐ²Ð°ÑÐ¸" />
                 </div>
                 <ul className="space-y-2">
                   {bullets.map((b, i) => (
                     <li key={i} className="flex items-start gap-2 text-sm text-gray-700 border-b border-gray-100 pb-2 last:border-0">
-                      <span className="text-navy font-bold mt-0.5 shrink-0">✓</span>{b}
+                      <span className="text-navy font-bold mt-0.5 shrink-0">â</span>{b}
                     </li>
                   ))}
                 </ul>
@@ -659,10 +658,10 @@ export default function CardPage() {
               <div className={`rounded-xl p-4 transition-colors ${lastChanged.includes('keywords') ? 'bg-yellow-50 ring-1 ring-yellow-200' : 'bg-gray-50'}`}>
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Ключові слова</span>
+                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">ÐÐ»ÑÑÐ¾Ð²Ñ ÑÐ»Ð¾Ð²Ð°</span>
                     <AIBadge show={lastChanged.includes('keywords')} />
                   </div>
-                  <CopyBtn text={keywords.join(', ')} label="Копіювати" />
+                  <CopyBtn text={keywords.join(', ')} label="ÐÐ¾Ð¿ÑÑÐ²Ð°ÑÐ¸" />
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {keywords.map(k => (
@@ -681,31 +680,31 @@ export default function CardPage() {
               className={`px-4 py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${
                 allCopied ? 'bg-green-600 text-white' : 'bg-gray-900 text-white hover:bg-gray-700'
               }`}>
-              {allCopied ? '✓ Скопійовано!' : '📋 Копіювати все'}
+              {allCopied ? 'â Ð¡ÐºÐ¾Ð¿ÑÐ¹Ð¾Ð²Ð°Ð½Ð¾!' : 'ð ÐÐ¾Ð¿ÑÑÐ²Ð°ÑÐ¸ Ð²ÑÐµ'}
             </button>
             <button onClick={downloadCSV}
               className="bg-green-700 text-white px-4 py-3 rounded-xl text-sm font-semibold hover:bg-green-600 transition-colors flex items-center justify-center gap-2">
-              ⬇ Завантажити CSV
+              â¬ ÐÐ°Ð²Ð°Ð½ÑÐ°Ð¶Ð¸ÑÐ¸ CSV
             </button>
             <Link href="/generate"
               className="border border-gray-200 text-gray-500 px-4 py-3 rounded-xl text-sm font-semibold hover:border-gray-400 hover:text-gray-700 transition-colors flex items-center justify-center gap-2 text-center">
-              ✦ Нова картка
+              â¦ ÐÐ¾Ð²Ð° ÐºÐ°ÑÑÐºÐ°
             </Link>
           </div>
         </div>
 
-        {/* ── Chat panel ── */}
+        {/* ââ Chat panel ââ */}
         {chatOpen && (
           <div className="flex flex-col bg-white/[0.04] border border-white/10 rounded-2xl overflow-hidden"
             style={{ height: '640px' }}>
 
             <div className="px-5 py-4 border-b border-white/[0.08] flex items-center justify-between shrink-0">
               <div>
-                <p className="text-white text-sm font-bold">✦ AI редагування</p>
-                <p className="text-white/30 text-xs">Скажи що змінити — AI оновить картку</p>
+                <p className="text-white text-sm font-bold">â¦ AI ÑÐµÐ´Ð°Ð³ÑÐ²Ð°Ð½Ð½Ñ</p>
+                <p className="text-white/30 text-xs">Ð¡ÐºÐ°Ð¶Ð¸ ÑÐ¾ Ð·Ð¼ÑÐ½Ð¸ÑÐ¸ â AI Ð¾Ð½Ð¾Ð²Ð¸ÑÑ ÐºÐ°ÑÑÐºÑ</p>
               </div>
               <button onClick={() => setChatOpen(false)}
-                className="text-white/30 hover:text-white text-xl leading-none transition-colors">✕</button>
+                className="text-white/30 hover:text-white text-xl leading-none transition-colors">â</button>
             </div>
 
             {/* Messages */}
@@ -713,10 +712,10 @@ export default function CardPage() {
 
               {messages.length === 0 && (
                 <div className="text-center py-8">
-                  <p className="text-4xl mb-3">✦</p>
+                  <p className="text-4xl mb-3">â¦</p>
                   <p className="text-white/50 text-sm mb-5">
-                    Я можу змінити будь-яку частину картки.<br />
-                    Спробуй одну з підказок:
+                    Ð¯ Ð¼Ð¾Ð¶Ñ Ð·Ð¼ÑÐ½Ð¸ÑÐ¸ Ð±ÑÐ´Ñ-ÑÐºÑ ÑÐ°ÑÑÐ¸Ð½Ñ ÐºÐ°ÑÑÐºÐ¸.<br />
+                    Ð¡Ð¿ÑÐ¾Ð±ÑÐ¹ Ð¾Ð´Ð½Ñ Ð· Ð¿ÑÐ´ÐºÐ°Ð·Ð¾Ðº:
                   </p>
                   <div className="flex flex-col gap-2">
                     {SUGGESTIONS.map(s => (
@@ -739,7 +738,7 @@ export default function CardPage() {
                     <p className="leading-relaxed">{m.content}</p>
                     {m.role === 'assistant' && m.changed && m.changed.length > 0 && (
                       <p className="text-white/35 text-[10px] mt-1">
-                        Змінено: {m.changed.join(', ')}
+                        ÐÐ¼ÑÐ½ÐµÐ½Ð¾: {m.changed.join(', ')}
                       </p>
                     )}
                   </div>
@@ -780,7 +779,7 @@ export default function CardPage() {
                   value={input}
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Що змінити? (Enter — відправити)"
+                  placeholder="Ð©Ð¾ Ð·Ð¼ÑÐ½Ð¸ÑÐ¸? (Enter â Ð²ÑÐ´Ð¿ÑÐ°Ð²Ð¸ÑÐ¸)"
                   rows={2}
                   disabled={aiLoading}
                   className="flex-1 bg-white/[0.06] border border-white/10 rounded-xl px-4 py-3 text-white text-sm placeholder:text-white/25 focus:outline-none focus:border-gold/40 resize-none disabled:opacity-50 transition-colors"
@@ -790,18 +789,18 @@ export default function CardPage() {
                   disabled={!input.trim() || aiLoading}
                   className="bg-gold text-black px-4 py-3 rounded-xl font-bold text-sm hover:bg-gold/90 transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
                 >
-                  ↑
+                  â
                 </button>
               </div>
               <p className="text-white/20 text-[10px] mt-1.5 text-center">
-                Shift+Enter — новий рядок · зміни зберігаються автоматично
+                Shift+Enter â Ð½Ð¾Ð²Ð¸Ð¹ ÑÑÐ´Ð¾Ðº Â· Ð·Ð¼ÑÐ½Ð¸ Ð·Ð±ÐµÑÑÐ³Ð°ÑÑÑÑÑ Ð°Ð²ÑÐ¾Ð¼Ð°ÑÐ¸ÑÐ½Ð¾
               </p>
             </div>
           </div>
         )}
       </div>
 
-      {/* ══ INFOGRAPHIC SECTION ════════════════════════════════════════════ */}
+      {/* ââ INFOGRAPHIC SECTION ââââââââââââââââââââââââââââââââââââââââââââ */}
       <InfographicSection card={card} accessToken={accessToken} />
 
     </div>

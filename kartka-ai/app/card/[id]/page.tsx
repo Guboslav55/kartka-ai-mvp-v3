@@ -175,12 +175,29 @@ function InfographicSection({ card, accessToken, inline = false }: { card: Saved
     setEditing(false);
   }
 
-  function download(idx?: number) {
+  async function download(idx?: number) {
     const i = idx !== undefined ? idx : (selected ?? 0);
     const url = variants[i]?.url;
     if (!url) return;
     const name = (card.product_name || card.title).replace(/[^a-zA-Z0-9]/g, '-').slice(0, 40);
-    window.open(`/api/download-image?url=${encodeURIComponent(url)}&filename=${name}.jpg`, '_blank');
+    try {
+      const res = await fetch(`/api/download-image?url=${encodeURIComponent(url)}&filename=${name}.jpg`);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = `${name}.jpg`;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(blobUrl); }, 1000);
+    } catch {
+      // Fallback — open in new tab
+      const a = document.createElement('a');
+      a.href = url;
+      a.target = '_blank';
+      a.click();
+    }
   }
 
   // Inline view — compact strip inside white card

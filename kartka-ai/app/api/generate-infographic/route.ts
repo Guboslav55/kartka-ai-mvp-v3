@@ -106,7 +106,7 @@ async function runFluxKontext(imageUrl: string, prompt: string): Promise<Buffer 
   if (!REPLICATE_TOKEN) return null;
   try {
     const createRes = await fetch(
-      'https://api.replicate.com/v1/models/black-forest-labs/flux-kontext-max/predictions',
+      'https://api.replicate.com/v1/models/black-forest-labs/flux-kontext-pro/predictions',
       {
         method: 'POST',
         headers: {
@@ -182,10 +182,10 @@ export async function POST(req: NextRequest) {
       bullets = [], category = 'general',
       variant = 'lifestyle', // 'lifestyle' | 'benefits'
       cardId,
-      allVariants, // ÃÂ¼ÃÂ°ÃÂÃÂ¸ÃÂ² ÃÂ²ÃÂ¶ÃÂµ ÃÂ·ÃÂ³ÃÂµÃÂ½ÃÂµÃÂÃÂ¾ÃÂ²ÃÂ°ÃÂ½ÃÂ¸ÃÂ ÃÂ²ÃÂ°ÃÂÃÂÃÂ°ÃÂ½ÃÂÃÂÃÂ² ÃÂ´ÃÂ»ÃÂ ÃÂ·ÃÂ±ÃÂµÃÂÃÂµÃÂ¶ÃÂµÃÂ½ÃÂ½ÃÂ ÃÂ² DB
+      allVariants, // ÃÂÃÂ¼ÃÂÃÂ°ÃÂÃÂÃÂÃÂ¸ÃÂÃÂ² ÃÂÃÂ²ÃÂÃÂ¶ÃÂÃÂµ ÃÂÃÂ·ÃÂÃÂ³ÃÂÃÂµÃÂÃÂ½ÃÂÃÂµÃÂÃÂÃÂÃÂ¾ÃÂÃÂ²ÃÂÃÂ°ÃÂÃÂ½ÃÂÃÂ¸ÃÂÃÂ ÃÂÃÂ²ÃÂÃÂ°ÃÂÃÂÃÂÃÂÃÂÃÂ°ÃÂÃÂ½ÃÂÃÂÃÂÃÂÃÂÃÂ² ÃÂÃÂ´ÃÂÃÂ»ÃÂÃÂ ÃÂÃÂ·ÃÂÃÂ±ÃÂÃÂµÃÂÃÂÃÂÃÂµÃÂÃÂ¶ÃÂÃÂµÃÂÃÂ½ÃÂÃÂ½ÃÂÃÂ ÃÂÃÂ² DB
     } = await req.json();
 
-    // ÃÂ¯ÃÂºÃÂÃÂ¾ ÃÂ¿ÃÂµÃÂÃÂµÃÂ´ÃÂ°ÃÂ½ÃÂ¾ allVariants Ã¢ÂÂ ÃÂ¿ÃÂÃÂ¾ÃÂÃÂÃÂ¾ ÃÂ·ÃÂ±ÃÂµÃÂÃÂÃÂ³ÃÂ°ÃÂÃÂ¼ÃÂ¾ ÃÂ² DB ÃÂ ÃÂ²ÃÂ¸ÃÂÃÂ¾ÃÂ´ÃÂ¸ÃÂ¼ÃÂ¾
+    // ÃÂÃÂ¯ÃÂÃÂºÃÂÃÂÃÂÃÂ¾ ÃÂÃÂ¿ÃÂÃÂµÃÂÃÂÃÂÃÂµÃÂÃÂ´ÃÂÃÂ°ÃÂÃÂ½ÃÂÃÂ¾ allVariants ÃÂ¢ÃÂÃÂ ÃÂÃÂ¿ÃÂÃÂÃÂÃÂ¾ÃÂÃÂÃÂÃÂÃÂÃÂ¾ ÃÂÃÂ·ÃÂÃÂ±ÃÂÃÂµÃÂÃÂÃÂÃÂÃÂÃÂ³ÃÂÃÂ°ÃÂÃÂÃÂÃÂ¼ÃÂÃÂ¾ ÃÂÃÂ² DB ÃÂÃÂ ÃÂÃÂ²ÃÂÃÂ¸ÃÂÃÂÃÂÃÂ¾ÃÂÃÂ´ÃÂÃÂ¸ÃÂÃÂ¼ÃÂÃÂ¾
     if (allVariants && cardId) {
       const { error } = await supabase
         .from('cards')
@@ -197,7 +197,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!productName.trim())
-      return NextResponse.json({ error: 'ÃÂÃÂ¾ÃÂÃÂÃÂÃÂ±ÃÂ½ÃÂ° ÃÂ½ÃÂ°ÃÂ·ÃÂ²ÃÂ° ÃÂÃÂ¾ÃÂ²ÃÂ°ÃÂÃÂ' }, { status: 400 });
+      return NextResponse.json({ error: 'ÃÂÃÂÃÂÃÂ¾ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ±ÃÂÃÂ½ÃÂÃÂ° ÃÂÃÂ½ÃÂÃÂ°ÃÂÃÂ·ÃÂÃÂ²ÃÂÃÂ° ÃÂÃÂÃÂÃÂ¾ÃÂÃÂ²ÃÂÃÂ°ÃÂÃÂÃÂÃÂ' }, { status: 400 });
 
     let resolvedBase64 = imageBase64 || '';
     if (!resolvedBase64 && imageUrl) {
@@ -209,36 +209,36 @@ export async function POST(req: NextRequest) {
       } catch (e) { console.warn('fetch imageUrl failed:', e); }
     }
     if (!resolvedBase64)
-      return NextResponse.json({ error: 'ÃÂÃÂ¾ÃÂÃÂÃÂÃÂ±ÃÂ½ÃÂµ ÃÂÃÂ¾ÃÂÃÂ¾ ÃÂÃÂ¾ÃÂ²ÃÂ°ÃÂÃÂ' }, { status: 400 });
+      return NextResponse.json({ error: 'ÃÂÃÂÃÂÃÂ¾ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ±ÃÂÃÂ½ÃÂÃÂµ ÃÂÃÂÃÂÃÂ¾ÃÂÃÂÃÂÃÂ¾ ÃÂÃÂÃÂÃÂ¾ÃÂÃÂ²ÃÂÃÂ°ÃÂÃÂÃÂÃÂ' }, { status: 400 });
 
     const cleanBullets = (bullets as string[])
       .filter(x => x.trim()).slice(0, 4)
-      .map(x => x.replace(/^[Ã¢ÂÂÃ¢ÂÂ¢]\s*/, '').trim());
+      .map(x => x.replace(/^[ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ¢]\s*/, '').trim());
 
     const publicImageUrl = await uploadImageForFlux(supabase, resolvedBase64, user.id);
     if (!publicImageUrl)
-      return NextResponse.json({ error: 'ÃÂÃÂµ ÃÂ²ÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÂÃÂ ÃÂ·ÃÂ°ÃÂ²ÃÂ°ÃÂ½ÃÂÃÂ°ÃÂ¶ÃÂ¸ÃÂÃÂ¸ ÃÂÃÂ¾ÃÂÃÂ¾' }, { status: 500 });
+      return NextResponse.json({ error: 'ÃÂÃÂÃÂÃÂµ ÃÂÃÂ²ÃÂÃÂ´ÃÂÃÂ°ÃÂÃÂ»ÃÂÃÂ¾ÃÂÃÂÃÂÃÂ ÃÂÃÂ·ÃÂÃÂ°ÃÂÃÂ²ÃÂÃÂ°ÃÂÃÂ½ÃÂÃÂÃÂÃÂ°ÃÂÃÂ¶ÃÂÃÂ¸ÃÂÃÂÃÂÃÂ¸ ÃÂÃÂÃÂÃÂ¾ÃÂÃÂÃÂÃÂ¾' }, { status: 500 });
 
     const prompt = await buildPrompt(
       resolvedBase64, productName, cleanBullets, category,
       variant as 'lifestyle' | 'benefits',
     );
     if (!prompt)
-      return NextResponse.json({ error: 'ÃÂÃÂµ ÃÂ²ÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÂÃÂ ÃÂ¿ÃÂ¾ÃÂ±ÃÂÃÂ´ÃÂÃÂ²ÃÂ°ÃÂÃÂ¸ ÃÂ¿ÃÂÃÂ¾ÃÂ¼ÃÂ¿ÃÂ' }, { status: 500 });
+      return NextResponse.json({ error: 'ÃÂÃÂÃÂÃÂµ ÃÂÃÂ²ÃÂÃÂ´ÃÂÃÂ°ÃÂÃÂ»ÃÂÃÂ¾ÃÂÃÂÃÂÃÂ ÃÂÃÂ¿ÃÂÃÂ¾ÃÂÃÂ±ÃÂÃÂÃÂÃÂ´ÃÂÃÂÃÂÃÂ²ÃÂÃÂ°ÃÂÃÂÃÂÃÂ¸ ÃÂÃÂ¿ÃÂÃÂÃÂÃÂ¾ÃÂÃÂ¼ÃÂÃÂ¿ÃÂÃÂ' }, { status: 500 });
 
     const buf = await runFluxKontext(publicImageUrl, prompt);
     if (!buf)
-      return NextResponse.json({ error: 'Flux Kontext ÃÂ½ÃÂµ ÃÂ·ÃÂ¼ÃÂÃÂ³ ÃÂ·ÃÂ³ÃÂµÃÂ½ÃÂµÃÂÃÂÃÂ²ÃÂ°ÃÂÃÂ¸ ÃÂ·ÃÂ¾ÃÂ±ÃÂÃÂ°ÃÂ¶ÃÂµÃÂ½ÃÂ½ÃÂ' }, { status: 500 });
+      return NextResponse.json({ error: 'Flux Kontext ÃÂÃÂ½ÃÂÃÂµ ÃÂÃÂ·ÃÂÃÂ¼ÃÂÃÂÃÂÃÂ³ ÃÂÃÂ·ÃÂÃÂ³ÃÂÃÂµÃÂÃÂ½ÃÂÃÂµÃÂÃÂÃÂÃÂÃÂÃÂ²ÃÂÃÂ°ÃÂÃÂÃÂÃÂ¸ ÃÂÃÂ·ÃÂÃÂ¾ÃÂÃÂ±ÃÂÃÂÃÂÃÂ°ÃÂÃÂ¶ÃÂÃÂµÃÂÃÂ½ÃÂÃÂ½ÃÂÃÂ' }, { status: 500 });
 
     const url = await uploadToStorage(supabase, buf, user.id);
-    const label = variant === 'lifestyle' ? 'Lifestyle' : 'ÃÂÃÂµÃÂÃÂµÃÂ²ÃÂ°ÃÂ³ÃÂ¸';
+    const label = variant === 'lifestyle' ? 'Lifestyle' : 'ÃÂÃÂÃÂÃÂµÃÂÃÂÃÂÃÂµÃÂÃÂ²ÃÂÃÂ°ÃÂÃÂ³ÃÂÃÂ¸';
 
     return NextResponse.json({ url, label });
 
   } catch (err: unknown) {
     console.error('Infographic error:', err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'ÃÂÃÂ¾ÃÂ¼ÃÂ¸ÃÂ»ÃÂºÃÂ° ÃÂ³ÃÂµÃÂ½ÃÂµÃÂÃÂ°ÃÂÃÂÃÂ' },
+      { error: err instanceof Error ? err.message : 'ÃÂÃÂÃÂÃÂ¾ÃÂÃÂ¼ÃÂÃÂ¸ÃÂÃÂ»ÃÂÃÂºÃÂÃÂ° ÃÂÃÂ³ÃÂÃÂµÃÂÃÂ½ÃÂÃÂµÃÂÃÂÃÂÃÂ°ÃÂÃÂÃÂÃÂÃÂÃÂ' },
       { status: 500 },
     );
   }

@@ -84,8 +84,11 @@ ${bulletText}
 ${variantInstructions}
 
 CRITICAL RULES:
-- Keep the ORIGINAL product from the photo â do NOT replace or alter it
-- All text labels must be in Ukrainian language
+- Keep the ORIGINAL product from the photo - do NOT replace or alter it
+- DO NOT add any text, letters, words, labels or annotations anywhere
+- DO NOT modify hands, fingers or any body parts - keep human anatomy exactly as original
+- Only modify: background, lighting, composition, decorative graphic elements
+- NO text overlays, NO callout text, NO written words of any kind
 - Professional marketplace quality, square 1024x1024
 - Write the prompt in English for Flux Kontext
 
@@ -179,10 +182,10 @@ export async function POST(req: NextRequest) {
       bullets = [], category = 'general',
       variant = 'lifestyle', // 'lifestyle' | 'benefits'
       cardId,
-      allVariants, // Ð¼Ð°ÑÐ¸Ð² Ð²Ð¶Ðµ Ð·Ð³ÐµÐ½ÐµÑÐ¾Ð²Ð°Ð½Ð¸Ñ Ð²Ð°ÑÑÐ°Ð½ÑÑÐ² Ð´Ð»Ñ Ð·Ð±ÐµÑÐµÐ¶ÐµÐ½Ð½Ñ Ð² DB
+      allVariants, // ÃÂ¼ÃÂ°ÃÂÃÂ¸ÃÂ² ÃÂ²ÃÂ¶ÃÂµ ÃÂ·ÃÂ³ÃÂµÃÂ½ÃÂµÃÂÃÂ¾ÃÂ²ÃÂ°ÃÂ½ÃÂ¸ÃÂ ÃÂ²ÃÂ°ÃÂÃÂÃÂ°ÃÂ½ÃÂÃÂÃÂ² ÃÂ´ÃÂ»ÃÂ ÃÂ·ÃÂ±ÃÂµÃÂÃÂµÃÂ¶ÃÂµÃÂ½ÃÂ½ÃÂ ÃÂ² DB
     } = await req.json();
 
-    // Ð¯ÐºÑÐ¾ Ð¿ÐµÑÐµÐ´Ð°Ð½Ð¾ allVariants â Ð¿ÑÐ¾ÑÑÐ¾ Ð·Ð±ÐµÑÑÐ³Ð°ÑÐ¼Ð¾ Ð² DB Ñ Ð²Ð¸ÑÐ¾Ð´Ð¸Ð¼Ð¾
+    // ÃÂ¯ÃÂºÃÂÃÂ¾ ÃÂ¿ÃÂµÃÂÃÂµÃÂ´ÃÂ°ÃÂ½ÃÂ¾ allVariants Ã¢ÂÂ ÃÂ¿ÃÂÃÂ¾ÃÂÃÂÃÂ¾ ÃÂ·ÃÂ±ÃÂµÃÂÃÂÃÂ³ÃÂ°ÃÂÃÂ¼ÃÂ¾ ÃÂ² DB ÃÂ ÃÂ²ÃÂ¸ÃÂÃÂ¾ÃÂ´ÃÂ¸ÃÂ¼ÃÂ¾
     if (allVariants && cardId) {
       const { error } = await supabase
         .from('cards')
@@ -194,7 +197,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!productName.trim())
-      return NextResponse.json({ error: 'ÐÐ¾ÑÑÑÐ±Ð½Ð° Ð½Ð°Ð·Ð²Ð° ÑÐ¾Ð²Ð°ÑÑ' }, { status: 400 });
+      return NextResponse.json({ error: 'ÃÂÃÂ¾ÃÂÃÂÃÂÃÂ±ÃÂ½ÃÂ° ÃÂ½ÃÂ°ÃÂ·ÃÂ²ÃÂ° ÃÂÃÂ¾ÃÂ²ÃÂ°ÃÂÃÂ' }, { status: 400 });
 
     let resolvedBase64 = imageBase64 || '';
     if (!resolvedBase64 && imageUrl) {
@@ -206,36 +209,36 @@ export async function POST(req: NextRequest) {
       } catch (e) { console.warn('fetch imageUrl failed:', e); }
     }
     if (!resolvedBase64)
-      return NextResponse.json({ error: 'ÐÐ¾ÑÑÑÐ±Ð½Ðµ ÑÐ¾ÑÐ¾ ÑÐ¾Ð²Ð°ÑÑ' }, { status: 400 });
+      return NextResponse.json({ error: 'ÃÂÃÂ¾ÃÂÃÂÃÂÃÂ±ÃÂ½ÃÂµ ÃÂÃÂ¾ÃÂÃÂ¾ ÃÂÃÂ¾ÃÂ²ÃÂ°ÃÂÃÂ' }, { status: 400 });
 
     const cleanBullets = (bullets as string[])
       .filter(x => x.trim()).slice(0, 4)
-      .map(x => x.replace(/^[ââ¢]\s*/, '').trim());
+      .map(x => x.replace(/^[Ã¢ÂÂÃ¢ÂÂ¢]\s*/, '').trim());
 
     const publicImageUrl = await uploadImageForFlux(supabase, resolvedBase64, user.id);
     if (!publicImageUrl)
-      return NextResponse.json({ error: 'ÐÐµ Ð²Ð´Ð°Ð»Ð¾ÑÑ Ð·Ð°Ð²Ð°Ð½ÑÐ°Ð¶Ð¸ÑÐ¸ ÑÐ¾ÑÐ¾' }, { status: 500 });
+      return NextResponse.json({ error: 'ÃÂÃÂµ ÃÂ²ÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÂÃÂ ÃÂ·ÃÂ°ÃÂ²ÃÂ°ÃÂ½ÃÂÃÂ°ÃÂ¶ÃÂ¸ÃÂÃÂ¸ ÃÂÃÂ¾ÃÂÃÂ¾' }, { status: 500 });
 
     const prompt = await buildPrompt(
       resolvedBase64, productName, cleanBullets, category,
       variant as 'lifestyle' | 'benefits',
     );
     if (!prompt)
-      return NextResponse.json({ error: 'ÐÐµ Ð²Ð´Ð°Ð»Ð¾ÑÑ Ð¿Ð¾Ð±ÑÐ´ÑÐ²Ð°ÑÐ¸ Ð¿ÑÐ¾Ð¼Ð¿Ñ' }, { status: 500 });
+      return NextResponse.json({ error: 'ÃÂÃÂµ ÃÂ²ÃÂ´ÃÂ°ÃÂ»ÃÂ¾ÃÂÃÂ ÃÂ¿ÃÂ¾ÃÂ±ÃÂÃÂ´ÃÂÃÂ²ÃÂ°ÃÂÃÂ¸ ÃÂ¿ÃÂÃÂ¾ÃÂ¼ÃÂ¿ÃÂ' }, { status: 500 });
 
     const buf = await runFluxKontext(publicImageUrl, prompt);
     if (!buf)
-      return NextResponse.json({ error: 'Flux Kontext Ð½Ðµ Ð·Ð¼ÑÐ³ Ð·Ð³ÐµÐ½ÐµÑÑÐ²Ð°ÑÐ¸ Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð½Ñ' }, { status: 500 });
+      return NextResponse.json({ error: 'Flux Kontext ÃÂ½ÃÂµ ÃÂ·ÃÂ¼ÃÂÃÂ³ ÃÂ·ÃÂ³ÃÂµÃÂ½ÃÂµÃÂÃÂÃÂ²ÃÂ°ÃÂÃÂ¸ ÃÂ·ÃÂ¾ÃÂ±ÃÂÃÂ°ÃÂ¶ÃÂµÃÂ½ÃÂ½ÃÂ' }, { status: 500 });
 
     const url = await uploadToStorage(supabase, buf, user.id);
-    const label = variant === 'lifestyle' ? 'Lifestyle' : 'ÐÐµÑÐµÐ²Ð°Ð³Ð¸';
+    const label = variant === 'lifestyle' ? 'Lifestyle' : 'ÃÂÃÂµÃÂÃÂµÃÂ²ÃÂ°ÃÂ³ÃÂ¸';
 
     return NextResponse.json({ url, label });
 
   } catch (err: unknown) {
     console.error('Infographic error:', err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'ÐÐ¾Ð¼Ð¸Ð»ÐºÐ° Ð³ÐµÐ½ÐµÑÐ°ÑÑÑ' },
+      { error: err instanceof Error ? err.message : 'ÃÂÃÂ¾ÃÂ¼ÃÂ¸ÃÂ»ÃÂºÃÂ° ÃÂ³ÃÂµÃÂ½ÃÂµÃÂÃÂ°ÃÂÃÂÃÂ' },
       { status: 500 },
     );
   }

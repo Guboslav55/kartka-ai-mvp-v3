@@ -84,7 +84,7 @@ ${bulletText}
 ${variantInstructions}
 
 CRITICAL RULES:
-- Keep the ORIGINAL product from the photo — do NOT replace or alter it
+- Keep the ORIGINAL product from the photo â do NOT replace or alter it
 - All text labels must be in Ukrainian language
 - Professional marketplace quality, square 1024x1024
 - Write the prompt in English for Flux Kontext
@@ -103,7 +103,7 @@ async function runFluxKontext(imageUrl: string, prompt: string): Promise<Buffer 
   if (!REPLICATE_TOKEN) return null;
   try {
     const createRes = await fetch(
-      'https://api.replicate.com/v1/models/black-forest-labs/flux-kontext-pro/predictions',
+      'https://api.replicate.com/v1/models/black-forest-labs/flux-kontext-max/predictions',
       {
         method: 'POST',
         headers: {
@@ -179,10 +179,10 @@ export async function POST(req: NextRequest) {
       bullets = [], category = 'general',
       variant = 'lifestyle', // 'lifestyle' | 'benefits'
       cardId,
-      allVariants, // масив вже згенерованих варіантів для збереження в DB
+      allVariants, // Ð¼Ð°ÑÐ¸Ð² Ð²Ð¶Ðµ Ð·Ð³ÐµÐ½ÐµÑÐ¾Ð²Ð°Ð½Ð¸Ñ Ð²Ð°ÑÑÐ°Ð½ÑÑÐ² Ð´Ð»Ñ Ð·Ð±ÐµÑÐµÐ¶ÐµÐ½Ð½Ñ Ð² DB
     } = await req.json();
 
-    // Якщо передано allVariants — просто зберігаємо в DB і виходимо
+    // Ð¯ÐºÑÐ¾ Ð¿ÐµÑÐµÐ´Ð°Ð½Ð¾ allVariants â Ð¿ÑÐ¾ÑÑÐ¾ Ð·Ð±ÐµÑÑÐ³Ð°ÑÐ¼Ð¾ Ð² DB Ñ Ð²Ð¸ÑÐ¾Ð´Ð¸Ð¼Ð¾
     if (allVariants && cardId) {
       const { error } = await supabase
         .from('cards')
@@ -194,7 +194,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!productName.trim())
-      return NextResponse.json({ error: 'Потрібна назва товару' }, { status: 400 });
+      return NextResponse.json({ error: 'ÐÐ¾ÑÑÑÐ±Ð½Ð° Ð½Ð°Ð·Ð²Ð° ÑÐ¾Ð²Ð°ÑÑ' }, { status: 400 });
 
     let resolvedBase64 = imageBase64 || '';
     if (!resolvedBase64 && imageUrl) {
@@ -206,36 +206,36 @@ export async function POST(req: NextRequest) {
       } catch (e) { console.warn('fetch imageUrl failed:', e); }
     }
     if (!resolvedBase64)
-      return NextResponse.json({ error: 'Потрібне фото товару' }, { status: 400 });
+      return NextResponse.json({ error: 'ÐÐ¾ÑÑÑÐ±Ð½Ðµ ÑÐ¾ÑÐ¾ ÑÐ¾Ð²Ð°ÑÑ' }, { status: 400 });
 
     const cleanBullets = (bullets as string[])
       .filter(x => x.trim()).slice(0, 4)
-      .map(x => x.replace(/^[✓•]\s*/, '').trim());
+      .map(x => x.replace(/^[ââ¢]\s*/, '').trim());
 
     const publicImageUrl = await uploadImageForFlux(supabase, resolvedBase64, user.id);
     if (!publicImageUrl)
-      return NextResponse.json({ error: 'Не вдалося завантажити фото' }, { status: 500 });
+      return NextResponse.json({ error: 'ÐÐµ Ð²Ð´Ð°Ð»Ð¾ÑÑ Ð·Ð°Ð²Ð°Ð½ÑÐ°Ð¶Ð¸ÑÐ¸ ÑÐ¾ÑÐ¾' }, { status: 500 });
 
     const prompt = await buildPrompt(
       resolvedBase64, productName, cleanBullets, category,
       variant as 'lifestyle' | 'benefits',
     );
     if (!prompt)
-      return NextResponse.json({ error: 'Не вдалося побудувати промпт' }, { status: 500 });
+      return NextResponse.json({ error: 'ÐÐµ Ð²Ð´Ð°Ð»Ð¾ÑÑ Ð¿Ð¾Ð±ÑÐ´ÑÐ²Ð°ÑÐ¸ Ð¿ÑÐ¾Ð¼Ð¿Ñ' }, { status: 500 });
 
     const buf = await runFluxKontext(publicImageUrl, prompt);
     if (!buf)
-      return NextResponse.json({ error: 'Flux Kontext не зміг згенерувати зображення' }, { status: 500 });
+      return NextResponse.json({ error: 'Flux Kontext Ð½Ðµ Ð·Ð¼ÑÐ³ Ð·Ð³ÐµÐ½ÐµÑÑÐ²Ð°ÑÐ¸ Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð½Ñ' }, { status: 500 });
 
     const url = await uploadToStorage(supabase, buf, user.id);
-    const label = variant === 'lifestyle' ? 'Lifestyle' : 'Переваги';
+    const label = variant === 'lifestyle' ? 'Lifestyle' : 'ÐÐµÑÐµÐ²Ð°Ð³Ð¸';
 
     return NextResponse.json({ url, label });
 
   } catch (err: unknown) {
     console.error('Infographic error:', err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Помилка генерації' },
+      { error: err instanceof Error ? err.message : 'ÐÐ¾Ð¼Ð¸Ð»ÐºÐ° Ð³ÐµÐ½ÐµÑÐ°ÑÑÑ' },
       { status: 500 },
     );
   }

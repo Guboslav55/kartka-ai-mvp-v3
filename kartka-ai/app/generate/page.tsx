@@ -9,10 +9,10 @@ const PLATFORMS: { value: Platform; label: string }[] = [
   { value: 'prom',    label: 'Prom.ua'   },
   { value: 'rozetka', label: 'Rozetka'   },
   { value: 'olx',     label: 'OLX'       },
-  { value: 'general', label: 'Загальний' },
+  { value: 'general', label: 'ÐÐ°Ð³Ð°Ð»ÑÐ½Ð¸Ð¹' },
 ];
 
-// ── Photo pipeline steps ────────────────────────────────────────────────────
+// ââ Photo pipeline steps ââââââââââââââââââââââââââââââââââââââââââââââââââââ
 type PhotoStep =
   | 'idle'
   | 'analyzing'   // GPT-4o analyze-product
@@ -23,14 +23,14 @@ type PhotoStep =
 
 const STEP_LABELS: Record<PhotoStep, string> = {
   idle:        '',
-  analyzing:   'AI аналізує товар...',
-  cropping:    'Обрізаю зображення...',
-  removing_bg: 'Видаляю фон...',
-  done:        'Фото готове ✓',
-  error:       'Помилка обробки',
+  analyzing:   'AI Ð°Ð½Ð°Ð»ÑÐ·ÑÑ ÑÐ¾Ð²Ð°Ñ...',
+  cropping:    'ÐÐ±ÑÑÐ·Ð°Ñ Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð½Ñ...',
+  removing_bg: 'ÐÐ¸Ð´Ð°Ð»ÑÑ ÑÐ¾Ð½...',
+  done:        'Ð¤Ð¾ÑÐ¾ Ð³Ð¾ÑÐ¾Ð²Ðµ â',
+  error:       'ÐÐ¾Ð¼Ð¸Ð»ÐºÐ° Ð¾Ð±ÑÐ¾Ð±ÐºÐ¸',
 };
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+// ââ Helpers âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 function CopyBtn({ text, label }: { text: string; label: string }) {
   const [ok, setOk] = useState(false);
   function copy() {
@@ -47,7 +47,7 @@ function CopyBtn({ text, label }: { text: string; label: string }) {
           : 'border-gray-200 text-gray-400 hover:border-gray-400 hover:text-gray-600'
       }`}
     >
-      {ok ? '✓' : label}
+      {ok ? 'â' : label}
     </button>
   );
 }
@@ -71,7 +71,7 @@ function PhotoStepBadge({ step }: { step: PhotoStep }) {
   );
 }
 
-// ── Main component ───────────────────────────────────────────────────────────
+// ââ Main component âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 export default function GeneratePage() {
   const router    = useRouter();
   const supabase  = createClient();
@@ -128,14 +128,14 @@ export default function GeneratePage() {
     });
   }, []);
 
-  // ── Photo pipeline ────────────────────────────────────────────────────────
+  // ââ Photo pipeline ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
   async function runPhotoPipeline(base64: string) {
     setPhotoError('');
     setProcessedPhoto(null);
     setAnalyzeData(null);
 
     try {
-      // Step 1 — analyze: GPT-4o returns bbox + category + bullets
+      // Step 1 â analyze: GPT-4o returns bbox + category + bullets
       setPhotoStep('analyzing');
       const analyzeRes = await fetch('/api/analyze-product', {
         method:  'POST',
@@ -143,7 +143,7 @@ export default function GeneratePage() {
         body:    JSON.stringify({ imageBase64: base64, lang }),
       });
       const analyzed = await analyzeRes.json();
-      if (!analyzeRes.ok) throw new Error(analyzed.error || 'Помилка аналізу фото');
+      if (!analyzeRes.ok) throw new Error(analyzed.error || 'ÐÐ¾Ð¼Ð¸Ð»ÐºÐ° Ð°Ð½Ð°Ð»ÑÐ·Ñ ÑÐ¾ÑÐ¾');
 
       // Auto-fill form fields from AI analysis
       if (analyzed.productName && !productName) setProductName(analyzed.productName);
@@ -151,19 +151,19 @@ export default function GeneratePage() {
       if (analyzed.bullets?.length && !features)
         setFeatures(analyzed.bullets.slice(0, 3).join(', '));
       setAnalyzeData(analyzed);
-
+        const shouldSkipProcessing = false; // Always remove bg
       const shouldSkipProcessing =
         analyzed.keepBackground ||
         (analyzed.bbox?.w > 0.92 && analyzed.bbox?.h > 0.92);
 
       if (shouldSkipProcessing) {
-        // White/clean background — skip crop + remove-bg, use original
+        // White/clean background â skip crop + remove-bg, use original
         setProcessedPhoto(base64);
         setPhotoStep('done');
         return;
       }
 
-      // Step 2 — crop: sharp cuts out the product bbox
+      // Step 2 â crop: sharp cuts out the product bbox
       setPhotoStep('cropping');
       const cropRes = await fetch('/api/crop-product', {
         method:  'POST',
@@ -171,10 +171,10 @@ export default function GeneratePage() {
         body:    JSON.stringify({ imageBase64: base64 }),
       });
       const cropData = await cropRes.json();
-      if (!cropRes.ok) throw new Error(cropData.error || 'Помилка обрізки');
+      if (!cropRes.ok) throw new Error(cropData.error || 'ÐÐ¾Ð¼Ð¸Ð»ÐºÐ° Ð¾Ð±ÑÑÐ·ÐºÐ¸');
       const cropped = cropData.croppedBase64 as string;
 
-      // Step 3 — remove background via Remove.bg
+      // Step 3 â remove background via Remove.bg
       setPhotoStep('removing_bg');
       const bgRes = await fetch('/api/remove-bg', {
         method:  'POST',
@@ -184,7 +184,7 @@ export default function GeneratePage() {
       const bgData = await bgRes.json();
 
       if (!bgRes.ok) {
-        // Remove.bg failed → fallback to cropped without bg removal, don't block user
+        // Remove.bg failed â fallback to cropped without bg removal, don't block user
         console.warn('Remove.bg failed, using cropped:', bgData.error);
         setProcessedPhoto(cropped);
       } else {
@@ -193,10 +193,10 @@ export default function GeneratePage() {
 
       setPhotoStep('done');
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Помилка обробки фото';
+      const msg = err instanceof Error ? err.message : 'ÐÐ¾Ð¼Ð¸Ð»ÐºÐ° Ð¾Ð±ÑÐ¾Ð±ÐºÐ¸ ÑÐ¾ÑÐ¾';
       setPhotoError(msg);
       setPhotoStep('error');
-      // Don't block — user can still generate with original photo
+      // Don't block â user can still generate with original photo
       setProcessedPhoto(base64);
     }
   }
@@ -224,7 +224,7 @@ export default function GeneratePage() {
     if (fileRef.current) fileRef.current.value = '';
   }
 
-  // ── Compress image for API (max 1024px, JPEG 85%) to avoid 413 / timeout ───
+  // ââ Compress image for API (max 1024px, JPEG 85%) to avoid 413 / timeout âââ
   function compressForApi(base64: string): Promise<string> {
     return new Promise(resolve => {
       const img = new Image();
@@ -247,10 +247,10 @@ export default function GeneratePage() {
     });
   }
 
-  // ── Generate card ─────────────────────────────────────────────────────────
+  // ââ Generate card âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
   const generate = useCallback(async () => {
     if (!productName.trim() || loading) return;
-    if (cardsLeft <= 0) { setError('Ліміт вичерпано. Підвищ тариф.'); return; }
+    if (cardsLeft <= 0) { setError('ÐÑÐ¼ÑÑ Ð²Ð¸ÑÐµÑÐ¿Ð°Ð½Ð¾. ÐÑÐ´Ð²Ð¸Ñ ÑÐ°ÑÐ¸Ñ.'); return; }
 
     setLoading(true);
     setError('');
@@ -276,14 +276,14 @@ export default function GeneratePage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Помилка генерації');
+      if (!res.ok) throw new Error(data.error || 'ÐÐ¾Ð¼Ð¸Ð»ÐºÐ° Ð³ÐµÐ½ÐµÑÐ°ÑÑÑ');
       setResult(data);
       setCardId(data.cardId ?? null);
       setEditMsgs([]);
       setEditOpen(false);
       setCardsLeft(c => Math.max(0, c - 1));
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Помилка сервера. Спробуй ще раз.');
+      setError(e instanceof Error ? e.message : 'ÐÐ¾Ð¼Ð¸Ð»ÐºÐ° ÑÐµÑÐ²ÐµÑÐ°. Ð¡Ð¿ÑÐ¾Ð±ÑÐ¹ ÑÐµ ÑÐ°Ð·.');
     }
 
     setLoading(false);
@@ -304,11 +304,11 @@ export default function GeneratePage() {
         body: JSON.stringify({ cardId, userMessage: text, card: { product_name: productName, platform, title: result.title, description: result.description, bullets: result.bullets, keywords: result.keywords }, history: editMsgs.slice(-6) }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Помилка AI');
+      if (!res.ok) throw new Error(data.error || 'ÐÐ¾Ð¼Ð¸Ð»ÐºÐ° AI');
       if (data.diff && Object.keys(data.diff).length > 0) { setResult(prev => prev ? { ...prev, ...data.diff } : prev); setLastChanged(data.changedFields ?? []); }
-      setEditMsgs(prev => [...prev, { role: 'assistant' as const, content: data.explanation ?? 'Готово', changedFields: data.changedFields }]);
+      setEditMsgs(prev => [...prev, { role: 'assistant' as const, content: data.explanation ?? 'ÐÐ¾ÑÐ¾Ð²Ð¾', changedFields: data.changedFields }]);
     } catch (err: unknown) {
-      setEditMsgs(prev => [...prev, { role: 'assistant' as const, content: '⚠️ ' + (err instanceof Error ? err.message : 'Помилка') }]);
+      setEditMsgs(prev => [...prev, { role: 'assistant' as const, content: 'â ï¸ ' + (err instanceof Error ? err.message : 'ÐÐ¾Ð¼Ð¸Ð»ÐºÐ°') }]);
     }
     setEditLoading(false);
   }
@@ -318,9 +318,9 @@ export default function GeneratePage() {
     const text = [
       result.title, '',
       result.description, '',
-      'Переваги:',
-      ...result.bullets.map(b => '• ' + b), '',
-      'Ключові слова: ' + result.keywords.join(', '),
+      'ÐÐµÑÐµÐ²Ð°Ð³Ð¸:',
+      ...result.bullets.map(b => 'â¢ ' + b), '',
+      'ÐÐ»ÑÑÐ¾Ð²Ñ ÑÐ»Ð¾Ð²Ð°: ' + result.keywords.join(', '),
     ].join('\n');
     navigator.clipboard.writeText(text);
     setAllCopied(true);
@@ -330,7 +330,7 @@ export default function GeneratePage() {
   function downloadCSV() {
     if (!result) return;
     const rows = [
-      ['Назва', 'Опис', 'Переваги', 'Ключові слова', 'Платформа', 'Зображення'],
+      ['ÐÐ°Ð·Ð²Ð°', 'ÐÐ¿Ð¸Ñ', 'ÐÐµÑÐµÐ²Ð°Ð³Ð¸', 'ÐÐ»ÑÑÐ¾Ð²Ñ ÑÐ»Ð¾Ð²Ð°', 'ÐÐ»Ð°ÑÑÐ¾ÑÐ¼Ð°', 'ÐÐ¾Ð±ÑÐ°Ð¶ÐµÐ½Ð½Ñ'],
       [
         result.title,
         result.description,
@@ -348,7 +348,7 @@ export default function GeneratePage() {
     a.click();
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ââ Render âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
   if (!ready) return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin" />
@@ -365,20 +365,20 @@ export default function GeneratePage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-8 gap-3">
         <Link href="/dashboard" className="text-white/40 text-sm hover:text-white transition-colors shrink-0">
-          ← Кабінет
+          â ÐÐ°Ð±ÑÐ½ÐµÑ
         </Link>
         <span className={`text-sm font-bold ${noCards ? 'text-red-400' : 'text-gold'}`}>
-          Залишок: {cardsLeft === 99999 ? '∞' : cardsLeft} карточок
+          ÐÐ°Ð»Ð¸ÑÐ¾Ðº: {cardsLeft === 99999 ? 'â' : cardsLeft} ÐºÐ°ÑÑÐ¾ÑÐ¾Ðº
         </span>
       </div>
 
-      <h1 className="font-display font-black text-2xl sm:text-3xl mb-6 tracking-tight">✦ Генератор картки</h1>
+      <h1 className="font-display font-black text-2xl sm:text-3xl mb-6 tracking-tight">â¦ ÐÐµÐ½ÐµÑÐ°ÑÐ¾Ñ ÐºÐ°ÑÑÐºÐ¸</h1>
 
       {noCards && (
         <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-5 py-4 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <p className="text-red-300 text-sm">Ліміт карточок вичерпано.</p>
+          <p className="text-red-300 text-sm">ÐÑÐ¼ÑÑ ÐºÐ°ÑÑÐ¾ÑÐ¾Ðº Ð²Ð¸ÑÐµÑÐ¿Ð°Ð½Ð¾.</p>
           <Link href="/pricing" className="bg-gold text-black px-4 py-2 rounded-lg text-sm font-bold hover:bg-gold-light transition-colors shrink-0">
-            Підвищити →
+            ÐÑÐ´Ð²Ð¸ÑÐ¸ÑÐ¸ â
           </Link>
         </div>
       )}
@@ -386,12 +386,12 @@ export default function GeneratePage() {
       <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-5 sm:p-7 mb-5">
         <div className="space-y-5">
 
-          {/* ── Photo upload ── */}
+          {/* ââ Photo upload ââ */}
           <div>
             <label className="block text-gold text-xs font-bold uppercase tracking-widest mb-2">
-              Фото товару{' '}
+              Ð¤Ð¾ÑÐ¾ ÑÐ¾Ð²Ð°ÑÑ{' '}
               <span className="text-white/30 font-normal normal-case tracking-normal">
-                — AI розпізнає, обріже та видалить фон автоматично
+                â AI ÑÐ¾Ð·Ð¿ÑÐ·Ð½Ð°Ñ, Ð¾Ð±ÑÑÐ¶Ðµ ÑÐ° Ð²Ð¸Ð´Ð°Ð»Ð¸ÑÑ ÑÐ¾Ð½ Ð°Ð²ÑÐ¾Ð¼Ð°ÑÐ¸ÑÐ½Ð¾
               </span>
             </label>
 
@@ -408,7 +408,7 @@ export default function GeneratePage() {
               {originalPhoto ? (
                 <div className="flex items-start gap-4">
 
-                  {/* Left: original → processed preview */}
+                  {/* Left: original â processed preview */}
                   <div className="flex items-center gap-2 shrink-0">
                     {/* Original */}
                     <div className="relative">
@@ -418,11 +418,11 @@ export default function GeneratePage() {
                         className="w-16 h-16 object-cover rounded-lg opacity-40"
                       />
                       <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 text-[9px] text-white/40 whitespace-nowrap">
-                        оригінал
+                        Ð¾ÑÐ¸Ð³ÑÐ½Ð°Ð»
                       </span>
                     </div>
 
-                    <span className="text-white/20 text-lg">→</span>
+                    <span className="text-white/20 text-lg">â</span>
 
                     {/* Processed */}
                     <div className="relative">
@@ -434,7 +434,7 @@ export default function GeneratePage() {
                             className="w-16 h-16 object-contain rounded-lg bg-white/5"
                           />
                           <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 text-[9px] text-gold whitespace-nowrap">
-                            готове
+                            Ð³Ð¾ÑÐ¾Ð²Ðµ
                           </span>
                         </>
                       ) : (
@@ -475,46 +475,46 @@ export default function GeneratePage() {
 
                     {photoStep === 'done' && (
                       <p className="text-gold text-xs mt-2 font-medium">
-                        ✓ Фон видалено, товар готовий до банеру
+                        â Ð¤Ð¾Ð½ Ð²Ð¸Ð´Ð°Ð»ÐµÐ½Ð¾, ÑÐ¾Ð²Ð°Ñ Ð³Ð¾ÑÐ¾Ð²Ð¸Ð¹ Ð´Ð¾ Ð±Ð°Ð½ÐµÑÑ
                       </p>
                     )}
 
                     {/* Analyzed data preview */}
                     {analyzeData && photoStep === 'done' && (
                       <p className="text-white/40 text-xs mt-1 truncate">
-                        AI визначив: {analyzeData.category as string}
+                        AI Ð²Ð¸Ð·Ð½Ð°ÑÐ¸Ð²: {analyzeData.category as string}
                       </p>
                     )}
 
                     {photoError && (
-                      <p className="text-red-400 text-xs mt-1">{photoError} — використаю оригінал</p>
+                      <p className="text-red-400 text-xs mt-1">{photoError} â Ð²Ð¸ÐºÐ¾ÑÐ¸ÑÑÐ°Ñ Ð¾ÑÐ¸Ð³ÑÐ½Ð°Ð»</p>
                     )}
 
                     <button
                       onClick={e => { e.stopPropagation(); clearPhoto(); }}
                       className="text-white/30 text-xs hover:text-red-400 mt-2 transition-colors"
                     >
-                      Видалити фото ×
+                      ÐÐ¸Ð´Ð°Ð»Ð¸ÑÐ¸ ÑÐ¾ÑÐ¾ Ã
                     </button>
                   </div>
                 </div>
               ) : (
                 <div className="text-center">
-                  <div className="text-3xl mb-2">📸</div>
-                  <p className="text-white/50 text-sm">Натисни щоб завантажити фото товару</p>
-                  <p className="text-white/25 text-xs mt-1">JPG, PNG до 10 МБ · AI обріже та видалить фон</p>
+                  <div className="text-3xl mb-2">ð¸</div>
+                  <p className="text-white/50 text-sm">ÐÐ°ÑÐ¸ÑÐ½Ð¸ ÑÐ¾Ð± Ð·Ð°Ð²Ð°Ð½ÑÐ°Ð¶Ð¸ÑÐ¸ ÑÐ¾ÑÐ¾ ÑÐ¾Ð²Ð°ÑÑ</p>
+                  <p className="text-white/25 text-xs mt-1">JPG, PNG Ð´Ð¾ 10 ÐÐ Â· AI Ð¾Ð±ÑÑÐ¶Ðµ ÑÐ° Ð²Ð¸Ð´Ð°Ð»Ð¸ÑÑ ÑÐ¾Ð½</p>
                 </div>
               )}
             </div>
           </div>
 
-          {/* ── Product name ── */}
+          {/* ââ Product name ââ */}
           <div>
             <label className="block text-gold text-xs font-bold uppercase tracking-widest mb-2">
-              Назва товару *{' '}
+              ÐÐ°Ð·Ð²Ð° ÑÐ¾Ð²Ð°ÑÑ *{' '}
               {analyzeData && (
                 <span className="text-white/30 font-normal normal-case tracking-normal">
-                  — заповнено AI з фото
+                  â Ð·Ð°Ð¿Ð¾Ð²Ð½ÐµÐ½Ð¾ AI Ð· ÑÐ¾ÑÐ¾
                 </span>
               )}
             </label>
@@ -522,64 +522,64 @@ export default function GeneratePage() {
               value={productName}
               onChange={e => setProductName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && generate()}
-              placeholder="наприклад: Тактична футболка selion veteran чорна"
+              placeholder="Ð½Ð°Ð¿ÑÐ¸ÐºÐ»Ð°Ð´: Ð¢Ð°ÐºÑÐ¸ÑÐ½Ð° ÑÑÑÐ±Ð¾Ð»ÐºÐ° selion veteran ÑÐ¾ÑÐ½Ð°"
               disabled={noCards}
               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm placeholder-white/20 focus:outline-none focus:border-gold transition-colors disabled:opacity-40"
             />
           </div>
 
-          {/* ── Category + Lang ── */}
+          {/* ââ Category + Lang ââ */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-gold text-xs font-bold uppercase tracking-widest mb-2">Категорія</label>
+              <label className="block text-gold text-xs font-bold uppercase tracking-widest mb-2">ÐÐ°ÑÐµÐ³Ð¾ÑÑÑ</label>
               <select
                 value={category}
                 onChange={e => setCategory(e.target.value)}
                 disabled={noCards}
                 className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-gold transition-colors disabled:opacity-40"
               >
-                <option value="">— вибери —</option>
+                <option value="">â Ð²Ð¸Ð±ÐµÑÐ¸ â</option>
                 {[
-                  'Електроніка', 'Одяг та взуття', 'Тактичне спорядження',
-                  'Дім та сад', "Краса та здоров'я", 'Спорт та хобі',
-                  'Авто та мото', 'Іграшки', 'Інше',
+                  'ÐÐ»ÐµÐºÑÑÐ¾Ð½ÑÐºÐ°', 'ÐÐ´ÑÐ³ ÑÐ° Ð²Ð·ÑÑÑÑ', 'Ð¢Ð°ÐºÑÐ¸ÑÐ½Ðµ ÑÐ¿Ð¾ÑÑÐ´Ð¶ÐµÐ½Ð½Ñ',
+                  'ÐÑÐ¼ ÑÐ° ÑÐ°Ð´', "ÐÑÐ°ÑÐ° ÑÐ° Ð·Ð´Ð¾ÑÐ¾Ð²'Ñ", 'Ð¡Ð¿Ð¾ÑÑ ÑÐ° ÑÐ¾Ð±Ñ',
+                  'ÐÐ²ÑÐ¾ ÑÐ° Ð¼Ð¾ÑÐ¾', 'ÐÐ³ÑÐ°ÑÐºÐ¸', 'ÐÐ½ÑÐµ',
                 ].map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-gold text-xs font-bold uppercase tracking-widest mb-2">Мова</label>
+              <label className="block text-gold text-xs font-bold uppercase tracking-widest mb-2">ÐÐ¾Ð²Ð°</label>
               <select
                 value={lang}
                 onChange={e => setLang(e.target.value as Lang)}
                 disabled={noCards}
                 className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-gold transition-colors disabled:opacity-40"
               >
-                <option value="uk">Українська</option>
-                <option value="ru">Російська</option>
+                <option value="uk">Ð£ÐºÑÐ°ÑÐ½ÑÑÐºÐ°</option>
+                <option value="ru">Ð Ð¾ÑÑÐ¹ÑÑÐºÐ°</option>
                 <option value="en">English</option>
               </select>
             </div>
           </div>
 
-          {/* ── Features ── */}
+          {/* ââ Features ââ */}
           <div>
             <label className="block text-gold text-xs font-bold uppercase tracking-widest mb-2">
-              Особливості{' '}
-              <span className="text-white/30 font-normal normal-case tracking-normal">(необов&apos;язково)</span>
+              ÐÑÐ¾Ð±Ð»Ð¸Ð²Ð¾ÑÑÑ{' '}
+              <span className="text-white/30 font-normal normal-case tracking-normal">(Ð½ÐµÐ¾Ð±Ð¾Ð²&apos;ÑÐ·ÐºÐ¾Ð²Ð¾)</span>
             </label>
             <textarea
               value={features}
               onChange={e => setFeatures(e.target.value)}
               rows={2}
               disabled={noCards}
-              placeholder="наприклад: швидке висихання, якісний принт TDF, підходить для служби"
+              placeholder="Ð½Ð°Ð¿ÑÐ¸ÐºÐ»Ð°Ð´: ÑÐ²Ð¸Ð´ÐºÐµ Ð²Ð¸ÑÐ¸ÑÐ°Ð½Ð½Ñ, ÑÐºÑÑÐ½Ð¸Ð¹ Ð¿ÑÐ¸Ð½Ñ TDF, Ð¿ÑÐ´ÑÐ¾Ð´Ð¸ÑÑ Ð´Ð»Ñ ÑÐ»ÑÐ¶Ð±Ð¸"
               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm placeholder-white/20 focus:outline-none focus:border-gold transition-colors resize-none disabled:opacity-40"
             />
           </div>
 
-          {/* ── Platform ── */}
+          {/* ââ Platform ââ */}
           <div>
-            <label className="block text-gold text-xs font-bold uppercase tracking-widest mb-2">Платформа</label>
+            <label className="block text-gold text-xs font-bold uppercase tracking-widest mb-2">ÐÐ»Ð°ÑÑÐ¾ÑÐ¼Ð°</label>
             <div className="flex gap-2 overflow-x-auto pb-1">
               {PLATFORMS.map(p => (
                 <button
@@ -598,11 +598,11 @@ export default function GeneratePage() {
             </div>
           </div>
 
-          {/* ── Tone ── */}
+          {/* ââ Tone ââ */}
           <div>
-            <label className="block text-gold text-xs font-bold uppercase tracking-widest mb-2">Тон</label>
+            <label className="block text-gold text-xs font-bold uppercase tracking-widest mb-2">Ð¢Ð¾Ð½</label>
             <div className="flex flex-wrap gap-2">
-              {([['professional', 'Професійний'], ['friendly', 'Дружній'], ['premium', 'Преміум'], ['simple', 'Простий']] as const).map(([v, l]) => (
+              {([['professional', 'ÐÑÐ¾ÑÐµÑÑÐ¹Ð½Ð¸Ð¹'], ['friendly', 'ÐÑÑÐ¶Ð½ÑÐ¹'], ['premium', 'ÐÑÐµÐ¼ÑÑÐ¼'], ['simple', 'ÐÑÐ¾ÑÑÐ¸Ð¹']] as const).map(([v, l]) => (
                 <button
                   key={v}
                   onClick={() => setTone(v as Tone)}
@@ -619,7 +619,7 @@ export default function GeneratePage() {
             </div>
           </div>
 
-          {/* ── DALL-E toggle — hide if photo uploaded ── */}
+          {/* ââ DALL-E toggle â hide if photo uploaded ââ */}
           {!originalPhoto && (
             <label className="flex items-center gap-3 cursor-pointer select-none">
               <button
@@ -633,12 +633,12 @@ export default function GeneratePage() {
                   style={{ left: genImage ? '18px' : '2px' }}
                 />
               </button>
-              <span className="text-white/60 text-sm">Генерувати зображення (DALL-E 3)</span>
+              <span className="text-white/60 text-sm">ÐÐµÐ½ÐµÑÑÐ²Ð°ÑÐ¸ Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð½Ñ (DALL-E 3)</span>
             </label>
           )}
         </div>
 
-        {/* ── Generate button ── */}
+        {/* ââ Generate button ââ */}
         <button
           onClick={generate}
           disabled={loading || noCards || !productName.trim() || pipelineActive}
@@ -647,30 +647,30 @@ export default function GeneratePage() {
           {loading ? (
             <>
               <span className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-              Генерую...
+              ÐÐµÐ½ÐµÑÑÑ...
             </>
           ) : pipelineActive ? (
             <>
               <span className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-              Обробляю фото...
+              ÐÐ±ÑÐ¾Ð±Ð»ÑÑ ÑÐ¾ÑÐ¾...
             </>
           ) : (
-            '✦ Згенерувати картку'
+            'â¦ ÐÐ³ÐµÐ½ÐµÑÑÐ²Ð°ÑÐ¸ ÐºÐ°ÑÑÐºÑ'
           )}
         </button>
       </div>
 
-      {/* ── Error ── */}
+      {/* ââ Error ââ */}
       {error && (
         <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-5 py-3 text-red-300 text-sm mb-5 flex flex-wrap items-center justify-between gap-2">
           <span>{error}</span>
-          {error.includes('тариф') && (
-            <Link href="/pricing" className="text-gold underline">Підвищити →</Link>
+          {error.includes('ÑÐ°ÑÐ¸Ñ') && (
+            <Link href="/pricing" className="text-gold underline">ÐÑÐ´Ð²Ð¸ÑÐ¸ÑÐ¸ â</Link>
           )}
         </div>
       )}
 
-      {/* ── Loading skeleton ── */}
+      {/* ââ Loading skeleton ââ */}
       {loading && (
         <div className="bg-white rounded-2xl p-6 sm:p-8">
           <div className="skeleton h-5 w-2/3 mb-6 rounded" />
@@ -682,7 +682,7 @@ export default function GeneratePage() {
         </div>
       )}
 
-      {/* ── Result card ── */}
+      {/* ââ Result card ââ */}
       {result && !loading && (
         <div className="bg-white rounded-2xl overflow-hidden shadow-2xl">
 
@@ -691,23 +691,23 @@ export default function GeneratePage() {
             <span className="bg-white/15 text-white text-xs font-bold px-3 py-1 rounded-full">{platformLabel}</span>
             <div className="flex items-center gap-3">
               <button onClick={() => setEditOpen(v => !v)} className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-all ${editOpen ? 'bg-gold text-black' : 'bg-white/15 text-white hover:bg-white/25'}`}>
-                {editOpen ? '✕ Закрити' : '✦ AI редагування'}
+                {editOpen ? 'â ÐÐ°ÐºÑÐ¸ÑÐ¸' : 'â¦ AI ÑÐµÐ´Ð°Ð³ÑÐ²Ð°Ð½Ð½Ñ'}
               </button>
-              <span className="text-white/40 text-xs">{result.title.length}/80 симв.</span>
+              <span className="text-white/40 text-xs">{result.title.length}/80 ÑÐ¸Ð¼Ð².</span>
               <button
                 onClick={copyAll}
                 className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-all ${
                   allCopied ? 'bg-green-500 text-white' : 'bg-white/15 text-white hover:bg-white/25'
                 }`}
               >
-                {allCopied ? '✓ Скопійовано!' : '📋 Копіювати все'}
+                {allCopied ? 'â Ð¡ÐºÐ¾Ð¿ÑÐ¹Ð¾Ð²Ð°Ð½Ð¾!' : 'ð ÐÐ¾Ð¿ÑÑÐ²Ð°ÑÐ¸ Ð²ÑÐµ'}
               </button>
             </div>
           </div>
 
           <div className="p-5 sm:p-7 space-y-5">
 
-            {/* Product image — processed or generated */}
+            {/* Product image â processed or generated */}
             {(processedPhoto || result.imageUrl) && (
               <div className="relative group">
                 <img
@@ -724,7 +724,7 @@ export default function GeneratePage() {
                   rel="noreferrer"
                   className="absolute bottom-3 right-3 bg-black/70 text-white text-xs px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity font-semibold"
                 >
-                  ⬇ Завантажити
+                  â¬ ÐÐ°Ð²Ð°Ð½ÑÐ°Ð¶Ð¸ÑÐ¸
                 </a>
               </div>
             )}
@@ -732,8 +732,8 @@ export default function GeneratePage() {
             {/* Title */}
             <div className="bg-gray-50 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Заголовок</span>
-                <CopyBtn text={result.title} label="Копіювати" />
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">ÐÐ°Ð³Ð¾Ð»Ð¾Ð²Ð¾Ðº</span>
+                <CopyBtn text={result.title} label="ÐÐ¾Ð¿ÑÑÐ²Ð°ÑÐ¸" />
               </div>
               <h2 className="font-display font-bold text-lg text-navy leading-tight">{result.title}</h2>
             </div>
@@ -741,8 +741,8 @@ export default function GeneratePage() {
             {/* Description */}
             <div className="bg-gray-50 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Опис</span>
-                <CopyBtn text={result.description} label="Копіювати" />
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">ÐÐ¿Ð¸Ñ</span>
+                <CopyBtn text={result.description} label="ÐÐ¾Ð¿ÑÑÐ²Ð°ÑÐ¸" />
               </div>
               <p className="text-gray-700 text-sm leading-relaxed">{result.description}</p>
             </div>
@@ -750,13 +750,13 @@ export default function GeneratePage() {
             {/* Bullets */}
             <div className="bg-gray-50 rounded-xl p-4">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Переваги</span>
-                <CopyBtn text={result.bullets.map(b => '• ' + b).join('\n')} label="Копіювати" />
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">ÐÐµÑÐµÐ²Ð°Ð³Ð¸</span>
+                <CopyBtn text={result.bullets.map(b => 'â¢ ' + b).join('\n')} label="ÐÐ¾Ð¿ÑÑÐ²Ð°ÑÐ¸" />
               </div>
               <ul className="space-y-2">
                 {result.bullets.map((b, i) => (
                   <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                    <span className="text-navy font-bold mt-0.5 shrink-0">✓</span>{b}
+                    <span className="text-navy font-bold mt-0.5 shrink-0">â</span>{b}
                   </li>
                 ))}
               </ul>
@@ -765,8 +765,8 @@ export default function GeneratePage() {
             {/* Keywords */}
             <div className="bg-gray-50 rounded-xl p-4">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Ключові слова</span>
-                <CopyBtn text={result.keywords.join(', ')} label="Копіювати" />
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">ÐÐ»ÑÑÐ¾Ð²Ñ ÑÐ»Ð¾Ð²Ð°</span>
+                <CopyBtn text={result.keywords.join(', ')} label="ÐÐ¾Ð¿ÑÑÐ²Ð°ÑÐ¸" />
               </div>
               <div className="flex flex-wrap gap-2">
                 {result.keywords.map(k => (
@@ -790,19 +790,19 @@ export default function GeneratePage() {
                 allCopied ? 'bg-green-600 text-white' : 'bg-gray-900 text-white hover:bg-gray-700'
               }`}
             >
-              {allCopied ? '✓ Все скопійовано!' : '📋 Копіювати все'}
+              {allCopied ? 'â ÐÑÐµ ÑÐºÐ¾Ð¿ÑÐ¹Ð¾Ð²Ð°Ð½Ð¾!' : 'ð ÐÐ¾Ð¿ÑÑÐ²Ð°ÑÐ¸ Ð²ÑÐµ'}
             </button>
             <button
               onClick={downloadCSV}
               className="bg-green-700 text-white px-4 py-3 rounded-xl text-sm font-semibold hover:bg-green-600 transition-colors flex items-center justify-center gap-2"
             >
-              ⬇ Завантажити CSV
+              â¬ ÐÐ°Ð²Ð°Ð½ÑÐ°Ð¶Ð¸ÑÐ¸ CSV
             </button>
             <button
               onClick={generate}
               className="border border-gray-200 text-gray-500 px-4 py-3 rounded-xl text-sm font-semibold hover:border-gray-400 hover:text-gray-700 transition-colors flex items-center justify-center gap-2"
             >
-              ↺ Інший варіант
+              âº ÐÐ½ÑÐ¸Ð¹ Ð²Ð°ÑÑÐ°Ð½Ñ
             </button>
           </div>
 
@@ -810,13 +810,13 @@ export default function GeneratePage() {
           {editOpen && (
             <div className="mx-5 sm:mx-7 mb-4 border border-gray-100 rounded-2xl overflow-hidden">
               <div className="px-4 py-3 bg-navy/5 border-b border-gray-100">
-                <p className="text-navy font-bold text-sm">✦ AI редагування тексту</p>
-                <p className="text-gray-400 text-xs mt-0.5">Скажи що змінити — AI оновить картку</p>
+                <p className="text-navy font-bold text-sm">â¦ AI ÑÐµÐ´Ð°Ð³ÑÐ²Ð°Ð½Ð½Ñ ÑÐµÐºÑÑÑ</p>
+                <p className="text-gray-400 text-xs mt-0.5">Ð¡ÐºÐ°Ð¶Ð¸ ÑÐ¾ Ð·Ð¼ÑÐ½Ð¸ÑÐ¸ â AI Ð¾Ð½Ð¾Ð²Ð¸ÑÑ ÐºÐ°ÑÑÐºÑ</p>
               </div>
               <div className="p-3 space-y-2 max-h-60 overflow-y-auto">
                 {editMsgs.length === 0 && (
                   <div className="flex flex-wrap gap-1.5 justify-center py-2">
-                    {['Зроби заголовок коротшим','Перепиши опис продаючим','Додай цифри в переваги','Зроби більш емоційним'].map(s => (
+                    {['ÐÑÐ¾Ð±Ð¸ Ð·Ð°Ð³Ð¾Ð»Ð¾Ð²Ð¾Ðº ÐºÐ¾ÑÐ¾ÑÑÐ¸Ð¼','ÐÐµÑÐµÐ¿Ð¸ÑÐ¸ Ð¾Ð¿Ð¸Ñ Ð¿ÑÐ¾Ð´Ð°ÑÑÐ¸Ð¼','ÐÐ¾Ð´Ð°Ð¹ ÑÐ¸ÑÑÐ¸ Ð² Ð¿ÐµÑÐµÐ²Ð°Ð³Ð¸','ÐÑÐ¾Ð±Ð¸ Ð±ÑÐ»ÑÑ ÐµÐ¼Ð¾ÑÑÐ¹Ð½Ð¸Ð¼'].map(s => (
                       <button key={s} onClick={() => sendEdit(s)} className="text-xs px-2.5 py-1 rounded-full border border-gray-200 text-gray-500 hover:border-navy/40 hover:text-navy">{s}</button>
                     ))}
                   </div>
@@ -829,7 +829,7 @@ export default function GeneratePage() {
                         <div className="flex flex-wrap gap-1 mt-1">
                           {msg.changedFields.map((f: string) => (
                             <span key={f} className="text-[10px] px-1.5 py-0.5 rounded bg-gold/20 text-navy/70">
-                              {f === 'title' ? 'заголовок' : f === 'description' ? 'опис' : f === 'bullets' ? 'переваги' : 'ключ.слова'}
+                              {f === 'title' ? 'Ð·Ð°Ð³Ð¾Ð»Ð¾Ð²Ð¾Ðº' : f === 'description' ? 'Ð¾Ð¿Ð¸Ñ' : f === 'bullets' ? 'Ð¿ÐµÑÐµÐ²Ð°Ð³Ð¸' : 'ÐºÐ»ÑÑ.ÑÐ»Ð¾Ð²Ð°'}
                             </span>
                           ))}
                         </div>
@@ -851,21 +851,21 @@ export default function GeneratePage() {
                 <div ref={editEndRef} />
               </div>
               <div className="p-3 border-t border-gray-100 flex gap-2">
-                <input type="text" value={editInput} onChange={e => setEditInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') sendEdit(editInput); }} placeholder="Що змінити? (Enter)" disabled={editLoading} className="flex-1 bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-navy/40 disabled:opacity-50" />
-                <button onClick={() => sendEdit(editInput)} disabled={editLoading || !editInput.trim()} className="bg-navy text-white font-bold px-4 py-2 rounded-xl text-sm disabled:opacity-40">↑</button>
+                <input type="text" value={editInput} onChange={e => setEditInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') sendEdit(editInput); }} placeholder="Ð©Ð¾ Ð·Ð¼ÑÐ½Ð¸ÑÐ¸? (Enter)" disabled={editLoading} className="flex-1 bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-navy/40 disabled:opacity-50" />
+                <button onClick={() => sendEdit(editInput)} disabled={editLoading || !editInput.trim()} className="bg-navy text-white font-bold px-4 py-2 rounded-xl text-sm disabled:opacity-40">â</button>
               </div>
             </div>
           )}
 
-        {/* AI Інфографіка — посилання на картку */}
+        {/* AI ÐÐ½ÑÐ¾Ð³ÑÐ°ÑÑÐºÐ° â Ð¿Ð¾ÑÐ¸Ð»Ð°Ð½Ð½Ñ Ð½Ð° ÐºÐ°ÑÑÐºÑ */}
         {cardId && (
           <div className="mt-4 bg-white/[0.04] border border-white/10 rounded-2xl p-5 flex items-center justify-between">
             <div>
-              <h3 className="text-white font-bold text-sm">📊 AI Інфографіка</h3>
-              <p className="text-white/35 text-xs mt-0.5">3 варіанти · DALL-E 3 · 1024×1024</p>
+              <h3 className="text-white font-bold text-sm">ð AI ÐÐ½ÑÐ¾Ð³ÑÐ°ÑÑÐºÐ°</h3>
+              <p className="text-white/35 text-xs mt-0.5">3 Ð²Ð°ÑÑÐ°Ð½ÑÐ¸ Â· DALL-E 3 Â· 1024Ã1024</p>
             </div>
             <a href={`/card/${cardId}`} className="bg-gold text-black font-bold px-4 py-2 rounded-xl text-sm hover:bg-gold/80 transition-colors">
-              Відкрити картку →
+              ÐÑÐ´ÐºÑÐ¸ÑÐ¸ ÐºÐ°ÑÑÐºÑ â
             </a>
           </div>
         )}

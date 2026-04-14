@@ -416,22 +416,6 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
         </div>
       )}
     </div>
-
-    {editorOpen && selected !== null && variants[selected] && (
-      <InfographicEditor
-        backgroundUrl={variants[selected].url}
-        productName={(card as any).product_name || card.title}
-        bullets={card.bullets as string[]}
-        onSave={(dataUrl) => {
-          const a = document.createElement('a');
-          a.href = dataUrl;
-          a.download = 'infographic-edited.jpg';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          setEditorOpen(false);
-        }}
-        onClose={() => setEditorOpen(false)}
       />
     )}
   );

@@ -96,7 +96,7 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, editing]);
 
-  async function generateVariant(variant: 'lifestyle' | 'benefits' | 'studio'): Promise<{ url: string; label: string } | null> {
+  async function generateVariant(variant: 'lifestyle' | 'benefits' | 'studio', retries = 2): Promise<{ url: string; label: string } | null> {
     const res = await fetch('/api/generate-infographic', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
@@ -109,7 +109,10 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
       }),
     });
     const data = await res.json();
-    if (!res.ok || !data.url) return null;
+    if (!res.ok || !data.url) {
+      if (retries > 0) return generateVariant(variant, retries - 1);
+      return null;
+    }
     return { url: data.url, label: data.label };
   }
 

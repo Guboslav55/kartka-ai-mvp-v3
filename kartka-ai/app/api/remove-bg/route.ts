@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     if (!imageBase64) return NextResponse.json({ error: 'No image provided' }, { status: 400 });
     if (!REPLICATE_TOKEN) return NextResponse.json({ error: 'Replicate token not configured' }, { status: 500 });
 
-    // Upload to Supabase to get public URL for Replicate
+    // Upload to Supabase to get public URL
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -35,57 +35,42 @@ export async function POST(req: NextRequest) {
     await supabase.storage.from('card-images').upload(fileName, buffer, { contentType: mimeType, upsert: true });
     const publicUrl = supabase.storage.from('card-images').getPublicUrl(fileName).data.publicUrl;
 
-    // 851-labs/background-remover - high quality, correct API
-    const createRes = await fetch(
-      'https://api.replicate.com/v1/models/851-labs/background-remover/predictions',
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${REPLICATE_TOKEN}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'wait',
-        },
-        body: JSON.stringify({
-          input: {
-            image: publicUrl,
-            background_type: 'rgba',
-          },
-        }),
-      }
-    );
+    // Call Replicate with standard versioned endpoint
+    const createRes = await fetch('https://api.replicate.com/v1/predictions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Token ${REPLICATE_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        version: 'fb8af171cfa1616ddcf1242c093f9c46bcada5ad4cf6f2fbe8b81b330ec5c003',
+        input: { image: publicUrl },
+      }),
+    });
 
     const prediction = await createRes.json();
-    console.log('Replicate response:', JSON.stringify(prediction).slice(0, 300));
-
-    // Handle immediate success (Prefer: wait)
-    if (prediction.status === 'succeeded' && prediction.output) {
-      const imgRes = await fetch(prediction.output);
-      const buf = await imgRes.arrayBuffer();
-      const b64 = Buffer.from(buf).toString('base64');
-      return NextResponse.json({ imageBase64: `data:image/png;base64,${b64}` });
-    }
+    console.log('Replicate create status:', prediction.status, 'error:', JSON.stringify(prediction.detail || prediction.error || ''));
 
     if (!prediction.id) {
-      console.error('Replicate error:', JSON.stringify(prediction));
-      return NextResponse.json({ error: 'Failed to start: ' + JSON.stringify(prediction) }, { status: 500 });
+      return NextResponse.json({ error: 'Replicate error: ' + JSON.stringify(prediction).slice(0, 200) }, { status: 500 });
     }
 
     // Poll
     let current = prediction;
     let attempts = 0;
-    while (current.status !== 'succeeded' && current.status !== 'failed' && attempts < 30) {
+    while (current.status !== 'succeeded' && current.status !== 'failed' && current.status !== 'canceled' && attempts < 30) {
       await new Promise(r => setTimeout(r, 2000));
       const pollRes = await fetch(
         `https://api.replicate.com/v1/predictions/${current.id}`,
-        { headers: { 'Authorization': `Bearer ${REPLICATE_TOKEN}` } }
+        { headers: { 'Authorization': `Token ${REPLICATE_TOKEN}` } }
       );
       current = await pollRes.json();
       attempts++;
     }
 
     if (current.status !== 'succeeded' || !current.output) {
-      console.error('Replicate failed:', JSON.stringify(current));
-      return NextResponse.json({ error: 'Background removal failed' }, { status: 500 });
+      console.error('Replicate failed:', JSON.stringify(current).slice(0, 300));
+      return NextResponse.json({ error: 'Background removal failed: ' + current.error }, { status: 500 });
     }
 
     const imgRes = await fetch(current.output);

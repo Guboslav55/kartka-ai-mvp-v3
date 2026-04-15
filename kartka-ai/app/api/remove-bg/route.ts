@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     if (!imageBase64) return NextResponse.json({ error: 'No image provided' }, { status: 400 });
     if (!REPLICATE_TOKEN) return NextResponse.json({ error: 'Replicate token not configured' }, { status: 500 });
 
-    // Upload to Supabase to get public URL
+    // Upload to Supabase to get public URL for Replicate
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -35,26 +35,42 @@ export async function POST(req: NextRequest) {
     await supabase.storage.from('card-images').upload(fileName, buffer, { contentType: mimeType, upsert: true });
     const publicUrl = supabase.storage.from('card-images').getPublicUrl(fileName).data.publicUrl;
 
-    // Use lucataco/remove-bg - faster, correct API format
-    const createRes = await fetch('https://api.replicate.com/v1/predictions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${REPLICATE_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        version: 'fb8af171cfa1616ddcf1242c093f9c46bcada5ad4cf6f2fbe8b81b330ec5c003',
-        input: { image: publicUrl },
-      }),
-    });
+    // 851-labs/background-remover - high quality, correct API
+    const createRes = await fetch(
+      'https://api.replicate.com/v1/models/851-labs/background-remover/predictions',
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${REPLICATE_TOKEN}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'wait',
+        },
+        body: JSON.stringify({
+          input: {
+            image: publicUrl,
+            background_type: 'rgba',
+          },
+        }),
+      }
+    );
 
     const prediction = await createRes.json();
-    if (!prediction.id) {
-      console.error('Replicate create failed:', JSON.stringify(prediction));
-      return NextResponse.json({ error: 'Failed to start background removal' }, { status: 500 });
+    console.log('Replicate response:', JSON.stringify(prediction).slice(0, 300));
+
+    // Handle immediate success (Prefer: wait)
+    if (prediction.status === 'succeeded' && prediction.output) {
+      const imgRes = await fetch(prediction.output);
+      const buf = await imgRes.arrayBuffer();
+      const b64 = Buffer.from(buf).toString('base64');
+      return NextResponse.json({ imageBase64: `data:image/png;base64,${b64}` });
     }
 
-    // Poll for result
+    if (!prediction.id) {
+      console.error('Replicate error:', JSON.stringify(prediction));
+      return NextResponse.json({ error: 'Failed to start: ' + JSON.stringify(prediction) }, { status: 500 });
+    }
+
+    // Poll
     let current = prediction;
     let attempts = 0;
     while (current.status !== 'succeeded' && current.status !== 'failed' && attempts < 30) {
@@ -68,8 +84,8 @@ export async function POST(req: NextRequest) {
     }
 
     if (current.status !== 'succeeded' || !current.output) {
-      console.error('Replicate remove-bg failed:', JSON.stringify(current.error));
-      return NextResponse.json({ error: 'Failed to remove background' }, { status: 500 });
+      console.error('Replicate failed:', JSON.stringify(current));
+      return NextResponse.json({ error: 'Background removal failed' }, { status: 500 });
     }
 
     const imgRes = await fetch(current.output);

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 
 export const maxDuration = 60;
 
@@ -12,17 +13,38 @@ export async function POST(req: NextRequest) {
 
     const { imageBase64 } = await req.json();
     if (!imageBase64) return NextResponse.json({ error: 'No image provided' }, { status: 400 });
+    if (!REPLICATE_TOKEN) return NextResponse.json({ error: 'Replicate token not configured' }, { status: 500 });
 
-    if (!REPLICATE_TOKEN) {
-      return NextResponse.json({ error: 'Replicate token not configured' }, { status: 500 });
+    // Get user for Supabase upload
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { global: { headers: { Authorization: `Bearer ${token}` } } }
+    );
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    // Upload image to Supabase to get a public URL for Replicate
+    const match = imageBase64.match(/^data:(image\/\w+);base64,(.+)$/s);
+    if (!match) return NextResponse.json({ error: 'Invalid image format' }, { status: 400 });
+
+    const mimeType = match[1];
+    const ext = mimeType.split('/')[1] || 'jpg';
+    const buffer = Buffer.from(match[2], 'base64');
+    const fileName = `temp/rembg/${user.id}/${Date.now()}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('card-images')
+      .upload(fileName, buffer, { contentType: mimeType, upsert: true });
+
+    if (uploadError) {
+      console.error('Upload error:', uploadError);
+      return NextResponse.json({ error: 'Failed to upload image' }, { status: 500 });
     }
 
-    // Upload image to Replicate as data URI
-    const input = {
-      image: imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`,
-    };
+    const publicUrl = supabase.storage.from('card-images').getPublicUrl(fileName).data.publicUrl;
 
-    // Call Replicate background remover (851-labs/background-remover)
+    // Call Replicate background remover with public URL
     const createRes = await fetch(
       'https://api.replicate.com/v1/models/851-labs/background-remover/predictions',
       {
@@ -32,22 +54,21 @@ export async function POST(req: NextRequest) {
           'Content-Type': 'application/json',
           'Prefer': 'wait',
         },
-        body: JSON.stringify({ input }),
+        body: JSON.stringify({ input: { image: publicUrl } }),
       }
     );
 
     const prediction = await createRes.json();
 
-    // If already done
+    // Handle immediate success
     if (prediction.status === 'succeeded' && prediction.output) {
-      const outputUrl = prediction.output;
-      const imgRes = await fetch(outputUrl);
+      const imgRes = await fetch(prediction.output);
       const buf = await imgRes.arrayBuffer();
       const b64 = Buffer.from(buf).toString('base64');
       return NextResponse.json({ imageBase64: `data:image/png;base64,${b64}` });
     }
 
-    // Poll if needed
+    // Poll
     let current = prediction;
     let attempts = 0;
     while (
@@ -66,7 +87,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (current.status !== 'succeeded' || !current.output) {
-      console.error('Replicate remove-bg failed:', current.error);
+      console.error('Replicate remove-bg failed:', JSON.stringify(current.error));
       return NextResponse.json({ error: 'Failed to remove background' }, { status: 500 });
     }
 

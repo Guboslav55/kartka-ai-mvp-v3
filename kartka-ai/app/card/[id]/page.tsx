@@ -96,7 +96,7 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, editing]);
 
-  async function generateVariant(variant: 'lifestyle' | 'benefits'): Promise<{ url: string; label: string } | null> {
+  async function generateVariant(variant: 'lifestyle' | 'benefits' | 'studio'): Promise<{ url: string; label: string } | null> {
     const res = await fetch('/api/generate-infographic', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
@@ -137,6 +137,10 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
       if (v2) {
         results.push({ ...v2, prompt: '' });
         setVariants([...results]);
+
+      setStep('variant3');
+      const v3 = await generateVariant('studio');
+      if (v3) { results.push({ ...v3, prompt: '' }); setVariants([...results]); }
       }
 
       if (results.length === 0) throw new Error('Не вдалося згенерувати жоден варіант');
@@ -223,7 +227,7 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-white font-bold text-lg">📊 AI Інфографіка</h2>
-          <p className="text-white/40 text-xs mt-0.5">2 унікальних варіанти · Flux AI · 1024×1024</p>
+          <p className="text-white/40 text-xs mt-0.5">3 унікальних варіанти · Flux AI · 1024×1024</p>
         </div>
         <button
           onClick={generate}
@@ -246,9 +250,10 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
             {[
               { key: 'variant1', label: '🎨 Flux AI генерує Lifestyle варіант...' },
               { key: 'variant2', label: '🎨 Flux AI генерує Переваги варіант...' },
+              { key: 'variant3', label: '📷 Flux AI генерує Студійне фото...' },
             ].map((s, i) => {
               const isActive = step === s.key;
-              const isDone = step === 'variant2' && i === 0;
+              const isDone = (step === 'variant2' && i === 0) || (step === 'variant3' && i <= 1);
               return (
                 <div key={s.key} className="flex items-center gap-3">
                   <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
@@ -270,7 +275,7 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
           </div>
           <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden">
             <div className={`h-full bg-gold rounded-full transition-all duration-1000 ${
-              step === 'variant1' ? 'w-1/2' : step === 'variant2' ? 'w-full' : 'w-0'
+              step === 'variant1' ? 'w-1/3' : step === 'variant2' ? 'w-2/3' : step === 'variant3' ? 'w-full' : 'w-0'
             }`} />
           </div>
           <p className="text-white/25 text-xs text-center mt-2">~1 хвилина на варіант</p>

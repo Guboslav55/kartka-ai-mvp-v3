@@ -4,8 +4,11 @@ import { createClient } from '@supabase/supabase-js';
 
 export const maxDuration = 120;
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const REPLICATE_TOKEN = process.env.REPLICATE_API_TOKEN;
+
+function getAnthropic() {
+  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+}
 
 interface TextElement {
   text: string;
@@ -89,7 +92,7 @@ async function buildFluxPrompt(
     | 'image/webp'
     | 'image/gif';
 
-  const response = await anthropic.messages.create({
+  const response = await getAnthropic().messages.create({
     model: 'claude-sonnet-4-20250514',
     max_tokens: 400,
     temperature: 0.7,
@@ -194,7 +197,7 @@ async function getTextOverlayFromClaude(
       : variant === 'studio' ? 'clean studio white/grey background — product centered, professional e-commerce'
       : 'colorful graphic background with geometric elements — energetic marketplace style';
 
-    const response = await anthropic.messages.create({
+    const response = await getAnthropic().messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 800,
       messages: [

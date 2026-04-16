@@ -372,7 +372,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({ url, label });
   } catch (err: unknown) {
-    console.error('Infographic error:', err);
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Error' }, { status: 500 });
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const errStack = err instanceof Error ? err.stack : '';
+    console.error('Infographic error FULL:', errMsg, errStack);
+    return NextResponse.json({ error: errMsg }, { status: 500 });
   }
 }

@@ -188,7 +188,7 @@ async function getTextOverlay(
     const productMime = productBase64.match(/^data:(image\/\w+);base64,/)?.[1] || 'image/jpeg';
     const hint = variant === 'lifestyle' ? 'lifestyle atmospheric' : variant === 'studio' ? 'clean studio white background' : 'colorful graphic';
     const body = {
-      model: 'claude-sonnet-4-5',
+      model: 'claude-sonnet-4-5-20250929',
       max_tokens: 600,
       messages: [{
         role: 'user',
@@ -208,7 +208,7 @@ async function getTextOverlay(
       },
       body: JSON.stringify(body),
     });
-    if (!resp.ok) { const err = await resp.text(); console.error('Anthropic API error:', err); return []; }
+    if (!resp.ok) { const errText = await resp.text(); console.error('Anthropic API error FULL:', resp.status, errText.slice(0,500)); return []; }
     const data = await resp.json() as { content: Array<{ type: string; text: string }> };
     const raw = data.content[0]?.type === 'text' ? data.content[0].text : '';
     const m = raw.match(/\[[\s\S]*\]/);

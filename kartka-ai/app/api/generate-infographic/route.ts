@@ -178,64 +178,25 @@ async function getTextOverlay(
   bullets: string[],
   variant: string,
 ): Promise<Array<{text:string;x:number;y:number;fontSize:number;fontWeight:string;color:string;bgColor:string|null;bgPadding:number;bgRadius:number;align:string;maxWidth:number}>> {
-  try {
-    const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
-    if (!ANTHROPIC_KEY) { console.error('No ANTHROPIC_API_KEY'); return []; }
-    
-    const hint = variant === 'lifestyle' ? 'dark atmospheric background' : variant === 'studio' ? 'white/grey studio background' : 'colorful graphic background';
-    const colorScheme = variant === 'lifestyle' ? 'white text on dark bg' : variant === 'studio' ? 'dark text on light bg' : 'white text on colored bg';
-    
-    // Text-only request - no images, much more reliable
-    const body = {
-      model: 'claude-haiku-4-5',
-      max_tokens: 400,
-      messages: [{
-        role: 'user',
-        content: `You design text overlays for Ukrainian marketplace infographics (Prom.ua, Rozetka).
-
-Product: "${productName}"
-Key benefits: ${bullets.slice(0,3).join(', ')}
-Background type: ${hint} (${colorScheme})
-Variant: ${variant}
-Canvas: 1024x1024px
-
-Rules:
-- ALL text in Ukrainian
-- For lifestyle: brand name bottom-left (y:950), 1 spec top-right
-- For studio: 2-3 specs as cards on left side (x:20, y:200,280,360)  
-- For benefits: 2-3 bold stats (x:30, y:150,280,410) and brand bottom-right
-- NEVER place text in center (x:300-700, y:200-800) - product is there
-- Use bgColor for readability
-
-Return ONLY valid JSON array:
-[{"text":"...","x":number,"y":number,"fontSize":number,"fontWeight":"bold","color":"#ffffff","bgColor":"#000000","bgPadding":8,"bgRadius":6,"align":"left","maxWidth":280}]`
-      }]
-    };
-    
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': ANTHROPIC_KEY,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
-    
-    if (!resp.ok) {
-      const errText = await resp.text();
-      console.error('Anthropic API error:', resp.status, errText.slice(0,300));
-      return [];
-    }
-    
-    const data = await resp.json() as { content: Array<{ type: string; text: string }> };
-    const raw = data.content[0]?.type === 'text' ? data.content[0].text : '';
-    const m = raw.match(/\[[\s\S]*\]/);
-    if (!m) { console.error('No JSON array in response:', raw.slice(0,200)); return []; }
-    return JSON.parse(m[0]);
-  } catch(e) {
-    console.error('Claude overlay error:', e);
-    return [];
+  // Simple deterministic overlay - no API call needed
+  const name = productName.slice(0, 25).toUpperCase();
+  const spec = bullets[0] ? bullets[0].replace(/^[✓✔•]\s*/, '').trim().slice(0, 30) : '';
+  
+  if (variant === 'lifestyle') {
+    return [
+      { text: name, x: 40, y: 970, fontSize: 36, fontWeight: 'bold', color: '#ffffff', bgColor: '#000000', bgPadding: 10, bgRadius: 6, align: 'left', maxWidth: 500 },
+      { text: spec, x: 40, y: 60, fontSize: 16, fontWeight: 'normal', color: '#ffffff', bgColor: '#000000', bgPadding: 8, bgRadius: 4, align: 'left', maxWidth: 400 },
+    ];
+  } else if (variant === 'studio') {
+    return [
+      { text: name, x: 512, y: 60, fontSize: 28, fontWeight: 'bold', color: '#1a1a1a', bgColor: null, bgPadding: 8, bgRadius: 6, align: 'center', maxWidth: 600 },
+      { text: spec, x: 30, y: 400, fontSize: 14, fontWeight: 'normal', color: '#333333', bgColor: '#f0f0f0', bgPadding: 8, bgRadius: 4, align: 'left', maxWidth: 200 },
+    ];
+  } else {
+    return [
+      { text: name, x: 40, y: 60, fontSize: 32, fontWeight: 'bold', color: '#ffffff', bgColor: '#000000', bgPadding: 10, bgRadius: 6, align: 'left', maxWidth: 500 },
+      { text: spec, x: 40, y: 960, fontSize: 16, fontWeight: 'normal', color: '#ffffff', bgColor: '#c8a84b', bgPadding: 8, bgRadius: 4, align: 'left', maxWidth: 400 },
+    ];
   }
 }
 

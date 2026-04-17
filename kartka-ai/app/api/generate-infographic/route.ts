@@ -221,9 +221,9 @@ async function getTextOverlay(
     const data = await resp.json() as { content: Array<{ type: string; text: string }> };
     const raw = data.content[0]?.type === 'text' ? data.content[0].text : '';
     console.log('Claude overlay raw:', raw.slice(0, 200));
-    const m = raw.match(/\[[\s\S]*?\]/);
+    const m = raw.match(/\[[\s\S]*\]/);
     if (!m) { console.error('No JSON array found in:', raw.slice(0, 300)); return []; }
-    const parsed = JSON.parse(m[0]);
+    console.log('Claude JSON match:', m[0].slice(0,200)); const parsed = JSON.parse(m[0]);
     console.log('Claude overlay elements:', parsed.length);
     return parsed;
   } catch(e) {

@@ -181,24 +181,37 @@ async function getTextOverlay(
   try {
     const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
     if (!ANTHROPIC_KEY) { console.error('No ANTHROPIC_API_KEY'); return []; }
-    const fluxRes = await fetch(fluxImageUrl);
-    const fluxB64 = Buffer.from(await fluxRes.arrayBuffer()).toString('base64');
-    const fluxMime = fluxRes.headers.get('content-type') || 'image/jpeg';
-    const productClean = productBase64.replace(/^data:image\/\w+;base64,/, '');
-    const productMime = productBase64.match(/^data:(image\/\w+);base64,/)?.[1] || 'image/jpeg';
-    const hint = variant === 'lifestyle' ? 'lifestyle atmospheric' : variant === 'studio' ? 'clean studio white background' : 'colorful graphic';
+    
+    const hint = variant === 'lifestyle' ? 'dark atmospheric background' : variant === 'studio' ? 'white/grey studio background' : 'colorful graphic background';
+    const colorScheme = variant === 'lifestyle' ? 'white text on dark bg' : variant === 'studio' ? 'dark text on light bg' : 'white text on colored bg';
+    
+    // Text-only request - no images, much more reliable
     const body = {
-      model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 600,
+      model: 'claude-haiku-4-5',
+      max_tokens: 400,
       messages: [{
         role: 'user',
-        content: [
-          { type: 'image', source: { type: 'base64', media_type: productMime, data: productClean } },
-          { type: 'image', source: { type: 'base64', media_type: fluxMime, data: fluxB64 } },
-          { type: 'text', text: `Ukrainian marketplace infographic designer. Product: "${productName}". Benefits: ${bullets.slice(0,3).join(' | ')}. Background: ${hint}. Design 2-3 text overlays for 1024x1024 image. RULES: text only in empty corners/edges/strips, NEVER on product body, all text in Ukrainian, title 36-48px, specs 14-18px, colors contrast with background. Return ONLY valid JSON array: [{"text":"...","x":number,"y":number,"fontSize":number,"fontWeight":"bold","color":"#hex","bgColor":"#hex or null","bgPadding":8,"bgRadius":6,"align":"left","maxWidth":300}]` }
-        ]
+        content: `You design text overlays for Ukrainian marketplace infographics (Prom.ua, Rozetka).
+
+Product: "${productName}"
+Key benefits: ${bullets.slice(0,3).join(', ')}
+Background type: ${hint} (${colorScheme})
+Variant: ${variant}
+Canvas: 1024x1024px
+
+Rules:
+- ALL text in Ukrainian
+- For lifestyle: brand name bottom-left (y:950), 1 spec top-right
+- For studio: 2-3 specs as cards on left side (x:20, y:200,280,360)  
+- For benefits: 2-3 bold stats (x:30, y:150,280,410) and brand bottom-right
+- NEVER place text in center (x:300-700, y:200-800) - product is there
+- Use bgColor for readability
+
+Return ONLY valid JSON array:
+[{"text":"...","x":number,"y":number,"fontSize":number,"fontWeight":"bold","color":"#ffffff","bgColor":"#000000","bgPadding":8,"bgRadius":6,"align":"left","maxWidth":280}]`
       }]
     };
+    
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -208,12 +221,22 @@ async function getTextOverlay(
       },
       body: JSON.stringify(body),
     });
-    if (!resp.ok) { const errText = await resp.text(); console.error('Anthropic API error FULL:', resp.status, errText.slice(0,500)); return []; }
+    
+    if (!resp.ok) {
+      const errText = await resp.text();
+      console.error('Anthropic API error:', resp.status, errText.slice(0,300));
+      return [];
+    }
+    
     const data = await resp.json() as { content: Array<{ type: string; text: string }> };
     const raw = data.content[0]?.type === 'text' ? data.content[0].text : '';
     const m = raw.match(/\[[\s\S]*\]/);
-    return m ? JSON.parse(m[0]) : [];
-  } catch(e) { console.error('Claude overlay error:', e); return []; }
+    if (!m) { console.error('No JSON array in response:', raw.slice(0,200)); return []; }
+    return JSON.parse(m[0]);
+  } catch(e) {
+    console.error('Claude overlay error:', e);
+    return [];
+  }
 }
 
 async function addTextOverlay(imageBuf: Buffer, elements: Array<{text:string;x:number;y:number;fontSize:number;fontWeight:string;color:string;bgColor:string|null;bgPadding:number;bgRadius:number;align:string;maxWidth:number}>): Promise<Buffer> {

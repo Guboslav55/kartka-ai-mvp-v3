@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
 
 export const maxDuration = 120;
@@ -168,6 +169,68 @@ async function runFluxKontext(imageUrl: string, prompt: string): Promise<Buffer 
   }
 }
 
+
+// ── Claude text overlay ───────────────────────────────────────────────────────
+
+async function getTextOverlay(
+  productBase64: string,
+  fluxImageUrl: string,
+  productName: string,
+  bullets: string[],
+  variant: string,
+): Promise<Array<{text:string;x:number;y:number;fontSize:number;fontWeight:string;color:string;bgColor:string|null;bgPadding:number;bgRadius:number;align:string;maxWidth:number}>> {
+  try {
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const fluxRes = await fetch(fluxImageUrl);
+    const fluxB64 = Buffer.from(await fluxRes.arrayBuffer()).toString('base64');
+    const fluxMime = (fluxRes.headers.get('content-type') || 'image/jpeg') as 'image/jpeg'|'image/png'|'image/webp'|'image/gif';
+    const productClean = productBase64.replace(/^data:image\/\w+;base64,/, '');
+    const productMime = (productBase64.match(/^data:(image\/\w+);base64,/)?.[1] || 'image/jpeg') as 'image/jpeg'|'image/png'|'image/webp'|'image/gif';
+    const hint = variant === 'lifestyle' ? 'lifestyle atmospheric' : variant === 'studio' ? 'clean studio white background' : 'colorful graphic';
+    const resp = await client.messages.create({
+      model: 'claude-sonnet-4-5',
+      max_tokens: 600,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: productMime, data: productClean } },
+          { type: 'image', source: { type: 'base64', media_type: fluxMime, data: fluxB64 } },
+          { type: 'text', text: `Ukrainian marketplace infographic designer. Product: "${productName}". Benefits: ${bullets.slice(0,3).join(' | ')}. Background: ${hint}. Design 2-3 text overlays for 1024x1024 image. RULES: text only in empty corners/edges/strips, NEVER on product body, all text in Ukrainian, title 36-48px, specs 14-18px, colors contrast with background. Return ONLY valid JSON array: [{"text":"...","x":number,"y":number,"fontSize":number,"fontWeight":"bold","color":"#hex","bgColor":"#hex or null","bgPadding":8,"bgRadius":6,"align":"left","maxWidth":300}]` }
+        ]
+      }]
+    });
+    const raw = resp.content[0]?.type === 'text' ? resp.content[0].text : '';
+    const m = raw.match(/\[[\s\S]*\]/);
+    return m ? JSON.parse(m[0]) : [];
+  } catch(e) { console.error('Claude overlay error:', e); return []; }
+}
+
+async function addTextOverlay(imageBuf: Buffer, elements: Array<{text:string;x:number;y:number;fontSize:number;fontWeight:string;color:string;bgColor:string|null;bgPadding:number;bgRadius:number;align:string;maxWidth:number}>): Promise<Buffer> {
+  const sharp = (await import('sharp')).default;
+  const parts = elements.map(el => {
+    const anchor = el.align === 'center' ? 'middle' : el.align === 'right' ? 'end' : 'start';
+    const fw = el.fontWeight === 'bold' ? '700' : '400';
+    const maxW = el.maxWidth || 350;
+    const pad = el.bgPadding || 8;
+    const rx = el.bgRadius || 6;
+    const words = el.text.split(' ');
+    const cpl = Math.floor(maxW / (el.fontSize * 0.55));
+    const lines: string[] = []; let cur = '';
+    for (const w of words) { const c = cur ? cur+' '+w : w; if(c.length>cpl){if(cur)lines.push(cur);cur=w;}else cur=c; }
+    if(cur) lines.push(cur);
+    const lh = el.fontSize * 1.25;
+    let bg = '';
+    if(el.bgColor && el.bgColor !== 'null') {
+      const bx = el.align==='center'?el.x-maxW/2-pad:el.align==='right'?el.x-maxW-pad:el.x-pad;
+      bg = `<rect x="${bx}" y="${el.y-el.fontSize-pad}" width="${maxW+pad*2}" height="${lines.length*lh+pad*2}" rx="${rx}" fill="${el.bgColor}" fill-opacity="0.82"/>`;
+    }
+    const ts = lines.map((l,i)=>`<tspan x="${el.x}" dy="${i===0?0:lh}">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</tspan>`).join('');
+    return `${bg}<text x="${el.x}" y="${el.y}" font-family="Arial,sans-serif" font-size="${el.fontSize}" font-weight="${fw}" fill="${el.color}" text-anchor="${anchor}" dominant-baseline="auto">${ts}</text>`;
+  });
+  const svg = `<svg width="1024" height="1024" xmlns="http://www.w3.org/2000/svg">${parts.join('')}</svg>`;
+  return sharp(imageBuf).composite([{input:Buffer.from(svg),top:0,left:0}]).jpeg({quality:92}).toBuffer();
+}
+
 export async function POST(req: NextRequest) {
   try {
     const token = req.headers.get('authorization')?.replace('Bearer ', '');
@@ -238,7 +301,16 @@ export async function POST(req: NextRequest) {
     const buf = await runFluxKontext(publicImageUrl, prompt);
     if (!buf) return NextResponse.json({ error: 'Flux Kontext не зміг згенерувати' }, { status: 500 });
 
-    const url = await uploadToStorage(supabase, buf, user.id);
+    // Claude adds text overlay
+  let finalBuf = buf;
+  try {
+    const fluxTempName = `temp/${user.id}/flux-ov-${Date.now()}.jpg`;
+    await supabase.storage.from('card-images').upload(fluxTempName, buf, { contentType: 'image/jpeg', upsert: true });
+    const fluxPubUrl = supabase.storage.from('card-images').getPublicUrl(fluxTempName).data.publicUrl;
+    const elements = await getTextOverlay(resolvedBase64, fluxPubUrl, productName, cleanBullets, variant);
+    if (elements.length > 0) finalBuf = await addTextOverlay(buf, elements);
+  } catch(e) { console.error('Overlay pipeline failed, using image without text:', e); }
+  const url = await uploadToStorage(supabase, finalBuf, user.id);
     const label = variant === 'lifestyle' ? 'Lifestyle' : variant === 'studio' ? 'Студійне фото' : 'Переваги';
 
     return NextResponse.json({ url, label });

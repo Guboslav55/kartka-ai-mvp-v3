@@ -295,7 +295,7 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
       {/* Variants grid */}
       {variants.length > 0 && (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {variants.map((v, i) => (
               <div
                 key={i}
@@ -306,7 +306,8 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
                     : 'border-white/10 hover:border-white/30'
                 }`}
               >
-                <img src={v.url} alt={v.label} className="w-full aspect-square object-cover" />
+                <img src={v.url} alt={v.label} className="w-full object-cover" style={{aspectRatio:"1/1", minHeight:"240px"}} />
+                <a href={v.url} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} className="block text-center text-xs py-1.5 bg-white/10 text-white/50 hover:bg-white/20 hover:text-white transition-colors">⛶ Переглянути повністю</a>
                 <div className={`px-3 py-2 text-xs font-bold text-center transition-colors ${
                   selected === i ? 'bg-gold text-black' : 'bg-white/[0.06] text-white/60'
                 }`}>

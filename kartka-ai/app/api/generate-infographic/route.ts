@@ -178,25 +178,57 @@ async function getTextOverlay(
   bullets: string[],
   variant: string,
 ): Promise<Array<{text:string;x:number;y:number;fontSize:number;fontWeight:string;color:string;bgColor:string|null;bgPadding:number;bgRadius:number;align:string;maxWidth:number}>> {
-  // Simple deterministic overlay - no API call needed
-  const name = productName.slice(0, 25).toUpperCase();
-  const spec = bullets[0] ? bullets[0].replace(/^[✓✔•]\s*/, '').trim().slice(0, 30) : '';
-  
-  if (variant === 'lifestyle') {
-    return [
-      { text: name, x: 40, y: 970, fontSize: 36, fontWeight: 'bold', color: '#ffffff', bgColor: '#000000', bgPadding: 10, bgRadius: 6, align: 'left', maxWidth: 500 },
-      { text: spec, x: 40, y: 60, fontSize: 16, fontWeight: 'normal', color: '#ffffff', bgColor: '#000000', bgPadding: 8, bgRadius: 4, align: 'left', maxWidth: 400 },
-    ];
-  } else if (variant === 'studio') {
-    return [
-      { text: name, x: 512, y: 60, fontSize: 28, fontWeight: 'bold', color: '#1a1a1a', bgColor: null, bgPadding: 8, bgRadius: 6, align: 'center', maxWidth: 600 },
-      { text: spec, x: 30, y: 400, fontSize: 14, fontWeight: 'normal', color: '#333333', bgColor: '#f0f0f0', bgPadding: 8, bgRadius: 4, align: 'left', maxWidth: 200 },
-    ];
-  } else {
-    return [
-      { text: name, x: 40, y: 60, fontSize: 32, fontWeight: 'bold', color: '#ffffff', bgColor: '#000000', bgPadding: 10, bgRadius: 6, align: 'left', maxWidth: 500 },
-      { text: spec, x: 40, y: 960, fontSize: 16, fontWeight: 'normal', color: '#ffffff', bgColor: '#c8a84b', bgPadding: 8, bgRadius: 4, align: 'left', maxWidth: 400 },
-    ];
+  try {
+    const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
+    if (!ANTHROPIC_KEY) { console.error('No ANTHROPIC_API_KEY'); return []; }
+
+    const name = productName.slice(0, 30);
+    const spec1 = bullets[0] ? bullets[0].replace(/^[\u2713\u2714\u2022]\s*/, '').trim().slice(0, 35) : '';
+    const spec2 = bullets[1] ? bullets[1].replace(/^[\u2713\u2714\u2022]\s*/, '').trim().slice(0, 35) : '';
+
+    const bgHint = variant === 'lifestyle' ? 'dark forest/atmospheric' : variant === 'studio' ? 'white/grey studio' : 'colorful graphic';
+    const colorHint = variant === 'studio' ? 'dark (#1a1a1a) text, light or null background' : 'white (#ffffff) text, dark semi-transparent background';
+
+    const userMsg = 'Design text overlays for a 1024x1024 marketplace infographic. ' +
+      'Product: ' + name + '. ' +
+      'Key specs: ' + spec1 + (spec2 ? ', ' + spec2 : '') + '. ' +
+      'Background: ' + bgHint + '. ' +
+      'Color scheme: ' + colorHint + '. ' +
+      'RULES: place text only in corners/edges/strips (y<100 or y>900 or x<120 or x>900), NEVER in center where product stands, all text in Ukrainian, max 3 elements. ' +
+      'Return ONLY a JSON array with objects having these exact fields: text, x, y, fontSize, fontWeight, color, bgColor, bgPadding, bgRadius, align, maxWidth. ' +
+      'Example: [{"text":"ПОМСТА","x":40,"y":970,"fontSize":40,"fontWeight":"bold","color":"#ffffff","bgColor":"#000000","bgPadding":10,"bgRadius":6,"align":"left","maxWidth":450}]';
+
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': ANTHROPIC_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5',
+        max_tokens: 500,
+        messages: [{ role: 'user', content: userMsg }]
+      }),
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      console.error('Claude API error:', resp.status, errText.slice(0, 400));
+      return [];
+    }
+
+    const data = await resp.json() as { content: Array<{ type: string; text: string }> };
+    const raw = data.content[0]?.type === 'text' ? data.content[0].text : '';
+    console.log('Claude overlay raw:', raw.slice(0, 200));
+    const m = raw.match(/\[[\s\S]*?\]/);
+    if (!m) { console.error('No JSON array found in:', raw.slice(0, 300)); return []; }
+    const parsed = JSON.parse(m[0]);
+    console.log('Claude overlay elements:', parsed.length);
+    return parsed;
+  } catch(e) {
+    console.error('getTextOverlay error:', e);
+    return [];
   }
 }
 

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
 
 export const maxDuration = 120;
@@ -180,14 +179,15 @@ async function getTextOverlay(
   variant: string,
 ): Promise<Array<{text:string;x:number;y:number;fontSize:number;fontWeight:string;color:string;bgColor:string|null;bgPadding:number;bgRadius:number;align:string;maxWidth:number}>> {
   try {
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
+    if (!ANTHROPIC_KEY) { console.error('No ANTHROPIC_API_KEY'); return []; }
     const fluxRes = await fetch(fluxImageUrl);
     const fluxB64 = Buffer.from(await fluxRes.arrayBuffer()).toString('base64');
-    const fluxMime = (fluxRes.headers.get('content-type') || 'image/jpeg') as 'image/jpeg'|'image/png'|'image/webp'|'image/gif';
+    const fluxMime = fluxRes.headers.get('content-type') || 'image/jpeg';
     const productClean = productBase64.replace(/^data:image\/\w+;base64,/, '');
-    const productMime = (productBase64.match(/^data:(image\/\w+);base64,/)?.[1] || 'image/jpeg') as 'image/jpeg'|'image/png'|'image/webp'|'image/gif';
+    const productMime = productBase64.match(/^data:(image\/\w+);base64,/)?.[1] || 'image/jpeg';
     const hint = variant === 'lifestyle' ? 'lifestyle atmospheric' : variant === 'studio' ? 'clean studio white background' : 'colorful graphic';
-    const resp = await client.messages.create({
+    const body = {
       model: 'claude-sonnet-4-5',
       max_tokens: 600,
       messages: [{
@@ -198,8 +198,19 @@ async function getTextOverlay(
           { type: 'text', text: `Ukrainian marketplace infographic designer. Product: "${productName}". Benefits: ${bullets.slice(0,3).join(' | ')}. Background: ${hint}. Design 2-3 text overlays for 1024x1024 image. RULES: text only in empty corners/edges/strips, NEVER on product body, all text in Ukrainian, title 36-48px, specs 14-18px, colors contrast with background. Return ONLY valid JSON array: [{"text":"...","x":number,"y":number,"fontSize":number,"fontWeight":"bold","color":"#hex","bgColor":"#hex or null","bgPadding":8,"bgRadius":6,"align":"left","maxWidth":300}]` }
         ]
       }]
+    };
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': ANTHROPIC_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(body),
     });
-    const raw = resp.content[0]?.type === 'text' ? resp.content[0].text : '';
+    if (!resp.ok) { const err = await resp.text(); console.error('Anthropic API error:', err); return []; }
+    const data = await resp.json() as { content: Array<{ type: string; text: string }> };
+    const raw = data.content[0]?.type === 'text' ? data.content[0].text : '';
     const m = raw.match(/\[[\s\S]*\]/);
     return m ? JSON.parse(m[0]) : [];
   } catch(e) { console.error('Claude overlay error:', e); return []; }

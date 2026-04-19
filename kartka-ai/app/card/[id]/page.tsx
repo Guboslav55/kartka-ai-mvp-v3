@@ -1,5 +1,4 @@
 'use client';
-import InfographicEditor from '@/app/components/InfographicEditor';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
@@ -328,15 +327,14 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
                 ⬇ Завантажити
               </button>
               <button
-                onClick={() => {
-                  const variants = card.infographic_urls as Array<{url:string;label:string}> | null;
-                  const imgUrl = variants && variants[selected] ? variants[selected].url : card.image_url || '';
-                  setEditorImageUrl(imgUrl);
-                  setShowEditor(true);
-                }}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border border-white/10 text-white/60 hover:text-white hover:border-white/20 transition-colors"
+                onClick={() => { setChatOpen(v => !v); if (!chatOpen) setMessages([]); }}
+                className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-colors flex items-center gap-2 ${
+                  chatOpen
+                    ? 'bg-gold text-black'
+                    : 'border border-white/20 text-white/70 hover:border-gold/50 hover:text-gold'
+                }`}
               >
-                ✏️ AI редагування
+                ✦ AI редагування
               </button>
             </div>
           )}
@@ -811,20 +809,6 @@ export default function CardPage() {
         accessToken={accessToken}
       />
 
-    
-      {showEditor && editorImageUrl && (
-        <InfographicEditor
-          imageUrl={editorImageUrl}
-          onClose={() => setShowEditor(false)}
-          onSave={(dataUrl) => {
-            const a = document.createElement('a');
-            a.href = dataUrl;
-            a.download = 'infographic-' + Date.now() + '.jpg';
-            a.click();
-            setShowEditor(false);
-          }}
-        />
-      )}
-      </div>
+    </div>
   );
 }

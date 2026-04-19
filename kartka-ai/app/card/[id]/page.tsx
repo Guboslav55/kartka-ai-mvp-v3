@@ -1,4 +1,5 @@
 'use client';
+import InfographicEditor from '@/app/components/InfographicEditor';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
@@ -327,7 +328,7 @@ function InfographicSection({ card, accessToken }: { card: SavedCard; accessToke
                 ⬇ Завантажити
               </button>
               <button
-                onClick={() => { setChatOpen(v => !v); if (!chatOpen) setMessages([]); }}
+                onClick={() => setShowEditor(true)}}
                 className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-colors flex items-center gap-2 ${
                   chatOpen
                     ? 'bg-gold text-black'
@@ -810,5 +811,23 @@ export default function CardPage() {
       />
 
     </div>
+
+      {showEditor && (
+        <InfographicEditor
+          imageUrl={
+            Array.isArray(card.infographic_urls) && (card.infographic_urls as Array<{url:string;label:string}>)[selected]
+              ? (card.infographic_urls as Array<{url:string;label:string}>)[selected].url
+              : card.image_url || ''
+          }
+          onClose={() => setShowEditor(false)}
+          onSave={(dataUrl) => {
+            const a = document.createElement('a');
+            a.href = dataUrl;
+            a.download = 'infographic-' + Date.now() + '.jpg';
+            a.click();
+            setShowEditor(false);
+          }}
+        />
+      )}
   );
 }

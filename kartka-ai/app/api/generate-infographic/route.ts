@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
-import fs from 'fs';
-import path from 'path';
-
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || '';
 
 export const maxDuration = 120;
@@ -210,67 +207,90 @@ async function getLayoutFromClaude(fluxImageUrl:string, productName:string, bull
   } catch(e) { console.error('getLayoutFromClaude error:',e); return null; }
 }
 
-async function compositeText(fluxBuf:Buffer, layout:Layout): Promise<Buffer> {
+async function compositeText(fluxBuf: Buffer, layout: Layout): Promise<Buffer> {
   const sharp = (await import('sharp')).default;
+  const satori = (await import('satori')).default;
 
-  // Читаємо шрифти з файлової системи (надійно на Vercel)
-  let fontRegB64 = '';
-  let fontBoldB64 = '';
+  // Завантажуємо woff шрифт для кирилиці (subset достатній для satori)
+  let fontRegData: ArrayBuffer | null = null;
+  let fontBoldData: ArrayBuffer | null = null;
   try {
-    const fontsDir = path.join(process.cwd(), 'public', 'fonts');
-    const reg = fs.readFileSync(path.join(fontsDir,'NotoSans-Regular.woff2'));
-    const bold = fs.readFileSync(path.join(fontsDir,'NotoSans-Bold.woff2'));
-    fontRegB64 = reg.toString('base64');
-    fontBoldB64 = bold.toString('base64');
-    console.log('Fonts loaded, reg:'+reg.length+'b bold:'+bold.length+'b');
-  } catch(e) { console.error('Font load failed:',e); }
+    const [reg, bold] = await Promise.all([
+      fetch('https://fonts.gstatic.com/s/notosans/v42/o-0bIpQlx3QUlC5A4PNB6Ryti20_6n1iPHjc5aPdu2ui.woff2'),
+      fetch('https://fonts.gstatic.com/s/notosans/v42/o-0NIpQlx3QUlC5A4PNjThbTkjc.woff2'),
+    ]);
+    fontRegData = await reg.arrayBuffer();
+    fontBoldData = await bold.arrayBuffer();
+    console.log('Fonts loaded reg:', fontRegData.byteLength, 'bold:', fontBoldData.byteLength);
+  } catch(e) { console.error('Font fetch failed:', e); }
 
-  const parts:string[] = [];
-
-  if (fontRegB64) {
-    parts.push('<defs><style>'+
-      '@font-face{font-family:"NotoSans";font-weight:400;src:url("data:font/woff2;base64,'+fontRegB64+'")format("woff2")}'+
-      '@font-face{font-family:"NotoSans";font-weight:700;src:url("data:font/woff2;base64,'+fontBoldB64+'")format("woff2")}'+
-      '</style></defs>');
+  if (!fontRegData) {
+    // Fallback: повертаємо без тексту
+    console.warn('No font, returning Flux image without text');
+    return fluxBuf;
   }
 
-  // Градієнти для читабельності
-  parts.push('<defs>'+
-    '<linearGradient id="tg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#000" stop-opacity=".7"/><stop offset="100%" stop-color="#000" stop-opacity="0"/></linearGradient>'+
-    '<linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity=".85"/></linearGradient>'+
-    '</defs>');
-  parts.push('<rect x="0" y="0" width="1024" height="100" fill="url(#tg)"/>');
-  parts.push('<rect x="0" y="924" width="1024" height="100" fill="url(#bg)"/>');
-  parts.push('<rect x="1016" y="0" width="8" height="150" fill="'+layout.accentColor+'"/>');
-  parts.push('<rect x="0" y="1016" width="150" height="8" fill="'+layout.accentColor+'"/>');
+  // Будуємо JSX дерево для satori
+  const children = layout.elements.map(el => {
+    const isCenter = el.align === 'center';
+    const isRight = el.align === 'right';
+    return {
+      type: 'div',
+      props: {
+        style: {
+          position: 'absolute',
+          left: isRight ? undefined : el.x,
+          right: isRight ? (1024 - el.x) : undefined,
+          top: el.y - el.fontSize - (el.bgPadding || 10),
+          backgroundColor: el.bgColor && el.bgColor !== 'null' ? el.bgColor : 'transparent',
+          color: el.color,
+          fontSize: el.fontSize,
+          fontWeight: el.fontWeight === 'bold' ? 700 : 400,
+          fontFamily: 'NotoSans',
+          padding: el.bgColor && el.bgColor !== 'null' ? el.bgPadding || 10 : 0,
+          borderRadius: 8,
+          maxWidth: el.maxWidth,
+          textAlign: isCenter ? 'center' : isRight ? 'right' : 'left',
+          lineHeight: 1.3,
+          textShadow: '0 1px 3px rgba(0,0,0,0.9)',
+        },
+        children: el.text,
+      }
+    };
+  });
 
-  for (const el of layout.elements) {
-    const anchor = el.align==='center'?'middle':el.align==='right'?'end':'start';
-    const fw = el.fontWeight==='bold'?'700':'400';
-    const ff = fontRegB64 ? '"NotoSans",Arial,sans-serif' : 'Arial,sans-serif';
-    const words = el.text.split(' ');
-    const cpl = Math.floor(el.maxWidth/(el.fontSize*0.6));
-    const lines:string[]=[]; let cur='';
-    for(const w of words){const c=cur?cur+' '+w:w;if(c.length>cpl){if(cur)lines.push(cur);cur=w;}else cur=c;}
-    if(cur)lines.push(cur);
-    const lh = el.fontSize*1.3;
-
-    if(el.bgColor&&el.bgColor!=='null'&&el.bgColor!==null){
-      const pad=el.bgPadding||10;
-      const aw=Math.min(el.maxWidth+pad*2,980);
-      const ah=lines.length*lh+pad*2;
-      let bx=el.x-pad;
-      if(anchor==='middle')bx=el.x-aw/2;
-      if(anchor==='end')bx=el.x-aw+pad;
-      parts.push('<rect x="'+Math.max(0,bx)+'" y="'+(el.y-el.fontSize-pad)+'" width="'+aw+'" height="'+ah+'" rx="8" fill="'+el.bgColor+'" fill-opacity=".85"/>');
+  // Satori рендерить JSX → SVG з правильними шрифтами
+  const svg = await satori(
+    {
+      type: 'div',
+      props: {
+        style: { width: 1024, height: 1024, position: 'relative', display: 'flex' },
+        children: [
+          // Градієнти через div overlay
+          { type: 'div', props: { style: { position: 'absolute', top: 0, left: 0, right: 0, height: 100, background: 'linear-gradient(to bottom, rgba(0,0,0,0.7), transparent)' } } },
+          { type: 'div', props: { style: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 100, background: 'linear-gradient(to top, rgba(0,0,0,0.85), transparent)' } } },
+          // Accent bars
+          { type: 'div', props: { style: { position: 'absolute', top: 0, right: 0, width: 8, height: 150, backgroundColor: layout.accentColor } } },
+          { type: 'div', props: { style: { position: 'absolute', bottom: 0, left: 0, width: 150, height: 8, backgroundColor: layout.accentColor } } },
+          ...children,
+        ],
+      }
+    },
+    {
+      width: 1024,
+      height: 1024,
+      fonts: [
+        { name: 'NotoSans', data: fontRegData, weight: 400, style: 'normal' },
+        { name: 'NotoSans', data: fontBoldData || fontRegData, weight: 700, style: 'normal' },
+      ],
     }
+  );
 
-    const ts=lines.map((l,i)=>'<tspan x="'+el.x+'" dy="'+(i===0?0:lh)+'">'+l.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</tspan>').join('');
-    parts.push('<text x="'+el.x+'" y="'+el.y+'" font-family="'+ff+'" font-size="'+el.fontSize+'" font-weight="'+fw+'" fill="'+el.color+'" text-anchor="'+anchor+'" dominant-baseline="auto" paint-order="stroke" stroke="#000000" stroke-width="2" stroke-linejoin="round">'+ts+'</text>');
-  }
-
-  const svg='<svg width="1024" height="1024" xmlns="http://www.w3.org/2000/svg">'+parts.join('')+'</svg>';
-  return sharp(fluxBuf).composite([{input:Buffer.from(svg),top:0,left:0}]).jpeg({quality:92}).toBuffer();
+  // Sharp компонує: Flux зображення + satori SVG overlay
+  return sharp(fluxBuf)
+    .composite([{ input: Buffer.from(svg), top: 0, left: 0 }])
+    .jpeg({ quality: 92 })
+    .toBuffer();
 }
 
 export async function POST(req: NextRequest) {

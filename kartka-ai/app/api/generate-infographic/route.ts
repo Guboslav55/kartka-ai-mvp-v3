@@ -35,18 +35,38 @@ async function uploadImageForFlux(supabase: SupabaseClient, base64: string, user
 
 async function buildFluxPrompt(imageBase64: string, productName: string, bullets: string[], category: string, variant: 'lifestyle' | 'benefits' | 'studio'): Promise<string> {
   const bulletText = bullets.slice(0, 4).map((b, i) => `${i + 1}. ${b}`).join('\n');
-  const variantInstr = variant === 'lifestyle'
-    ? 'LIFESTYLE: Change ONLY the background to dramatic atmospheric scene. The person, face, clothing, pose must be PIXEL-PERFECT IDENTICAL to original. ZERO changes to the person. NO TEXT. NO labels.'
+  const variantInstructions = variant === 'lifestyle'
+    ? `LIFESTYLE: Transform background into dramatic atmospheric scene matching the product. Keep product centered and clearly visible. NO TEXT. NO labels. NO annotations. Only change background and lighting.`
     : variant === 'studio'
-    ? 'STUDIO: Change ONLY background to pure white/grey studio. Person, face, clothing, pose IDENTICAL to original. ZERO changes to person. NO TEXT.'
-    : 'BENEFITS: Change ONLY background to colorful graphic shapes. Person, face, clothing, pose IDENTICAL to original. ZERO changes to person. NO TEXT. NO labels.';
+    ? `STUDIO PHOTO: Transform into professional studio product photography. Pure white or light grey seamless background. Perfect soft studio lighting from multiple angles. Product centered, sharp focus, commercial e-commerce quality. Clean minimal composition. NO TEXT.`
+    : `BENEFITS: Dynamic colorful graphic background with geometric shapes and energy. Product hero centered. Vivid contrasting colors. Modern marketplace infographic style. NO TEXT. NO labels. NO written words.`;
+
   const response = await openai.chat.completions.create({
     model: 'gpt-4o',
     messages: [{ role: 'user', content: [
       { type: 'image_url', image_url: { url: imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`, detail: 'high' } },
-      { type: 'text', text: `Ukrainian marketplace infographic designer. Product: "${productName}". Category: ${category}. Features:\n${bulletText}\n\n${variantInstr}\n\nCRITICAL: Keep original product. NO text/labels anywhere. Professional 1024x1024 square. Write Flux Kontext prompt in English only. Return ONLY the prompt.` }
+      { type: 'text', text: `You are a professional Ukrainian marketplace infographic designer. Analyze this product and create ONE editing prompt for Flux Kontext image editor.
+
+Product: "${productName}"
+Category: ${category}
+Key features:
+${bulletText}
+
+${variantInstructions}
+
+CRITICAL RULES:
+- Keep the ORIGINAL product from the photo - do NOT replace or alter it
+- DO NOT add any text, letters, words, labels or annotations anywhere
+- DO NOT modify hands, fingers or any body parts - keep human anatomy exactly as original
+- Only modify: background, lighting, composition, decorative graphic elements
+- NO text overlays, NO callout text, NO written words of any kind
+- Professional marketplace quality, square 1024x1024
+- Write the prompt in English for Flux Kontext
+
+Return ONLY the prompt text, no JSON, no explanation.` }
     ] }],
-    max_tokens: 400, temperature: 0.7,
+    max_tokens: 400,
+    temperature: 0.7,
   });
   return response.choices[0]?.message?.content?.trim() || '';
 }
@@ -118,8 +138,7 @@ async function getLayoutFromClaude(fluxImageUrl: string, productName: string, bu
   const data = await resp.json() as { content: Array<{type:string;text:string}> };
   const raw = data.content[0]?.type === 'text' ? data.content[0].text : '';
   console.log('Claude layout:', raw.slice(0,300));
-  const stripped = raw.replace(/```json\s*/g,'').replace(/```\s*/g,'').trim();
-  const m = stripped.match(/\{[\s\S]*\}/);
+  const m = raw.match(/\{[\s\S]*\}/);
   if (!m) throw new Error('No JSON: ' + raw.slice(0,200));
   return JSON.parse(m[0]) as Layout;
 }

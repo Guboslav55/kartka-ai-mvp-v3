@@ -1,193 +1,233 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
 
-interface TextBlock {
-  id: string;
-  text: string;
-  x: number;
-  y: number;
-  fontSize: number;
-  color: string;
-  bold: boolean;
-  type: 'title' | 'bullet' | 'custom';
+import { useRef, useState, useEffect, useCallback } from 'react';
+
+interface TextLayer {
+  id: string; text: string; x: number; y: number;
+  fontSize: number; fontWeight: 'normal'|'bold';
+  color: string; bgColor: string; bgEnabled: boolean;
+  align: 'left'|'center'|'right';
 }
+interface Props { imageUrl: string; onClose: () => void; onSave: (dataUrl: string) => void; }
 
-interface Props {
-  backgroundUrl: string;
-  productName: string;
-  bullets: string[];
-  onSave: (dataUrl: string) => void;
-  onClose: () => void;
-}
+function uid() { return Math.random().toString(36).slice(2,9); }
+const PRESETS = [
+  {label:'Назва',text:'Назва товару',x:512,y:940,fontSize:44,fontWeight:'bold' as const,color:'#ffffff',bgEnabled:true,bgColor:'#000000',align:'center' as const},
+  {label:'Бейдж',text:'✓ Преміум',x:40,y:50,fontSize:18,fontWeight:'normal' as const,color:'#ffffff',bgEnabled:true,bgColor:'#c8a84b',align:'left' as const},
+  {label:'Ціна',text:'₴ 999',x:984,y:940,fontSize:36,fontWeight:'bold' as const,color:'#c8a84b',bgEnabled:false,bgColor:'#000000',align:'right' as const},
+  {label:'Характ.',text:'100% бавовна',x:40,y:400,fontSize:20,fontWeight:'normal' as const,color:'#ffffff',bgEnabled:true,bgColor:'#1a1a1a',align:'left' as const},
+];
 
-export default function InfographicEditor({ backgroundUrl, productName, bullets, onSave, onClose }: Props) {
+export default function InfographicEditor({imageUrl,onClose,onSave}:Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [blocks, setBlocks] = useState<TextBlock[]>([]);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [dragging, setDragging] = useState<{ id: string; offsetX: number; offsetY: number } | null>(null);
-  const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
+  const [layers,setLayers] = useState<TextLayer[]>([]);
+  const [selected,setSelected] = useState<string|null>(null);
+  const [dragging,setDragging] = useState(false);
+  const [dragOffset,setDragOffset] = useState({x:0,y:0});
+  const [imgLoaded,setImgLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement|null>(null);
+  const [saving,setSaving] = useState(false);
+  const sel = layers.find(l=>l.id===selected)??null;
 
-  const SIZE = 580;
-  const SCALE = 1024 / SIZE;
+  useEffect(()=>{
+    const img=new window.Image(); img.crossOrigin='anonymous';
+    img.onload=()=>{imgRef.current=img;setImgLoaded(true);};
+    img.src=imageUrl;
+  },[imageUrl]);
 
-  useEffect(() => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => setBgImage(img);
-    img.src = backgroundUrl;
-  }, [backgroundUrl]);
+  function wrap(ctx:CanvasRenderingContext2D,text:string,maxW:number):string[]{
+    const words=text.split(' '); const lines:string[]=[]; let cur='';
+    for(const w of words){const c=cur?cur+' '+w:w; if(ctx.measureText(c).width>maxW){if(cur)lines.push(cur);cur=w;}else cur=c;}
+    if(cur)lines.push(cur); return lines.length?lines:[''];
+  }
 
-  useEffect(() => {
-    setBlocks([
-      { id: 'title', text: productName.slice(0, 50), x: SIZE/2, y: 52, fontSize: 34, color: '#ffffff', bold: true, type: 'title' },
-      ...bullets.slice(0, 4).map((b, i) => ({
-        id: `b${i}`, text: '\u2713 ' + b.slice(0, 38), x: 16, y: SIZE - 150 + i * 36,
-        fontSize: 20, color: '#ffffff', bold: false, type: 'bullet' as const,
-      })),
-    ]);
-  }, [productName, bullets]);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !bgImage) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.clearRect(0, 0, SIZE, SIZE);
-    ctx.drawImage(bgImage, 0, 0, SIZE, SIZE);
-    blocks.forEach(b => {
-      ctx.font = `${b.bold ? 'bold ' : ''}${b.fontSize}px Arial`;
-      ctx.shadowColor = 'rgba(0,0,0,0.85)'; ctx.shadowBlur = 7;
-      ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 2;
-      ctx.fillStyle = b.color;
-      ctx.textAlign = b.type === 'title' ? 'center' : 'left';
-      ctx.fillText(b.text, b.x, b.y);
-      ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
-      if (selected === b.id) {
-        const m = ctx.measureText(b.text);
-        const bx = b.type === 'title' ? b.x - m.width/2 - 4 : b.x - 4;
-        ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 2;
-        ctx.strokeRect(bx, b.y - b.fontSize, m.width + 8, b.fontSize + 8);
+  const render=useCallback(()=>{
+    const canvas=canvasRef.current; const img=imgRef.current;
+    if(!canvas||!img||!imgLoaded)return;
+    const ctx=canvas.getContext('2d'); if(!ctx)return;
+    canvas.width=1024; canvas.height=1024;
+    ctx.drawImage(img,0,0,1024,1024);
+    layers.forEach(l=>{
+      ctx.save();
+      ctx.font=`${l.fontWeight} ${l.fontSize}px Arial,sans-serif`;
+      ctx.textAlign=l.align; ctx.textBaseline='top';
+      const lines=wrap(ctx,l.text,480);
+      const lh=l.fontSize*1.3;
+      const tw=Math.max(...lines.map(ln=>ctx.measureText(ln).width));
+      const th=lines.length*lh; const pad=10;
+      let bx=l.x-pad;
+      if(l.align==='center')bx=l.x-tw/2-pad;
+      if(l.align==='right')bx=l.x-tw-pad;
+      if(l.bgEnabled){
+        ctx.fillStyle=l.bgColor+'dd';
+        ctx.beginPath();
+        (ctx as any).roundRect(bx,l.y-pad,tw+pad*2,th+pad*2,8);
+        ctx.fill();
       }
+      ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=4;
+      ctx.fillStyle=l.color;
+      lines.forEach((line,i)=>ctx.fillText(line,l.x,l.y+i*lh));
+      if(l.id===selected){
+        ctx.shadowBlur=0; ctx.strokeStyle='#c8a84b'; ctx.lineWidth=2;
+        ctx.setLineDash([6,3]);
+        ctx.strokeRect(bx,l.y-pad,tw+pad*2,th+pad*2);
+        ctx.setLineDash([]);
+      }
+      ctx.restore();
     });
-  }, [bgImage, blocks, selected]);
+  },[layers,selected,imgLoaded]);
 
-  function hitTest(x: number, y: number) {
-    const canvas = canvasRef.current;
-    if (!canvas) return null;
-    const ctx = canvas.getContext('2d')!;
-    for (let i = blocks.length - 1; i >= 0; i--) {
-      const b = blocks[i];
-      ctx.font = `${b.bold ? 'bold ' : ''}${b.fontSize}px Arial`;
-      const w = ctx.measureText(b.text).width;
-      const bx = b.type === 'title' ? b.x - w/2 : b.x;
-      if (x >= bx-4 && x <= bx+w+4 && y >= b.y-b.fontSize-4 && y <= b.y+8) return b.id;
+  useEffect(()=>{render();},[render]);
+
+  function coords(e:React.MouseEvent<HTMLCanvasElement>){
+    const r=canvasRef.current!.getBoundingClientRect();
+    return{x:(e.clientX-r.left)*(1024/r.width),y:(e.clientY-r.top)*(1024/r.height)};
+  }
+
+  function hit(x:number,y:number):string|null{
+    const ctx=canvasRef.current?.getContext('2d'); if(!ctx)return null;
+    for(let i=layers.length-1;i>=0;i--){
+      const l=layers[i];
+      ctx.font=`${l.fontWeight} ${l.fontSize}px Arial,sans-serif`;
+      const lines=wrap(ctx,l.text,480);
+      const tw=Math.max(...lines.map(ln=>ctx.measureText(ln).width));
+      const th=lines.length*l.fontSize*1.3; const pad=14;
+      let bx=l.x-pad;
+      if(l.align==='center')bx=l.x-tw/2-pad;
+      if(l.align==='right')bx=l.x-tw-pad;
+      if(x>=bx&&x<=bx+tw+pad*2&&y>=l.y-pad&&y<=l.y+th+pad)return l.id;
     }
     return null;
   }
 
-  function onDown(e: React.MouseEvent) {
-    const r = canvasRef.current!.getBoundingClientRect();
-    const x = e.clientX - r.left, y = e.clientY - r.top;
-    const id = hitTest(x, y);
-    setSelected(id);
-    if (id) { const bl = blocks.find(b => b.id === id)!; setDragging({ id, offsetX: x - bl.x, offsetY: y - bl.y }); }
+  function onMD(e:React.MouseEvent<HTMLCanvasElement>){
+    const{x,y}=coords(e); const h=hit(x,y); setSelected(h);
+    if(h){const l=layers.find(l=>l.id===h)!;setDragging(true);setDragOffset({x:x-l.x,y:y-l.y});}
   }
-  function onMove(e: React.MouseEvent) {
-    if (!dragging) return;
-    const r = canvasRef.current!.getBoundingClientRect();
-    setBlocks(prev => prev.map(b => b.id === dragging.id ? { ...b, x: e.clientX-r.left-dragging.offsetX, y: e.clientY-r.top-dragging.offsetY } : b));
+  function onMM(e:React.MouseEvent<HTMLCanvasElement>){
+    if(!dragging||!selected)return;
+    const{x,y}=coords(e);
+    setLayers(p=>p.map(l=>l.id===selected?{...l,x:Math.round(x-dragOffset.x),y:Math.round(y-dragOffset.y)}:l));
   }
-  function onUp() { setDragging(null); }
-
-  function upd(u: Partial<TextBlock>) { if (selected) setBlocks(p => p.map(b => b.id === selected ? {...b,...u} : b)); }
-
-  function save() {
-    const fc = document.createElement('canvas');
-    fc.width = 1024; fc.height = 1024;
-    const ctx = fc.getContext('2d')!;
-    ctx.drawImage(bgImage!, 0, 0, 1024, 1024);
-    blocks.forEach(b => {
-      ctx.font = `${b.bold ? 'bold ' : ''}${b.fontSize * SCALE}px Arial`;
-      ctx.shadowColor = 'rgba(0,0,0,0.85)'; ctx.shadowBlur = 12;
-      ctx.shadowOffsetX = 3; ctx.shadowOffsetY = 3;
-      ctx.fillStyle = b.color;
-      ctx.textAlign = b.type === 'title' ? 'center' : 'left';
-      ctx.fillText(b.text, b.x * SCALE, b.y * SCALE);
-      ctx.shadowColor = 'transparent';
-    });
-    onSave(fc.toDataURL('image/jpeg', 0.92));
+  function addLayer(){
+    const l:TextLayer={id:uid(),text:'Новий текст',x:512,y:900,fontSize:40,fontWeight:'bold',color:'#ffffff',bgColor:'#000000',bgEnabled:true,align:'center'};
+    setLayers(p=>[...p,l]); setSelected(l.id);
   }
+  function upd(patch:Partial<TextLayer>){if(!selected)return;setLayers(p=>p.map(l=>l.id===selected?{...l,...patch}:l));}
+  function del(id:string){setLayers(p=>p.filter(l=>l.id!==id));if(selected===id)setSelected(null);}
 
-  const sel = blocks.find(b => b.id === selected);
-
-  return (
-    <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-50 p-3">
-      <div className="bg-[#0f0f0f] rounded-2xl overflow-hidden flex w-full max-w-5xl" style={{maxHeight:'95vh'}}>
-        <div className="flex-1 p-4 flex flex-col">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-white font-bold">✏️ Редактор інфографіки</h2>
-            <button onClick={onClose} className="text-white/40 hover:text-white text-xl">✕</button>
-          </div>
-          <canvas ref={canvasRef} width={SIZE} height={SIZE}
-            className="rounded-xl cursor-move w-full flex-1"
-            style={{objectFit:'contain'}}
-            onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
-          />
-          <p className="text-white/25 text-xs mt-2 text-center">Клікни на текст · Тягни щоб перемістити</p>
+  return(
+    <div className="fixed inset-0 z-50 bg-black/95 flex flex-col">
+      <div className="flex items-center justify-between px-5 py-3 border-b border-white/10">
+        <div className="flex items-center gap-3">
+          <span className="text-gold font-bold">✏️ Редактор інфографіки</span>
+          <span className="text-white/30 text-xs hidden sm:block">Перетягуй текст мишкою</span>
         </div>
-
-        <div className="w-64 bg-white/[0.03] border-l border-white/10 p-4 flex flex-col gap-3 overflow-y-auto">
-          <div>
-            <p className="text-white/40 text-xs uppercase tracking-wider mb-2">Блоки</p>
-            {blocks.map(b => (
-              <button key={b.id} onClick={() => setSelected(b.id)}
-                className={`w-full text-left px-3 py-1.5 rounded-lg text-xs truncate mb-1 transition-colors ${selected===b.id ? 'bg-gold text-black font-bold' : 'bg-white/[0.06] text-white/60 hover:bg-white/10'}`}>
-                {b.text.slice(0,30)}
-              </button>
-            ))}
-            <button onClick={() => { const id='c'+Date.now(); setBlocks(p=>[...p,{id,text:'Новий текст',x:SIZE/2,y:SIZE/2,fontSize:26,color:'#ffffff',bold:false,type:'custom'}]); setSelected(id); }}
-              className="w-full py-1.5 border border-white/15 text-white/40 hover:border-gold/50 hover:text-gold rounded-lg text-xs mt-1 transition-colors">
-              + Додати текст
-            </button>
+        <div className="flex gap-2">
+          <button onClick={onClose} className="px-4 py-1.5 rounded-xl text-sm text-white/50 border border-white/10 hover:border-white/20 transition-colors">✕ Закрити</button>
+          <button onClick={async()=>{setSaving(true);onSave(canvasRef.current!.toDataURL('image/jpeg',0.92));setSaving(false);}} disabled={saving}
+            className="px-5 py-1.5 rounded-xl text-sm font-bold bg-gold text-black hover:bg-amber-400 transition-colors disabled:opacity-50">
+            {saving?'...':'↓ Зберегти'}
+          </button>
+        </div>
+      </div>
+      <div className="flex flex-1 overflow-hidden">
+        <div className="flex-1 flex items-center justify-center p-4 bg-[#111]">
+          <canvas ref={canvasRef} className="max-h-full max-w-full rounded-xl shadow-2xl cursor-crosshair" style={{aspectRatio:'1/1'}}
+            onMouseDown={onMD} onMouseMove={onMM} onMouseUp={()=>setDragging(false)} onMouseLeave={()=>setDragging(false)}/>
+        </div>
+        <div className="w-64 border-l border-white/10 flex flex-col bg-[#0d0d0d]">
+          <div className="p-3 border-b border-white/10">
+            <p className="text-white/30 text-xs mb-2 uppercase tracking-wider">Додати шар</p>
+            <div className="grid grid-cols-2 gap-1.5 mb-2">
+              {PRESETS.map(p=>(
+                <button key={p.label} onClick={()=>{const l={id:uid(),...p};setLayers(pr=>[...pr,l]);setSelected(l.id);}}
+                  className="px-2 py-1.5 rounded-lg text-xs text-white/60 border border-white/10 hover:border-gold/40 hover:text-gold/80 transition-colors text-left truncate">
+                  + {p.label}
+                </button>
+              ))}
+            </div>
+            <button onClick={addLayer} className="w-full py-1.5 rounded-lg text-xs text-white/60 border border-white/10 hover:border-white/20 transition-colors">+ Свій текст</button>
           </div>
-
-          {sel && (
-            <div className="space-y-3 border-t border-white/10 pt-3">
-              <p className="text-white/40 text-xs uppercase tracking-wider">Редагування</p>
-              <textarea value={sel.text} onChange={e=>upd({text:e.target.value})}
-                className="w-full bg-white/[0.06] border border-white/10 rounded-lg px-2 py-1.5 text-white text-xs resize-none focus:outline-none focus:border-gold/40" rows={2}/>
+          <div className="p-3 border-b border-white/10">
+            <p className="text-white/30 text-xs mb-1.5 uppercase tracking-wider">Шари {layers.length>0&&`(${layers.length})`}</p>
+            <div className="space-y-1 max-h-28 overflow-y-auto">
+              {layers.length===0&&<p className="text-white/20 text-xs text-center py-2">Пусто</p>}
+              {layers.map(l=>(
+                <div key={l.id} onClick={()=>setSelected(l.id)}
+                  className={`flex items-center justify-between px-2 py-1.5 rounded-lg cursor-pointer transition-colors text-xs ${l.id===selected?'bg-gold/15 border border-gold/30 text-gold':'text-white/50 hover:bg-white/5 border border-transparent'}`}>
+                  <span className="truncate max-w-[150px]">{l.text}</span>
+                  <button onClick={e=>{e.stopPropagation();del(l.id);}} className="text-white/20 hover:text-red-400 ml-1 flex-shrink-0">✕</button>
+                </div>
+              ))}
+            </div>
+          </div>
+          {sel?(
+            <div className="p-3 flex-1 overflow-y-auto space-y-3">
+              <p className="text-white/30 text-xs uppercase tracking-wider">Властивості</p>
+              <textarea value={sel.text} onChange={e=>upd({text:e.target.value})} rows={2}
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-2 text-white text-xs resize-none focus:outline-none focus:border-gold/40"/>
               <div>
-                <p className="text-white/35 text-xs mb-1">Розмір: {sel.fontSize}px</p>
-                <input type="range" min={10} max={72} value={sel.fontSize}
-                  onChange={e=>upd({fontSize:+e.target.value})} className="w-full accent-yellow-400"/>
+                <div className="flex justify-between text-xs mb-1"><span className="text-white/30">Розмір</span><span className="text-white/50">{sel.fontSize}px</span></div>
+                <input type="range" min={12} max={96} value={sel.fontSize} onChange={e=>upd({fontSize:Number(e.target.value)})} className="w-full accent-amber-400 h-1"/>
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <input type="color" value={sel.color} onChange={e=>upd({color:e.target.value})} className="w-7 h-7 rounded cursor-pointer"/>
-                {['#ffffff','#000000','#FFD700','#FF5722','#29B6F6'].map(c=>(
-                  <button key={c} onClick={()=>upd({color:c})} className="w-6 h-6 rounded-full border border-white/20 hover:scale-110 transition-transform" style={{background:c}}/>
+              <div className="flex gap-1.5">
+                {(['normal','bold'] as const).map(w=>(
+                  <button key={w} onClick={()=>upd({fontWeight:w})} style={{fontWeight:w}}
+                    className={`flex-1 py-1 rounded text-xs border transition-colors ${sel.fontWeight===w?'border-gold bg-gold/10 text-gold':'border-white/10 text-white/40'}`}>
+                    {w==='bold'?'Bold':'Normal'}
+                  </button>
                 ))}
               </div>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={sel.bold} onChange={e=>upd({bold:e.target.checked})} className="accent-yellow-400"/>
-                <span className="text-white/50 text-xs">Жирний</span>
-              </label>
-              {sel.type==='custom' && (
-                <button onClick={()=>{setBlocks(p=>p.filter(b=>b.id!==selected));setSelected(null);}}
-                  className="w-full py-1.5 bg-red-500/15 border border-red-500/25 text-red-400 rounded-lg text-xs hover:bg-red-500/25 transition-colors">
-                  🗑 Видалити
-                </button>
-              )}
+              <div className="flex gap-1.5">
+                {(['left','center','right'] as const).map(a=>(
+                  <button key={a} onClick={()=>upd({align:a})}
+                    className={`flex-1 py-1 rounded text-xs border transition-colors ${sel.align===a?'border-gold bg-gold/10 text-gold':'border-white/10 text-white/40'}`}>
+                    {a==='left'?'←':a==='center'?'↔':'→'}
+                  </button>
+                ))}
+              </div>
+              <div>
+                <p className="text-white/30 text-xs mb-1">Колір тексту</p>
+                <div className="flex gap-1.5 items-center flex-wrap">
+                  <input type="color" value={sel.color} onChange={e=>upd({color:e.target.value})} className="w-7 h-7 rounded cursor-pointer bg-transparent border-0"/>
+                  {['#ffffff','#000000','#c8a84b','#ff4444','#44dd88','#4488ff'].map(c=>(
+                    <button key={c} onClick={()=>upd({color:c})} className="w-5 h-5 rounded-full border transition-all hover:scale-110"
+                      style={{backgroundColor:c,borderColor:sel.color===c?'#c8a84b':'rgba(255,255,255,0.15)'}}/>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <p className="text-white/30 text-xs">Фон</p>
+                  <input type="checkbox" checked={sel.bgEnabled} onChange={e=>upd({bgEnabled:e.target.checked})} className="accent-amber-400 w-3 h-3"/>
+                </div>
+                {sel.bgEnabled&&(
+                  <div className="flex gap-1.5 items-center flex-wrap">
+                    <input type="color" value={sel.bgColor} onChange={e=>upd({bgColor:e.target.value})} className="w-7 h-7 rounded cursor-pointer bg-transparent border-0"/>
+                    {['#000000','#1a1a1a','#c8a84b','#ffffff','#0d0d2e'].map(c=>(
+                      <button key={c} onClick={()=>upd({bgColor:c})} className="w-5 h-5 rounded-full border transition-all hover:scale-110"
+                        style={{backgroundColor:c,borderColor:sel.bgColor===c?'#c8a84b':'rgba(255,255,255,0.15)'}}/>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {[['X','x'],['Y','y']].map(([label,key])=>(
+                  <div key={key}>
+                    <p className="text-white/30 text-xs mb-1">{label}</p>
+                    <input type="number" value={(sel as any)[key]} min={0} max={1024}
+                      onChange={e=>upd({[key]:Number(e.target.value)})}
+                      className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-gold/40"/>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ):(
+            <div className="flex-1 flex items-center justify-center">
+              <p className="text-white/15 text-xs text-center px-4">Вибери або додай шар вище</p>
             </div>
           )}
-
-          <div className="mt-auto space-y-2 pt-3 border-t border-white/10">
-            <button onClick={save} className="w-full py-2.5 bg-green-700 hover:bg-green-600 text-white font-bold rounded-xl text-sm transition-colors">
-              ⬇ Зберегти
-            </button>
-            <button onClick={onClose} className="w-full py-2 border border-white/15 text-white/40 hover:border-white/30 rounded-xl text-sm transition-colors">
-              Закрити
-            </button>
-          </div>
         </div>
       </div>
     </div>

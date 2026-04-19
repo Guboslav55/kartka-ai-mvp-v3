@@ -36,10 +36,10 @@ async function uploadImageForFlux(supabase: SupabaseClient, base64: string, user
 async function buildFluxPrompt(imageBase64: string, productName: string, bullets: string[], category: string, variant: 'lifestyle' | 'benefits' | 'studio'): Promise<string> {
   const bulletText = bullets.slice(0, 4).map((b, i) => `${i + 1}. ${b}`).join('\n');
   const variantInstr = variant === 'lifestyle'
-    ? 'LIFESTYLE: Transform background into dramatic atmospheric scene. Keep product centered. NO TEXT. NO labels.'
+    ? 'LIFESTYLE: Change ONLY the background to dramatic atmospheric scene. The person, face, clothing, pose must be PIXEL-PERFECT IDENTICAL to original. ZERO changes to the person. NO TEXT. NO labels.'
     : variant === 'studio'
-    ? 'STUDIO: Professional studio photography. Pure white/grey seamless background. Soft studio lighting. NO TEXT.'
-    : 'BENEFITS: Dynamic colorful graphic background with geometric shapes. NO TEXT. NO labels.';
+    ? 'STUDIO: Change ONLY background to pure white/grey studio. Person, face, clothing, pose IDENTICAL to original. ZERO changes to person. NO TEXT.'
+    : 'BENEFITS: Change ONLY background to colorful graphic shapes. Person, face, clothing, pose IDENTICAL to original. ZERO changes to person. NO TEXT. NO labels.';
   const response = await openai.chat.completions.create({
     model: 'gpt-4o',
     messages: [{ role: 'user', content: [
@@ -118,7 +118,8 @@ async function getLayoutFromClaude(fluxImageUrl: string, productName: string, bu
   const data = await resp.json() as { content: Array<{type:string;text:string}> };
   const raw = data.content[0]?.type === 'text' ? data.content[0].text : '';
   console.log('Claude layout:', raw.slice(0,300));
-  const m = raw.match(/\{[\s\S]*\}/);
+  const stripped = raw.replace(/```json\s*/g,'').replace(/```\s*/g,'').trim();
+  const m = stripped.match(/\{[\s\S]*\}/);
   if (!m) throw new Error('No JSON: ' + raw.slice(0,200));
   return JSON.parse(m[0]) as Layout;
 }

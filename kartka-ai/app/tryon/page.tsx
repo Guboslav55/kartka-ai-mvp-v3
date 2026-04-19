@@ -20,10 +20,23 @@ const MODELS = [
   { id: 'no_model', label: 'Без моделі', emoji: '👗' },
 ];
 
+function getSupabaseToken(): string {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i) || '';
+      if (key.includes('supabase') && key.includes('auth')) {
+        const val = JSON.parse(localStorage.getItem(key) || '{}');
+        if (val?.access_token) return val.access_token;
+        if (val?.session?.access_token) return val.session.access_token;
+      }
+    }
+  } catch {}
+  return '';
+}
+
 export default function TryOnPage() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [image, setImage] = useState<string | null>(null);
-  const [imageFile, setImageFile] = useState<File | null>(null);
   const [scene, setScene] = useState('studio_white');
   const [model, setModel] = useState('woman_young');
   const [results, setResults] = useState<string[]>([]);
@@ -32,11 +45,9 @@ export default function TryOnPage() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   function handleFile(file: File) {
-    setImageFile(file);
     const reader = new FileReader();
-    reader.onload = e => setImage(e.target?.result as string);
+    reader.onload = e => { setImage(e.target?.result as string); setStep(2); };
     reader.readAsDataURL(file);
-    setStep(2);
   }
 
   async function generate() {
@@ -46,21 +57,21 @@ export default function TryOnPage() {
     setResults([]);
     setStep(3);
     try {
-      let token = '';
-      try {
-        const sess = await (await fetch('/api/auth/session')).json();
-        token = sess?.access_token || '';
-      } catch {}
+      const authToken = getSupabaseToken();
       const res = await fetch('/api/tryon', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
         body: JSON.stringify({ imageBase64: image, scene, model }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Помилка');
-      setResults(data.urls || [data.url]);
+      if (!res.ok) throw new Error(data.error || 'Помилка генерації');
+      setResults(data.urls || [data.url].filter(Boolean));
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Помилка');
+      const msg = e instanceof Error ? e.message : 'Невідома помилка';
+      setError(msg);
       setStep(2);
     } finally {
       setLoading(false);
@@ -82,6 +93,7 @@ export default function TryOnPage() {
           <div className="w-20" />
         </div>
       </div>
+
       <div className="max-w-4xl mx-auto px-6 py-10">
         <div className="flex items-center justify-center gap-4 mb-10">
           {[{ n: 1, label: 'Фото' }, { n: 2, label: 'Сцена' }, { n: 3, label: 'Результат' }].map((s, i) => (
@@ -99,7 +111,8 @@ export default function TryOnPage() {
           <div className="text-center">
             <h1 className="text-3xl font-bold mb-2">Завантажте фото товару</h1>
             <p className="text-white/50 mb-8">Одяг, взуття або аксесуар — підійде будь-яке фото</p>
-            <div className="border-2 border-dashed border-white/20 rounded-2xl p-16 cursor-pointer hover:border-gold/50 transition-colors group"
+            <div
+              className="border-2 border-dashed border-white/20 rounded-2xl p-16 cursor-pointer hover:border-gold/50 transition-colors group"
               onClick={() => fileRef.current?.click()}
               onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f?.type.startsWith('image/')) handleFile(f); }}
               onDragOver={e => e.preventDefault()}
@@ -119,8 +132,10 @@ export default function TryOnPage() {
               <p className="text-white/50 text-sm mb-3">Ваше фото</p>
               <div className="relative rounded-2xl overflow-hidden aspect-square">
                 <img src={image} alt="upload" className="w-full h-full object-contain bg-white/5" />
-                <button onClick={() => { setImage(null); setStep(1); }}
-                  className="absolute top-3 right-3 bg-black/60 text-white/60 hover:text-white w-8 h-8 rounded-full flex items-center justify-center text-sm">✕</button>
+                <button
+                  onClick={() => { setImage(null); setStep(1); }}
+                  className="absolute top-3 right-3 bg-black/60 text-white/60 hover:text-white w-8 h-8 rounded-full flex items-center justify-center text-sm"
+                >✕</button>
               </div>
             </div>
             <div className="space-y-6">
@@ -149,7 +164,8 @@ export default function TryOnPage() {
                   ))}
                 </div>
               </div>
-              <button onClick={generate} className="w-full py-4 rounded-2xl bg-gold text-black font-bold text-lg hover:bg-amber-400 transition-colors">
+              <button onClick={generate}
+                className="w-full py-4 rounded-2xl bg-gold text-black font-bold text-lg hover:bg-amber-400 transition-colors">
                 ✨ Згенерувати
               </button>
             </div>
@@ -158,36 +174,53 @@ export default function TryOnPage() {
 
         {step === 3 && (
           <div>
-            <h2 className="text-2xl font-bold text-center mb-8">{loading ? 'Генеруємо...' : 'Результати'}</h2>
+            <h2 className="text-2xl font-bold text-center mb-8">
+              {loading ? 'Генеруємо...' : error ? 'Помилка' : 'Готово!'}
+            </h2>
             {loading && (
               <div className="text-center py-16">
                 <div className="text-6xl mb-6 animate-pulse">✨</div>
                 <p className="text-white/60 mb-2">AI підбирає модель і сцену</p>
                 <p className="text-white/30 text-sm">Зазвичай 30-60 секунд</p>
+                <div className="mt-6 w-48 mx-auto h-1 bg-white/10 rounded-full overflow-hidden">
+                  <div className="h-full bg-gold rounded-full animate-pulse w-3/5" />
+                </div>
               </div>
             )}
-            {error && (
+            {error && !loading && (
               <div className="text-center py-8">
                 <div className="text-4xl mb-4">❌</div>
-                <p className="text-red-400 mb-4">{error}</p>
-                <button onClick={() => setStep(2)} className="px-6 py-2 rounded-xl border border-white/20 text-white/60 hover:text-white transition-colors">← Спробувати знову</button>
+                <p className="text-red-400 mb-2">{error}</p>
+                <button onClick={() => { setError(''); setStep(2); }}
+                  className="mt-4 px-6 py-2 rounded-xl border border-white/20 text-white/60 hover:text-white transition-colors">
+                  ← Спробувати знову
+                </button>
               </div>
             )}
-            {results.length > 0 && (
+            {results.length > 0 && !loading && (
               <>
-                <div className="grid grid-cols-1 max-w-sm mx-auto gap-4">
+                <div className="max-w-sm mx-auto space-y-4">
                   {results.map((url, i) => (
                     <div key={i} className="rounded-2xl overflow-hidden border border-white/10 group relative">
-                      <img src={url} alt={`result ${i+1}`} className="w-full aspect-square object-cover" />
+                      <img src={url} alt={`result ${i + 1}`} className="w-full aspect-square object-cover" />
                       <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <a href={url} download={`tryon-${i+1}.jpg`} className="px-4 py-2 rounded-xl bg-gold text-black font-bold text-sm">↓ Завантажити</a>
+                        <a href={url} download={`tryon-${i + 1}.jpg`} target="_blank" rel="noreferrer"
+                          className="px-4 py-2 rounded-xl bg-gold text-black font-bold text-sm hover:bg-amber-400">
+                          ↓ Завантажити
+                        </a>
                       </div>
                     </div>
                   ))}
                 </div>
                 <div className="text-center mt-8 flex gap-4 justify-center">
-                  <button onClick={() => { setStep(2); setResults([]); }} className="px-6 py-2 rounded-xl border border-white/20 text-white/60 hover:text-white transition-colors text-sm">↩ Змінити</button>
-                  <button onClick={generate} className="px-6 py-2 rounded-xl bg-gold/20 text-gold border border-gold/30 hover:bg-gold/30 transition-colors text-sm font-medium">🔄 Ще раз</button>
+                  <button onClick={() => { setStep(2); setResults([]); }}
+                    className="px-6 py-2 rounded-xl border border-white/20 text-white/60 hover:text-white transition-colors text-sm">
+                    ↩ Змінити
+                  </button>
+                  <button onClick={generate}
+                    className="px-6 py-2 rounded-xl bg-gold/20 text-gold border border-gold/30 hover:bg-gold/30 transition-colors text-sm font-medium">
+                    🔄 Ще раз
+                  </button>
                 </div>
               </>
             )}

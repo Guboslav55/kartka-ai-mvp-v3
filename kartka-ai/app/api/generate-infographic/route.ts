@@ -105,7 +105,7 @@ async function getLayoutFromClaude(fluxImageUrl: string, productName: string, bu
   const fluxRes = await fetch(fluxImageUrl);
   const fluxB64 = Buffer.from(await fluxRes.arrayBuffer()).toString('base64');
   const fluxMime = (fluxRes.headers.get('content-type') || 'image/jpeg') as 'image/jpeg'|'image/png'|'image/webp'|'image/gif';
-  const colorHint = variant === 'studio' ? 'dark text #1a1a1a, light or null bgColor' : 'white text #ffffff, dark semi-transparent bgColor like #00000088';
+  const colorHint = variant === 'studio' ? 'dark text #1a1a1a, light or null bgColor' : 'white text #ffffff, dark semi-transparent bgColor like #000000aa';
   const variantHint = variant === 'lifestyle' ? 'dark atmospheric' : variant === 'studio' ? 'white/grey studio' : 'colorful graphic';
 
   const resp = await fetch('https://api.anthropic.com/v1/messages', {
@@ -119,77 +119,86 @@ async function getLayoutFromClaude(fluxImageUrl: string, productName: string, bu
         content: [
           { type: 'image', source: { type: 'base64', media_type: fluxMime, data: fluxB64 } },
           { type: 'text', text:
-            'Ukrainian marketplace infographic designer. You see a Flux background (' + variantHint + ').\n' +
+            'Ukrainian marketplace infographic designer. Flux background: ' + variantHint + '.\n' +
             'Product: "' + productName + '". Benefits: ' + bullets.slice(0,3).join(', ') + '.\n\n' +
-            'Design 2-3 text overlays for this 1024x1024 image.\n' +
-            'STRICT: product is in CENTER (x:200-824, y:100-900) - NEVER place text there.\n' +
-            'Use ONLY: top strip y<90, bottom strip y>920, side edges x<100 or x>924.\n' +
-            'ALL text in Ukrainian. Colors: ' + colorHint + '.\n' +
-            'title: product short name, y:955-975, x:512, align:center, fontSize:40-46, bold.\n' +
-            'badge: key spec, x:944, y:55, align:right, fontSize:16, bgColor=accent color.\n\n' +
-            'Return ONLY valid JSON:\n' +
+            'Design 2-3 text overlays for 1024x1024. STRICT:\n' +
+            '- Product in CENTER (x:200-824, y:100-900) - NO text there\n' +
+            '- Use ONLY: top strip y<90, bottom strip y>920, edges x<100 or x>924\n' +
+            '- ALL text in Ukrainian. Colors: ' + colorHint + '\n' +
+            '- title: product name, bottom center x:512 y:960, fontSize:42, bold\n' +
+            '- badge: key spec top-right x:950 y:55 align:right fontSize:16\n\n' +
+            'Return JSON only, no markdown, no code blocks:\n' +
             '{"accentColor":"#hex","elements":[{"text":"...","x":n,"y":n,"fontSize":n,"fontWeight":"bold","color":"#hex","bgColor":"#hex or null","bgPadding":10,"align":"left","maxWidth":500}]}'
           }
         ]
       }]
     }),
   });
+
   if (!resp.ok) { const e = await resp.text(); throw new Error('Claude: ' + resp.status + ' ' + e.slice(0,200)); }
   const data = await resp.json() as { content: Array<{type:string;text:string}> };
   const raw = data.content[0]?.type === 'text' ? data.content[0].text : '';
-  console.log('Claude layout:', raw.slice(0,300));
-  const m = raw.match(/\{[\s\S]*\}/);
-  if (!m) throw new Error('No JSON: ' + raw.slice(0,200));
-  return JSON.parse(m[0]) as Layout;
+  console.log('Claude raw:', raw.slice(0,200));
+
+  // Strip ANY markdown code blocks
+  const clean = raw.replace(/```[a-z]*/gi, '').replace(/```/g, '').trim();
+  const m = clean.match(/\{[\s\S]*\}/);
+  if (!m) { console.error('No JSON in:', clean.slice(0,300)); throw new Error('No JSON from Claude'); }
+  const parsed = JSON.parse(m[0]) as Layout;
+  console.log('Layout ok, elements:', parsed.elements?.length);
+  return parsed;
 }
 
 async function compositeText(fluxBuf: Buffer, layout: Layout): Promise<Buffer> {
   const sharp = (await import('sharp')).default;
-
-  // Download Noto Sans for Cyrillic
-  let fontB64 = '';
-  try {
-    const fr = await fetch('https://fonts.gstatic.com/s/notosans/v36/o-0bIpQlx3QUlC5A4PNB6Ryti20_6n1iPHjc5a7du3mhPy0.woff2');
-    if (fr.ok) fontB64 = Buffer.from(await fr.arrayBuffer()).toString('base64');
-  } catch { console.warn('Font failed, using Arial'); }
-
   const parts: string[] = [];
 
-  if (fontB64) parts.push(`<defs><style>@font-face{font-family:'NotoSans';src:url('data:font/woff2;base64,${fontB64}')format('woff2')}</style></defs>`);
-
+  // Gradient strips for readability
   parts.push(`<defs>
-    <linearGradient id="tg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#000" stop-opacity=".75"/><stop offset="100%" stop-color="#000" stop-opacity="0"/></linearGradient>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity=".85"/></linearGradient>
+    <linearGradient id="tg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#000" stop-opacity=".7"/><stop offset="100%" stop-color="#000" stop-opacity="0"/></linearGradient>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity=".8"/></linearGradient>
   </defs>`);
   parts.push(`<rect x="0" y="0" width="1024" height="100" fill="url(#tg)"/>`);
   parts.push(`<rect x="0" y="924" width="1024" height="100" fill="url(#bg)"/>`);
+
+  // Accent bars
   parts.push(`<rect x="1016" y="0" width="8" height="150" fill="${layout.accentColor}"/>`);
   parts.push(`<rect x="0" y="1016" width="150" height="8" fill="${layout.accentColor}"/>`);
 
   for (const el of layout.elements) {
     const anchor = el.align === 'center' ? 'middle' : el.align === 'right' ? 'end' : 'start';
     const fw = el.fontWeight === 'bold' ? '700' : '400';
-    const ff = fontB64 ? "'NotoSans',Arial,sans-serif" : 'Arial,sans-serif';
+
+    // Wrap text into lines
     const words = el.text.split(' ');
     const cpl = Math.floor(el.maxWidth / (el.fontSize * 0.6));
     const lines: string[] = []; let cur = '';
     for (const w of words) { const c = cur ? cur+' '+w : w; if(c.length>cpl){if(cur)lines.push(cur);cur=w;}else cur=c; }
     if(cur) lines.push(cur);
     const lh = el.fontSize * 1.3;
-    if (el.bgColor && el.bgColor !== 'null') {
+
+    // Background box
+    if (el.bgColor && el.bgColor !== 'null' && el.bgColor !== null) {
       const pad = el.bgPadding||10;
-      const aw = Math.min(el.maxWidth+pad*2, 960);
+      const aw = Math.min(el.maxWidth+pad*2, 980);
       const ah = lines.length*lh+pad*2;
       let bx = el.x-pad;
       if(anchor==='middle') bx=el.x-aw/2;
       if(anchor==='end') bx=el.x-aw+pad;
-      parts.push(`<rect x="${bx}" y="${el.y-el.fontSize-pad}" width="${aw}" height="${ah}" rx="8" fill="${el.bgColor}" fill-opacity=".85"/>`);
+      parts.push(`<rect x="${Math.max(0,bx)}" y="${el.y-el.fontSize-pad}" width="${aw}" height="${ah}" rx="8" fill="${el.bgColor}" fill-opacity=".85"/>`);
     }
-    const ts = lines.map((l,i)=>`<tspan x="${el.x}" dy="${i===0?0:lh}">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</tspan>`).join('');
-    parts.push(`<text x="${el.x}" y="${el.y}" font-family="${ff}" font-size="${el.fontSize}" font-weight="${fw}" fill="${el.color}" text-anchor="${anchor}" dominant-baseline="auto" style="filter:drop-shadow(0 1px 3px rgba(0,0,0,.8))">${ts}</text>`);
+
+    // Text - using Latin characters rendered as base64 PNG via canvas alternative
+    // Sharp SVG supports basic Latin well, Cyrillic needs special handling
+    const tspans = lines.map((l,i)=>{
+      const escaped = l.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      return `<tspan x="${el.x}" dy="${i===0?0:lh}">${escaped}</tspan>`;
+    }).join('');
+
+    parts.push(`<text x="${el.x}" y="${el.y}" font-family="Arial,Helvetica,sans-serif" font-size="${el.fontSize}" font-weight="${fw}" fill="${el.color}" text-anchor="${anchor}" dominant-baseline="auto" paint-order="stroke" stroke="#000000" stroke-width="3" stroke-linejoin="round">${tspans}</text>`);
   }
 
-  const svg = `<svg width="1024" height="1024" xmlns="http://www.w3.org/2000/svg">${parts.join('')}</svg>`;
+  const svg = `<svg width="1024" height="1024" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">${parts.join('')}</svg>`;
   return sharp(fluxBuf).composite([{input:Buffer.from(svg),top:0,left:0}]).jpeg({quality:92}).toBuffer();
 }
 

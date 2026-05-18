@@ -1,28 +1,24 @@
-// app/api/stars/balance/route.ts
-import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
-export async function GET() {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+export async function GET(req: NextRequest) {
+  const token = req.headers.get('authorization')?.replace('Bearer ', '')
+  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { global: { headers: { Authorization: `Bearer ${token}` } } }
+  )
 
-  const { data: profile, error } = await supabase
-    .from('profiles')
-    .select('stars_balance, free_regenerations, account_code')
-    .eq('id', user.id)
-    .single()
+  const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+  if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  if (error || !profile) {
-    return NextResponse.json({ balance: 0, free_regenerations: 0 })
-  }
+  const { data: profile } = await supabase.from('profiles').select('stars_balance, free_regenerations, account_code').eq('id', user.id).single()
 
   return NextResponse.json({
-    balance: profile.stars_balance ?? 0,
-    free_regenerations: profile.free_regenerations ?? 0,
-    account_code: profile.account_code ?? null,
+    balance: profile?.stars_balance ?? 0,
+    free_regenerations: profile?.free_regenerations ?? 0,
+    account_code: profile?.account_code ?? null,
   })
 }

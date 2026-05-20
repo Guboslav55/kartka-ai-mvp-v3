@@ -2,34 +2,22 @@
 import Link from 'next/link';
 
 const FEATURES = [
-  { icon: '✏️', title: 'AI-генерація текстів', desc: 'Заголовок, опис, 5 переваг та ключові слова для будь-якого товару' },
-  { icon: '🖼️', title: 'Генерація зображень', desc: 'DALL-E 3 створює банерну картку товару за описом' },
-  { icon: '🎯', title: 'Оптимізація під платформи', desc: 'Адаптація під Prom.ua, Rozetka, OLX — правильні довжини та SEO' },
-  { icon: '📥', title: 'Експорт CSV / Excel', desc: 'Завантажуй готові картки та імпортуй одразу на маркетплейс' },
+  { icon: '✏️', title: 'AI-генерація тексту', desc: 'Заголовок, опис, 5 переваг та ключові слова. GPT-4o аналізує фото і пише сам — без шаблонів.' },
+  { icon: '📸', title: 'Обробка фото товару', desc: 'Завантаж фото — AI обріже, видалить фон і підготує до маркетплейсу автоматично.' },
+  { icon: '🎯', title: 'Оптимізація під платформи', desc: 'Окремі алгоритми для Prom.ua, Rozetka і OLX — правильні довжини, SEO і формат.' },
+  { icon: '📊', title: 'AI Інфографіка', desc: 'Три варіанти інфографіки з твоїм фото та текстом — готово до публікації.' },
 ];
 
 const STEPS = [
-  { num: '01', title: 'Введи назву товару', desc: 'Вкажи категорію та ключові особливості' },
-  { num: '02', title: 'AI генерує контент', desc: 'Текст + зображення за 10–15 секунд' },
-  { num: '03', title: 'Завантажуй та публікуй', desc: 'Копіюй або скачай CSV — готово до імпорту' },
+  { num: '01', title: 'Завантаж фото товару', desc: 'AI розпізнає, обріже і видалить фон за 5 секунд' },
+  { num: '02', title: 'AI пише картку', desc: 'Заголовок, опис, переваги, ключові слова — 10 сек' },
+  { num: '03', title: 'Копіюй і публікуй', desc: 'Або скачай CSV для масового завантаження на маркетплейс' },
 ];
 
-const PLANS = [
-  {
-    name: 'Стартер', price: '0', period: 'назавжди', popular: false,
-    features: ['5 карточок / місяць', 'Українська мова', 'Prom.ua та Rozetka', '—  Генерація зображень', '—  Експорт CSV'],
-    cta: 'Спробувати', href: '/auth',
-  },
-  {
-    name: 'Про', price: '499', period: '/ місяць', popular: true,
-    features: ['200 карточок / місяць', 'UA + RU + EN', 'Усі 4 платформи', '✓  Генерація зображень', '✓  Експорт CSV'],
-    cta: 'Обрати Про', href: '/auth?plan=pro',
-  },
-  {
-    name: 'Бізнес', price: '1490', period: '/ місяць', popular: false,
-    features: ['Безліміт карточок', 'UA + RU + EN', 'Усі 4 платформи', '✓  Генерація зображень', '✓  API-доступ'],
-    cta: 'Зв\'язатися', href: '/auth?plan=business',
-  },
+const PACKAGES = [
+  { id: 'starter_100',     name: 'Старт',        stars: 100,  bonus: 0,    price: 99,   popular: false, per: '~0.99 ₴/⭐', examples: '25 карток' },
+  { id: 'pro_500',         name: 'Про',          stars: 500,  bonus: 50,   price: 390,  popular: true,  per: '~0.71 ₴/⭐', examples: '137 карток' },
+  { id: 'growth_1200',     name: 'Зростання',    stars: 1200, bonus: 200,  price: 790,  popular: false, per: '~0.57 ₴/⭐', examples: '350 карток' },
 ];
 
 export default function HomePage() {
@@ -54,23 +42,19 @@ export default function HomePage() {
       <section className="relative min-h-screen flex flex-col items-center justify-center text-center px-6 pt-24 pb-16 overflow-hidden">
         <div className="absolute inset-0 hero-grid" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_900px_600px_at_50%_40%,rgba(36,86,164,0.18),transparent_70%)]" />
-
         <div className="relative z-10 animate-fade-down">
           <div className="inline-flex items-center gap-2 bg-gold/10 border border-gold/25 rounded-full px-4 py-1.5 text-gold-light text-xs font-medium mb-8">
             <span className="w-1.5 h-1.5 rounded-full bg-gold animate-pulse-dot" />
             Перший AI-сервіс карток товарів в Україні
           </div>
-
           <h1 className="font-display font-black text-4xl md:text-6xl lg:text-7xl leading-[1.05] tracking-tight mb-6">
             Картки товарів<br />
             для <span className="text-gold">Prom</span> та <span className="text-gold">Rozetka</span><br />
             за 10 секунд
           </h1>
-
           <p className="text-white/60 text-lg max-w-lg mx-auto mb-10">
-            Введи назву товару — AI напише заголовок, опис, переваги та ключові слова. Готово до завантаження.
+            Завантаж фото — AI напише заголовок, опис, переваги та ключові слова. Видалить фон. Готово до публікації.
           </p>
-
           <div className="flex flex-wrap items-center justify-center gap-4">
             <Link href="/auth" className="bg-gold text-black px-8 py-4 rounded-full font-bold text-base hover:bg-gold-light transition-all hover:-translate-y-0.5 shadow-[0_8px_32px_rgba(200,168,75,0.3)]">
               ✦ Спробувати безкоштовно
@@ -79,7 +63,6 @@ export default function HomePage() {
               Як це працює →
             </a>
           </div>
-
           <div className="flex flex-wrap justify-center gap-12 mt-16">
             {[['10 сек', 'Час генерації'], ['4+', 'Платформи'], ['3', 'Мови']].map(([num, label]) => (
               <div key={label} className="text-center">
@@ -135,44 +118,61 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* PRICING */}
+      {/* PRICING — STARS */}
       <section id="pricing" className="py-24 px-6 max-w-5xl mx-auto">
         <div className="text-center mb-14">
           <p className="text-gold text-xs font-bold uppercase tracking-widest mb-3">▸ Тарифи</p>
-          <h2 className="font-display font-black text-3xl md:text-5xl tracking-tight">Прозора ціна</h2>
-          <p className="text-white/40 mt-3">Оплата в гривнях. Скасування в будь-який момент.</p>
+          <h2 className="font-display font-black text-3xl md:text-5xl tracking-tight">Платиш тільки за результат</h2>
+          <p className="text-white/40 mt-3 max-w-md mx-auto">Система Зорь — купуй зорі і витрачай коли треба. Без підписки. Без обмежень по часу.</p>
         </div>
+
+        {/* Star cost explanation */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-12 max-w-3xl mx-auto">
+          {[
+            { op: '✏️ Текст картки', cost: '2 ⭐' },
+            { op: '📸 Обробка фото', cost: '4 ⭐' },
+            { op: '📊 Інфографіка', cost: '4 ⭐' },
+            { op: '🎨 3 інфографіки', cost: '10 ⭐' },
+          ].map(item => (
+            <div key={item.op} className="bg-white/[0.04] border border-white/8 rounded-xl p-4 text-center">
+              <div className="text-xs text-white/40 mb-1">{item.op}</div>
+              <div className="font-display font-bold text-lg text-gold">{item.cost}</div>
+            </div>
+          ))}
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-          {PLANS.map(plan => (
-            <div key={plan.name} className={`relative rounded-2xl p-8 border transition-all hover:-translate-y-2 ${plan.popular ? 'bg-gold/5 border-gold' : 'bg-white/[0.03] border-white/10'}`}>
-              {plan.popular && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gold text-black text-[10px] font-black px-4 py-1 rounded-full tracking-wider">
-                  НАЙПОПУЛЯРНІШИЙ
-                </div>
+          {PACKAGES.map(pkg => (
+            <div key={pkg.id} className={`relative rounded-2xl p-8 border transition-all hover:-translate-y-2 ${pkg.popular ? 'bg-gold/5 border-gold' : 'bg-white/[0.03] border-white/10'}`}>
+              {pkg.popular && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gold text-black text-[10px] font-black px-4 py-1 rounded-full tracking-wider">НАЙПОПУЛЯРНІШИЙ</div>
               )}
-              <div className="text-white/40 text-xs font-bold uppercase tracking-widest mb-3">{plan.name}</div>
+              <div className="text-white/40 text-xs font-bold uppercase tracking-widest mb-3">{pkg.name}</div>
               <div className="font-display font-black text-4xl mb-1">
-                {plan.price}<span className="text-white/30 text-lg font-normal"> ₴</span>
+                {pkg.price}<span className="text-white/30 text-lg font-normal"> ₴</span>
               </div>
-              <div className="text-white/35 text-sm mb-6">{plan.period}</div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-gold font-bold">⭐ {pkg.stars.toLocaleString('uk-UA')}</span>
+                {pkg.bonus > 0 && <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-semibold">+{pkg.bonus} бонус</span>}
+              </div>
+              <div className="text-white/30 text-xs mb-6">{pkg.per} · ~{pkg.examples}</div>
               <div className="h-px bg-white/8 mb-6" />
-              <ul className="space-y-3 mb-8">
-                {plan.features.map(f => (
-                  <li key={f} className={`text-sm flex items-start gap-2 ${f.startsWith('—') ? 'text-white/25' : 'text-white/75'}`}>
-                    {f.startsWith('✓') ? <span className="text-gold mt-0.5">✓</span> : f.startsWith('—') ? <span className="mt-0.5">—</span> : <span className="text-gold mt-0.5">✓</span>}
-                    {f.replace(/^[✓—]\s+/, '')}
-                  </li>
-                ))}
+              <ul className="space-y-2 mb-8 text-sm text-white/70">
+                <li className="flex items-center gap-2"><span className="text-gold">✓</span> Текст картки — 2 ⭐</li>
+                <li className="flex items-center gap-2"><span className="text-gold">✓</span> Обробка фото — 4 ⭐</li>
+                <li className="flex items-center gap-2"><span className="text-gold">✓</span> Інфографіка — 4 ⭐</li>
+                <li className="flex items-center gap-2"><span className="text-gold">✓</span> Зорі не згоряють</li>
               </ul>
-              <Link
-                href={plan.href}
-                className={`block text-center py-3 rounded-xl font-bold text-sm transition-all ${plan.popular ? 'bg-gold text-black hover:bg-gold-light' : 'border border-white/20 text-white hover:border-gold hover:text-gold'}`}
-              >
-                {plan.cta}
+              <Link href="/pricing" className={`block text-center py-3 rounded-xl font-bold text-sm transition-all ${pkg.popular ? 'bg-gold text-black hover:bg-gold-light' : 'border border-white/20 text-white hover:border-gold hover:text-gold'}`}>
+                Придбати →
               </Link>
             </div>
           ))}
         </div>
+
+        <p className="text-center text-white/30 text-sm mt-8">
+          🎁 При реєстрації — 5 зорь безкоштовно · Оплата в гривнях · LiqPay
+        </p>
       </section>
 
       {/* CTA */}
@@ -182,9 +182,9 @@ export default function HomePage() {
           <h2 className="font-display font-black text-3xl md:text-5xl tracking-tight mb-4">
             Почни продавати більше<br />вже сьогодні
           </h2>
-          <p className="text-white/40 mb-10">Перші 5 карточок — безкоштовно. Реєстрація за 30 секунд.</p>
+          <p className="text-white/40 mb-10">Реєстрація за 30 секунд. 5 безкоштовних зорь одразу.</p>
           <Link href="/auth" className="inline-block bg-gold text-black px-10 py-4 rounded-full font-bold text-base hover:bg-gold-light transition-all shadow-[0_8px_32px_rgba(200,168,75,0.3)]">
-            ✦ Спробувати зараз
+            ✦ Спробувати зараз — безкоштовно
           </Link>
         </div>
       </section>
@@ -192,7 +192,7 @@ export default function HomePage() {
       {/* FOOTER */}
       <footer className="border-t border-white/6 px-10 py-8 flex flex-wrap items-center justify-between gap-4">
         <div className="font-display font-black text-gold">Картка<span className="text-white">АІ</span></div>
-        <p className="text-white/25 text-sm">© 2024 КарткаАІ. Зроблено в Україні 🇺🇦</p>
+        <p className="text-white/25 text-sm">© 2025 КарткаАІ. Зроблено в Україні 🇺🇦</p>
         <p className="text-white/20 text-xs">Політика конфіденційності · Умови використання</p>
       </footer>
     </div>

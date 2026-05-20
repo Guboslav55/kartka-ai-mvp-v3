@@ -29,6 +29,13 @@ export default function DashboardPage() {
       setLoading(false);
     }
     load();
+
+    // Оновлення балансу після поповнення
+    const handler = (e: any) => {
+      setUser((prev: any) => prev ? { ...prev, stars_balance: e.detail.newBalance } : prev);
+    };
+    window.addEventListener('stars-updated', handler);
+    return () => window.removeEventListener('stars-updated', handler);
   }, []);
 
   async function deleteCard(e: React.MouseEvent, id: string) {
@@ -51,22 +58,41 @@ export default function DashboardPage() {
   );
 
   const plan = user?.plan ?? 'free';
-  const cardsLeft = user?.cards_left === 99999 ? '∞' : String(user?.cards_left ?? 0);
+  const starsBalance = user?.stars_balance ?? 0;
+  const isLowStars = starsBalance < 10;
 
   return (
     <div className="min-h-screen px-4 sm:px-6 py-8 max-w-4xl mx-auto">
+      {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <Link href="/" className="font-display font-black text-xl text-gold">
           Картка<span className="text-white">АІ</span>
         </Link>
-        <button onClick={signOut} className="text-white/30 text-sm hover:text-white transition-colors">Вийти</button>
+        <div className="flex items-center gap-3">
+          {/* Зорі в хедері */}
+          <Link href="/pricing"
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium border transition-all ${
+              isLowStars
+                ? 'bg-red-500/20 text-red-300 border-red-500/30'
+                : 'bg-white/10 text-white border-white/15 hover:border-gold/40 hover:text-gold'
+            }`}>
+            <span>⭐</span>
+            <span>{starsBalance.toLocaleString('uk-UA')}</span>
+          </Link>
+          <Link href="/pricing"
+            className="flex items-center gap-1 rounded-full bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white border border-indigo-500 hover:bg-indigo-500 transition-colors">
+            <span className="text-xs">+</span>
+            <span>Поповнити</span>
+          </Link>
+          <button onClick={signOut} className="text-white/30 text-sm hover:text-white transition-colors">Вийти</button>
+        </div>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         {[
+          { label: 'Зорі ⭐', value: starsBalance.toLocaleString('uk-UA'), cls: isLowStars ? 'text-red-400' : 'text-gold' },
           { label: 'Тариф', value: PLAN_LABELS[plan], cls: PLAN_COLORS[plan] },
-          { label: 'Залишок карточок', value: cardsLeft, cls: 'text-white' },
           { label: 'Всього створено', value: String(user?.cards_total ?? 0), cls: 'text-white' },
           { label: 'Збережено', value: String(cards.length), cls: 'text-white' },
         ].map(s => (
@@ -77,15 +103,15 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Upgrade banner */}
-      {plan === 'free' && (user?.cards_left ?? 0) <= 2 && (
+      {/* Low stars banner */}
+      {isLowStars && (
         <div className="bg-gold/8 border border-gold/25 rounded-2xl px-5 py-4 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <p className="text-gold font-semibold text-sm">Карточки майже закінчились!</p>
-            <p className="text-white/45 text-xs mt-0.5">Про-тариф: 200 карточок за 499 ₴/міс</p>
+            <p className="text-gold font-semibold text-sm">⭐ Зорі майже закінчились!</p>
+            <p className="text-white/45 text-xs mt-0.5">Поповни баланс — генерація тексту коштує лише 2 зорі</p>
           </div>
           <Link href="/pricing" className="bg-gold text-black px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-gold-light transition-colors shrink-0">
-            Підвищити тариф →
+            Поповнити ⭐ →
           </Link>
         </div>
       )}
@@ -97,24 +123,28 @@ export default function DashboardPage() {
           <div className="text-3xl mb-3">✏️</div>
           <div className="font-display font-bold text-lg mb-1">Генератор тексту</div>
           <div className="text-white/40 text-sm">Заголовок, опис, переваги та ключові слова</div>
-          <div className="text-gold text-sm mt-3 font-semibold group-hover:translate-x-1 transition-transform">Створити картку →</div>
+          <div className="flex items-center justify-between mt-3">
+            <span className="text-gold text-sm font-semibold group-hover:translate-x-1 transition-transform">Створити картку →</span>
+            <span className="text-white/30 text-xs bg-white/5 px-2 py-1 rounded-full">2 ⭐</span>
+          </div>
         </Link>
         <Link href="/banner"
           className="bg-white/[0.04] border border-white/10 rounded-2xl p-6 hover:border-white/20 transition-all hover:-translate-y-1 group">
           <div className="text-3xl mb-3">🖼️</div>
           <div className="font-display font-bold text-lg mb-1">Банер товару</div>
           <div className="text-white/40 text-sm">Завантаж фото → AI генерує 2 банери</div>
-          <div className="text-white/40 text-sm mt-3 font-semibold group-hover:text-white/60 group-hover:translate-x-1 transition-all">Створити банер →</div>
+          <div className="flex items-center justify-between mt-3">
+            <span className="text-white/40 text-sm font-semibold group-hover:text-white/60 group-hover:translate-x-1 transition-all">Створити банер →</span>
+            <span className="text-white/20 text-xs bg-white/5 px-2 py-1 rounded-full">скоро</span>
+          </div>
         </Link>
       </div>
 
       {/* Extra actions */}
       <div className="flex flex-wrap gap-3 mb-8">
-        {plan !== 'business' && (
-          <Link href="/pricing" className="border border-white/15 text-white/60 px-5 py-2.5 rounded-xl font-semibold text-sm hover:border-gold hover:text-gold transition-colors">
-            ↑ Підвищити тариф
-          </Link>
-        )}
+        <Link href="/pricing" className="border border-white/15 text-white/60 px-5 py-2.5 rounded-xl font-semibold text-sm hover:border-gold hover:text-gold transition-colors">
+          ⭐ Поповнити зорі
+        </Link>
         <Link href="/auth/reset-password" className="border border-white/10 text-white/35 px-5 py-2.5 rounded-xl text-sm hover:border-white/25 hover:text-white/50 transition-colors">
           🔑 Змінити пароль
         </Link>
@@ -139,12 +169,10 @@ export default function DashboardPage() {
           {cards.map(card => (
             <Link key={card.id} href={`/card/${card.id}`}
               className="bg-white/[0.03] border border-white/8 rounded-xl px-4 py-4 flex items-start gap-3 hover:border-gold/30 hover:bg-white/[0.05] transition-all group block">
-              {/* Thumbnail */}
               {card.image_url
                 ? <img src={card.image_url} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" />
                 : <div className="w-12 h-12 rounded-lg bg-white/5 flex items-center justify-center shrink-0 text-lg">📦</div>
               }
-              {/* Text */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-[10px] bg-white/8 text-white/40 px-2 py-0.5 rounded-full">
@@ -157,7 +185,6 @@ export default function DashboardPage() {
                 <div className="font-semibold text-white text-sm truncate group-hover:text-gold transition-colors">{card.title}</div>
                 <div className="text-white/35 text-xs mt-0.5 line-clamp-1">{card.description}</div>
               </div>
-              {/* Actions */}
               <div className="flex items-center gap-2 shrink-0">
                 <span className="text-white/20 text-xs opacity-0 group-hover:opacity-100 transition-opacity">відкрити →</span>
                 <button

@@ -95,7 +95,28 @@ export async function POST(req: NextRequest) {
     const cta = CTA[lang] ?? CTA.uk;
     const userContent: OpenAI.Chat.ChatCompletionContentPart[] = [];
     if (hasProcessed) userContent.push({ type: 'image_url', image_url: { url: uploadedPhoto, detail: 'high' } });
-    userContent.push({ type: 'text', text: `Ти — експерт-копірайтер для українських маркетплейсів.\n${LANG_HINTS[lang] ?? LANG_HINTS.uk}\n${PLATFORM_HINTS[platform] ?? PLATFORM_HINTS.general}\n${TONE_HINTS[tone] ?? TONE_HINTS.professional}\n${hasProcessed ? 'На фото — товар клієнта. Уважно опиши деталі з фото.' : ''}\nТовар: ${productName}\n${category ? `Категорія: ${category}` : ''}\n${features ? `Характеристики: ${features}` : ''}\nВАЖЛИВО: В кінці опису ОБОВ'ЯЗКОВО додай: "${cta}"\nВідповідай ТІЛЬКИ валідним JSON без markdown:\n{"title":"SEO-заголовок","description":"Опис 3-5 речень + заклик до дії","bullets":["Перевага 1","Перевага 2","Перевага 3","Перевага 4","Перевага 5"],"keywords":["слово1","слово2","слово3","слово4","слово5","слово6"]}` });
+    userContent.push({ type: 'text', text: `Ти — топовий копірайтер для українських маркетплейсів з 10-річним досвідом.
+${LANG_HINTS[lang] ?? LANG_HINTS.uk}
+${PLATFORM_HINTS[platform] ?? PLATFORM_HINTS.general}
+${TONE_HINTS[tone] ?? TONE_HINTS.professional}
+${hasProcessed ? `ФОТО ТОВАРУ ДОДАНО. Уважно проаналізуй:
+- Колір, матеріал, текстуру, форму
+- Видимі написи, логотипи, бренди
+- Комплектацію якщо видно
+Використай ці конкретні деталі в тексті — НЕ вигадуй характеристики яких не видно на фото.` : ''}
+
+ТОВАР: ${productName}
+${category ? `КАТЕГОРІЯ: ${category}` : ''}
+${features ? `ХАРАКТЕРИСТИКИ ВІД ПРОДАВЦЯ: ${features}` : ''}
+
+ПРАВИЛА:
+1. Заголовок — починай з ключового слова, включи бренд/модель якщо є, конкретні параметри (розмір, колір, матеріал)
+2. Опис — 4-5 речень: вигода покупця → конкретні характеристики → для кого → якість/матеріал → заклик: "${cta}"
+3. Переваги — КОНКРЕТНІ з деталями. НЕ "висока якість", а "подвійне прошивання витримує 50 кг". НЕ "зручний", а "ергономічна форма зменшує навантаження на руку"
+4. Ключові слова — реальні пошукові запити українських покупців
+
+Відповідай ТІЛЬКИ валідним JSON без markdown:
+{"title":"SEO-заголовок до 80 символів","description":"Опис 4-5 речень","bullets":["Конкретна перевага 1","Конкретна перевага 2","Конкретна перевага 3","Конкретна перевага 4","Конкретна перевага 5"],"keywords":["слово1","слово2","слово3","слово4","слово5","слово6"]}` });
 
     const completion = await openai.chat.completions.create({ model: 'gpt-4o', messages: [{ role: 'user', content: userContent }], max_tokens: 1000, response_format: { type: 'json_object' } });
     const cardData = JSON.parse(completion.choices[0]?.message?.content ?? '{}');

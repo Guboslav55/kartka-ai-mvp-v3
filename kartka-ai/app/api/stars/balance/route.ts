@@ -14,7 +14,11 @@ export async function GET(req: NextRequest) {
   const { data: { user }, error: authError } = await supabase.auth.getUser(token)
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: profile } = await supabase.from('profiles').select('stars_balance, free_regenerations, account_code').eq('id', user.id).single()
+  const { data: profile } = await supabase
+    .from('users')
+    .select('stars_balance, free_regenerations, account_code')
+    .eq('id', user.id)
+    .single()
 
   return NextResponse.json({
     balance: profile?.stars_balance ?? 0,

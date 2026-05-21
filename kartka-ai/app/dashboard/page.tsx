@@ -91,7 +91,7 @@ export default function DashboardPage() {
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         {[
-          { label: 'Зорі ⭐', value: starsBalance.toLocaleString('uk-UA'), cls: isLowStars ? 'text-red-400' : 'text-gold' },
+          { label: 'Зорі ⭐ →', value: starsBalance.toLocaleString('uk-UA'), cls: isLowStars ? 'text-red-400' : 'text-gold', href: '/stars' },
           { label: 'Тариф', value: PLAN_LABELS[plan], cls: PLAN_COLORS[plan] },
           { label: 'Всього створено', value: String(user?.cards_total ?? 0), cls: 'text-white' },
           { label: 'Збережено', value: String(cards.length), cls: 'text-white' },
@@ -144,6 +144,12 @@ export default function DashboardPage() {
       <div className="flex flex-wrap gap-3 mb-8">
         <Link href="/pricing" className="border border-white/15 text-white/60 px-5 py-2.5 rounded-xl font-semibold text-sm hover:border-gold hover:text-gold transition-colors">
           ⭐ Поповнити зорі
+        </Link>
+        <Link href="/referral" className="border border-white/15 text-white/60 px-5 py-2.5 rounded-xl font-semibold text-sm hover:border-indigo-400 hover:text-indigo-400 transition-colors">
+          🤝 Запросити друга
+        </Link>
+        <Link href="/stars" className="border border-white/10 text-white/40 px-5 py-2.5 rounded-xl text-sm hover:border-white/25 hover:text-white/60 transition-colors">
+          📊 Історія зорь
         </Link>
         <Link href="/auth/reset-password" className="border border-white/10 text-white/35 px-5 py-2.5 rounded-xl text-sm hover:border-white/25 hover:text-white/50 transition-colors">
           🔑 Змінити пароль

@@ -46,6 +46,22 @@ export default function DashboardPage() {
     setDeletingId(null);
   }
 
+  async function downloadCSV(format: string) {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    const res = await fetch(`/api/export?format=${format}`, {
+      headers: { Authorization: `Bearer ${session.access_token}` }
+    })
+    if (!res.ok) return
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `kartka-${format}-${new Date().toISOString().slice(0,10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   async function signOut() {
     await supabase.auth.signOut();
     router.push('/');
@@ -151,6 +167,12 @@ export default function DashboardPage() {
         <Link href="/stars" className="border border-white/10 text-white/40 px-5 py-2.5 rounded-xl text-sm hover:border-white/25 hover:text-white/60 transition-colors">
           📊 Історія зорь
         </Link>
+        <button onClick={() => downloadCSV('prom')} className="border border-white/10 text-white/35 px-5 py-2.5 rounded-xl text-sm hover:border-green-500/50 hover:text-green-400 transition-colors">
+          ⬇ CSV Prom.ua
+        </button>
+        <button onClick={() => downloadCSV('rozetka')} className="border border-white/10 text-white/35 px-5 py-2.5 rounded-xl text-sm hover:border-green-500/50 hover:text-green-400 transition-colors">
+          ⬇ CSV Rozetka
+        </button>
         <Link href="/auth/reset-password" className="border border-white/10 text-white/35 px-5 py-2.5 rounded-xl text-sm hover:border-white/25 hover:text-white/50 transition-colors">
           🔑 Змінити пароль
         </Link>

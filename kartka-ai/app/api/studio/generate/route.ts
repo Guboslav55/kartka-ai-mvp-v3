@@ -34,14 +34,18 @@ async function buildPhotoPrompt(
       role: 'user',
       content: [
         { type: 'image_url', image_url: { url: productBase64, detail: 'high' } },
-        { type: 'text', text: `You are a professional product photographer. Analyze this product.
+        { type: 'text', text: `You are a professional product photographer. Analyze this product image carefully.
 Product: "${productName}", Category: "${category}"
-Create a detailed DALL-E 3 prompt for: ${styleGuide}
+Create a detailed DALL-E 3 image generation prompt for: ${styleGuide}
 Photography style: ${photoGuide}
 Format: ${aspectNote}
-${wishes ? `Requirements: ${wishes}` : ''}
-The product must be the main subject. NO text, NO labels, NO watermarks.
-Return ONLY the prompt text, max 300 words.` }
+${wishes ? `Additional requirements (translate to English if needed): ${wishes}` : ''}
+RULES:
+- The product must be the main subject
+- CRITICAL: Write the prompt ONLY in English (translate product name if needed)
+- NO text, NO labels, NO watermarks in the image
+- Be specific about lighting, angles, colors, atmosphere
+Return ONLY the English prompt text, max 250 words.` }
       ]
     }],
     max_tokens: 400,
@@ -64,12 +68,16 @@ async function buildCardBgPrompt(
       role: 'user',
       content: [
         { type: 'image_url', image_url: { url: productBase64, detail: 'low' } },
-        { type: 'text', text: `Create a DALL-E 3 background for a product infographic card.
-Product: "${productName}", Benefits: ${bullets.slice(0,3).join(', ')}
-Style: ${styleNote}, Format: ${aspectNote}
-Background only — leave space for product image and text overlays.
-CRITICAL: NO text, NO words, NO letters anywhere. Background design only.
-Return ONLY the prompt, max 200 words.` }
+        { type: 'text', text: `Create a DALL-E 3 background design prompt for a product infographic card.
+Product type: translate "${productName}" to English if needed.
+Design style: ${styleNote}
+Format: ${aspectNote}
+RULES:
+- Background design ONLY — product image will be placed on top
+- CRITICAL: Write prompt ONLY in English
+- Absolutely NO text, NO letters, NO words anywhere in the image
+- Describe colors, textures, gradients, geometric elements
+Return ONLY the English design prompt, max 150 words.` }
       ]
     }],
     max_tokens: 300,
@@ -82,15 +90,25 @@ async function generateDalle(prompt: string, format: string): Promise<string | n
     '1:1': '1024x1024', '4:3': '1792x1024', '3:4': '1024x1792',
     '16:9': '1792x1024', '9:16': '1024x1792',
   }
+  // Ensure prompt is within limits and clean
+  const cleanPrompt = prompt.slice(0, 3800) + '\n\nIMPORTANT: Absolutely NO text, letters, words, labels anywhere in the image.'
   try {
     const res = await openai.images.generate({
       model: 'dall-e-3',
-      prompt: `${prompt}\n\nIMPORTANT: Absolutely NO text, letters, words, labels anywhere in the image.`,
+      prompt: cleanPrompt,
       size: sizeMap[format] || '1024x1024',
-      quality: 'hd', style: 'natural', n: 1,
+      quality: 'standard', style: 'natural', n: 1,
     })
     return res.data[0]?.url ?? null
-  } catch (e) { console.error('DALL-E error:', e); return null }
+  } catch (e: any) {
+    console.error('DALL-E error:', e?.message || e)
+    // Try with simpler prompt on failure
+    try {
+      const fallback = `Professional product photography, clean white studio background, ${format} format. NO text.`
+      const res2 = await openai.images.generate({ model: 'dall-e-3', prompt: fallback, size: sizeMap[format] || '1024x1024', quality: 'standard', n: 1 })
+      return res2.data[0]?.url ?? null
+    } catch { return null }
+  }
 }
 
 async function uploadUrl(supabase: ReturnType<typeof createClient>, url: string, userId: string): Promise<string> {

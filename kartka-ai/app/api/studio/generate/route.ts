@@ -205,6 +205,16 @@ export async function POST(req: NextRequest) {
       description: `AI Студія: ${productName.slice(0,30)} (${mode} ×${results.length})`
     })
 
+    // Save results to gallery DB
+    await supabase.from('studio_results').insert({
+      user_id: user.id,
+      product_name: productName.slice(0, 100),
+      mode,
+      urls: results,
+      stars_spent: totalCost,
+      settings: { displayStyle, photoStyle, cardStyle, format, count },
+    }).then(() => {})
+
     return NextResponse.json({ results, starsSpent: totalCost, newBalance: balance - totalCost })
   } catch (err: unknown) {
     console.error('Studio error:', err)

@@ -28,7 +28,7 @@ async function buildDallePrompt(imageBase64: string, productName: string, bullet
       model: 'gpt-4o',
       messages: [{ role: 'user', content: [
         { type: 'image_url', image_url: { url: imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`, detail: 'low' } },
-        { type: 'text', text: `Product: "${productName}". Features: ${bulletText}. Create a DALL-E 3 background prompt for ${variant} infographic. ${variantMap[variant]} Return only the prompt, max 200 words.` },
+        { type: 'text', text: `Product type: "${productName}" (translate to English if needed). Features: ${bulletText}. Create a DALL-E 3 background image prompt for ${variant} infographic style. ${variantMap[variant]} CRITICAL: Write the prompt ONLY in English. Return only the English prompt, max 200 words.` },
       ]}],
       max_tokens: 200,
     });

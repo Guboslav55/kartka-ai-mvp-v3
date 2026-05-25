@@ -144,14 +144,14 @@ export default function DashboardPage() {
             <span className="text-white/30 text-xs bg-white/5 px-2 py-1 rounded-full">2 ⭐</span>
           </div>
         </Link>
-        <Link href="/banner"
-          className="bg-white/[0.04] border border-white/10 rounded-2xl p-6 hover:border-white/20 transition-all hover:-translate-y-1 group">
-          <div className="text-3xl mb-3">🖼️</div>
-          <div className="font-display font-bold text-lg mb-1">Банер товару</div>
-          <div className="text-white/40 text-sm">Завантаж фото → AI генерує 2 банери</div>
+        <Link href="/studio"
+          className="bg-indigo-500/10 border border-indigo-500/30 rounded-2xl p-6 hover:bg-indigo-500/15 transition-all hover:-translate-y-1 group">
+          <div className="text-3xl mb-3">📸</div>
+          <div className="font-display font-bold text-lg mb-1">AI Фото-студія</div>
+          <div className="text-white/40 text-sm">На моделі, у магазині, раскладка, студійно</div>
           <div className="flex items-center justify-between mt-3">
-            <span className="text-white/40 text-sm font-semibold group-hover:text-white/60 group-hover:translate-x-1 transition-all">Створити банер →</span>
-            <span className="text-white/20 text-xs bg-white/5 px-2 py-1 rounded-full">скоро</span>
+            <span className="text-indigo-300 text-sm font-semibold group-hover:translate-x-1 transition-transform">Відкрити студію →</span>
+            <span className="text-white/30 text-xs bg-white/5 px-2 py-1 rounded-full">4 ⭐</span>
           </div>
         </Link>
       </div>

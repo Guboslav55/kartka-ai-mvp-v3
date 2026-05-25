@@ -82,7 +82,7 @@ function ResultGrid({ results, loading, loadingCount }: { results: string[]; loa
     </div>
   )
   return (
-    <div className={`grid gap-4 ${results.length + (loading ? loadingCount : 0) > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+    <div className={`grid gap-3 md:gap-4 ${results.length + (loading ? loadingCount : 0) > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
       {results.map((url, i) => (
         <div key={i} className="relative group rounded-2xl overflow-hidden bg-white/5 border border-white/10">
           <img src={url} alt="" className="w-full aspect-square object-cover" />
@@ -202,7 +202,7 @@ export default function StudioPage() {
   if (!ready) return <div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin"/></div>
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-[#0F0F1A]">
       {/* Header */}
       <header className="border-b border-white/8 px-6 py-3 flex items-center justify-between shrink-0">
         <Link href="/" className="font-display font-black text-lg text-gold">Картка<span className="text-white">АІ</span></Link>
@@ -214,9 +214,9 @@ export default function StudioPage() {
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
         {/* ── Left Panel ── */}
-        <div className="w-72 border-r border-white/8 overflow-y-auto p-5 space-y-6 shrink-0">
+        <div className="w-full md:w-72 border-b md:border-b-0 md:border-r border-white/8 overflow-y-auto p-4 md:p-5 space-y-5 md:space-y-6 md:shrink-0 max-h-[55vh] md:max-h-none">
 
           {/* Step 01 — Product */}
           <div>
@@ -402,7 +402,7 @@ export default function StudioPage() {
             <span className="text-white/25 text-xs font-mono ml-auto">03</span>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-8">
+          <div className="flex-1 overflow-y-auto p-4 md:p-8">
             {error && (
               <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-red-300 text-sm flex flex-wrap items-center justify-between gap-2">
                 <span>{error}</span>
@@ -413,7 +413,7 @@ export default function StudioPage() {
           </div>
 
           {/* Generate button */}
-          <div className="border-t border-white/8 px-8 py-4 flex items-center gap-4 shrink-0">
+          <div className="border-t border-white/8 px-4 md:px-8 py-3 md:py-4 flex flex-wrap items-center gap-3 shrink-0">
             <button onClick={generate} disabled={!canGenerate}
               className={`flex items-center gap-3 px-6 py-3 rounded-xl font-bold text-base transition-all ${canGenerate ? 'bg-gradient-to-r from-gold to-gold-light text-black hover:opacity-90 shadow-[0_4px_20px_rgba(200,168,75,0.3)]' : 'bg-white/10 text-white/30 cursor-not-allowed'}`}>
               {loading ? <span className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin"/> : '✦'}

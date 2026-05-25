@@ -146,6 +146,11 @@ export default function StudioPage() {
     })
     const h = (e: any) => setStarsBalance(e.detail.newBalance)
     window.addEventListener('stars-updated', h)
+
+    // Pick up wish from style-test quiz
+    const savedWish = localStorage.getItem('studio_wish')
+    if (savedWish) { setWishes(savedWish); localStorage.removeItem('studio_wish') }
+
     return () => window.removeEventListener('stars-updated', h)
   }, [])
 
@@ -274,20 +279,15 @@ export default function StudioPage() {
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-white/60 text-xs">Побажання</label>
                     <div className="relative">
-                      <button onClick={() => setShowAiMenu(v => !v)}
-                        className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
-                        {aiIdeaLoading ? <span className="w-3 h-3 border border-indigo-400 border-t-transparent rounded-full animate-spin"/> : '✨'} AI ідея
-                      </button>
-                      {showAiMenu && (
-                        <div className="absolute right-0 top-6 z-20 bg-[#1a1a2e] border border-white/15 rounded-xl p-3 w-52 shadow-xl">
-                          <p className="text-white font-semibold text-sm mb-1">Покращити побажання</p>
-                          <p className="text-white/40 text-xs mb-3">Оберіть режим генерації ідеї</p>
-                          <button onClick={() => getAiIdea('detailed')}
-                            className="w-full bg-gold text-black py-2 rounded-lg font-bold text-sm mb-2">Детальний опис</button>
-                          <button onClick={() => getAiIdea('random')}
-                            className="w-full bg-white/10 text-white py-2 rounded-lg text-sm">Випадкове побажання</button>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-1.5">
+                        <a href="/studio/style-test" className="text-xs text-gold hover:text-gold-light transition-colors border border-gold/30 px-2 py-1 rounded-lg">
+                          🎯 Пройти тест
+                        </a>
+                        <button onClick={() => getAiIdea('random')} disabled={aiIdeaLoading}
+                          className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+                          {aiIdeaLoading ? <span className="w-3 h-3 border border-indigo-400 border-t-transparent rounded-full animate-spin"/> : '✨'} Ідея
+                        </button>
+                      </div>
                     </div>
                   </div>
                   <textarea value={wishes} onChange={e => setWishes(e.target.value)} rows={3}

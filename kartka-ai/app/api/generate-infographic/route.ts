@@ -38,7 +38,7 @@ async function buildDallePrompt(imageBase64: string, productName: string, bullet
 
 async function generateBackground(prompt: string): Promise<Buffer | null> {
   try {
-    const res = await openai.images.generate({ model: 'dall-e-3', prompt: `${prompt} IMPORTANT: NO text, NO letters, NO words, NO labels anywhere.`, size: '1024x1024', quality: 'hd', style: 'natural', n: 1 });
+    const res = await openai.images.generate({ model: 'dall-e-3', prompt: `${prompt} IMPORTANT: NO text, NO letters, NO words, NO labels anywhere.`, size: '1024x1024', quality: 'standard', n: 1 });
     const url = res.data[0]?.url;
     if (!url) return null;
     return Buffer.from(await (await fetch(url)).arrayBuffer());

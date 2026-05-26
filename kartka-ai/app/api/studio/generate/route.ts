@@ -97,7 +97,7 @@ async function generateDalle(prompt: string, format: string): Promise<string | n
       model: 'dall-e-3',
       prompt: cleanPrompt,
       size: sizeMap[format] || '1024x1024',
-      quality: 'standard', style: 'natural', n: 1,
+      quality: 'standard', n: 1,
     })
     return res.data[0]?.url ?? null
   } catch (e: any) {

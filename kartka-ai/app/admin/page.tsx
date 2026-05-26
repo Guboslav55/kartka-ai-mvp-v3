@@ -36,10 +36,58 @@ type RecentUser = {
   created_at: string
 }
 
+
+function GiveStarsForm({ token }: { token: string }) {
+  const [email, setEmail] = useState('')
+  const [amount, setAmount] = useState('50')
+  const [reason, setReason] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [result, setResult] = useState<{ok: boolean, msg: string} | null>(null)
+
+  async function submit() {
+    if (!email || !amount) return
+    setLoading(true); setResult(null)
+    const res = await fetch('/api/admin/give-stars', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ targetEmail: email, amount: parseInt(amount), reason }),
+    })
+    const d = await res.json()
+    setResult({ ok: res.ok, msg: d.message || d.error })
+    if (res.ok) { setEmail(''); setReason('') }
+    setLoading(false)
+  }
+
+  return (
+    <div className="space-y-3">
+      <input value={email} onChange={e => setEmail(e.target.value)} placeholder="email юзера"
+        className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-sm placeholder-white/30 focus:outline-none focus:border-gold/50" />
+      <div className="flex gap-2">
+        {[10,25,50,100,500].map(n => (
+          <button key={n} onClick={() => setAmount(String(n))}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${amount===String(n) ? 'bg-gold text-black' : 'bg-white/8 text-white/60 hover:bg-white/15'}`}>
+            {n}⭐
+          </button>
+        ))}
+        <input value={amount} onChange={e => setAmount(e.target.value)} type="number" min="1"
+          className="w-20 bg-white/5 border border-white/10 rounded-lg px-2 text-white text-xs text-center focus:outline-none" />
+      </div>
+      <input value={reason} onChange={e => setReason(e.target.value)} placeholder="Причина (необов'язково)"
+        className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-sm placeholder-white/30 focus:outline-none" />
+      {result && <div className={`rounded-xl p-2.5 text-sm ${result.ok ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>{result.msg}</div>}
+      <button onClick={submit} disabled={loading || !email}
+        className="w-full bg-gold text-black py-2.5 rounded-xl font-bold text-sm hover:bg-gold-light disabled:opacity-50 transition-colors">
+        {loading ? 'Нараховую...' : `⭐ Нарахувати ${amount} зорь`}
+      </button>
+    </div>
+  )
+}
+
 export default function AdminPage() {
   const router = useRouter()
   const supabase = createClient()
   const [loading, setLoading] = useState(true)
+  const [token, setToken] = useState('')
   const [stats, setStats] = useState<Stats | null>(null)
   const [payments, setPayments] = useState<RecentPayment[]>([])
   const [users, setUsers] = useState<RecentUser[]>([])
@@ -201,11 +249,15 @@ export default function AdminPage() {
             </div>
           </div>
           <div className="bg-white/[0.03] border border-white/8 rounded-2xl p-6">
-            <h3 className="font-bold text-white mb-4">Швидкі дії</h3>
+            <h3 className="font-bold text-white mb-4">Видати зорі вручну</h3>
+            <GiveStarsForm token={token} />
+          </div>
+          <div className="bg-white/[0.03] border border-white/8 rounded-2xl p-6">
+            <h3 className="font-bold text-white mb-4">Швидкі посилання</h3>
             <div className="flex flex-wrap gap-3">
               <Link href="https://supabase.com/dashboard" target="_blank" className="bg-white/5 border border-white/10 text-white/60 px-4 py-2 rounded-xl text-sm hover:border-white/25 transition-colors">🗄️ Supabase</Link>
               <Link href="https://vercel.com" target="_blank" className="bg-white/5 border border-white/10 text-white/60 px-4 py-2 rounded-xl text-sm hover:border-white/25 transition-colors">▲ Vercel</Link>
-              <Link href="https://platform.openai.com/usage" target="_blank" className="bg-white/5 border border-white/10 text-white/60 px-4 py-2 rounded-xl text-sm hover:border-white/25 transition-colors">🤖 OpenAI Usage</Link>
+              <Link href="https://platform.openai.com/usage" target="_blank" className="bg-white/5 border border-white/10 text-white/60 px-4 py-2 rounded-xl text-sm hover:border-white/25 transition-colors">🤖 OpenAI</Link>
               <Link href="https://www.liqpay.ua" target="_blank" className="bg-white/5 border border-white/10 text-white/60 px-4 py-2 rounded-xl text-sm hover:border-white/25 transition-colors">💳 LiqPay</Link>
             </div>
           </div>

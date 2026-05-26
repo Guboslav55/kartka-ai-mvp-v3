@@ -1,54 +1,40 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
+import { NextRequest, NextResponse } from 'next/server'
 
-export async function middleware(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
+// Protected routes that require auth
+const PROTECTED = ['/dashboard', '/generate', '/studio', '/stars', '/referral', '/profile', '/gallery', '/admin', '/onboarding']
+// Public routes always accessible
+const PUBLIC = ['/', '/auth', '/pricing', '/sitemap.xml', '/robots.txt']
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() { return request.cookies.getAll(); },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          supabaseResponse = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          );
-        },
-      },
-    }
-  );
+export function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl
 
-  const { data: { user } } = await supabase.auth.getUser();
-  const path = request.nextUrl.pathname;
-
-  // Protect private routes
-  const protectedRoutes = ['/dashboard', '/generate', '/pricing', '/onboarding', '/banner', '/card'];
-  if (protectedRoutes.some(r => path.startsWith(r)) && !user) {
-    return NextResponse.redirect(new URL('/auth', request.url));
+  // Skip API routes, static files, Next.js internals
+  if (pathname.startsWith('/api/') || pathname.startsWith('/_next/') || pathname.startsWith('/favicon')) {
+    return NextResponse.next()
   }
 
-  // Auth page — if logged in go to dashboard, NOT to pricing or anywhere else
-  if (path === '/auth' && user) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+  // Check if protected route
+  const isProtected = PROTECTED.some(p => pathname.startsWith(p))
+  if (!isProtected) return NextResponse.next()
+
+  // Check for Supabase auth cookie
+  const authToken = req.cookies.get('sb-access-token')?.value
+    || req.cookies.get('supabase-auth-token')?.value
+    || req.cookies.get('sb-' + (process.env.NEXT_PUBLIC_SUPABASE_URL || '').split('//')[1]?.split('.')[0] + '-auth-token')?.value
+
+  // Also check localStorage-based auth via cookie set by app
+  const hasAuth = !!authToken || req.cookies.getAll().some(c => c.name.includes('auth-token') || c.name.includes('sb-'))
+
+  if (!hasAuth) {
+    const url = req.nextUrl.clone()
+    url.pathname = '/auth'
+    url.searchParams.set('redirect', pathname)
+    return NextResponse.redirect(url)
   }
 
-  // Root page — always accessible, never redirect
-  // (do NOT redirect logged-in users away from '/')
-
-  return supabaseResponse;
+  return NextResponse.next()
 }
 
 export const config = {
-  matcher: [
-    '/dashboard/:path*',
-    '/generate/:path*',
-    '/pricing/:path*',
-    '/onboarding/:path*',
-    '/banner/:path*',
-    '/card/:path*',
-    '/auth',
-  ],
-};
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.png$|.*\\.jpg$|.*\\.svg$).*)'],
+}

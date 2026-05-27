@@ -1,117 +1,127 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import OpenAI from 'openai';
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
-export const maxDuration = 120;
+export const maxDuration = 120
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const REPLICATE_TOKEN = process.env.REPLICATE_API_TOKEN;
+const TRYON_COST = 6 // зорі за приміряння
 
-const SCENE_PROMPTS: Record<string, string> = {
-  studio_white: 'professional studio photography with pure white seamless background, soft studio lighting from multiple angles, clean commercial look',
-  studio_gray: 'professional studio photography with light grey seamless background, soft diffused studio lighting, elegant minimalist setting',
-  loft: 'modern loft interior with exposed brick walls, large windows with natural light, industrial style furniture in background',
-  street: 'urban street setting, city background slightly blurred, natural daylight, modern city environment',
-  nature: 'outdoor nature setting, green park or forest background, soft natural sunlight, fresh outdoor atmosphere',
-  cafe: 'cozy cafe interior, warm ambient lighting, coffee shop atmosphere, bokeh background',
-};
+export async function POST(req: NextRequest) {
+  const token = req.headers.get('authorization')?.replace('Bearer ', '')
+  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-const MODEL_PROMPTS: Record<string, string> = {
-  woman_young: 'worn by a young woman in her mid-20s, confident pose, professional fashion model',
-  man_young: 'worn by a young man in his mid-20s, confident pose, professional fashion model',
-  woman_mid: 'worn by a woman in her late 30s, elegant pose, professional appearance',
-  man_mid: 'worn by a man in his late 30s, confident business pose, professional appearance',
-  no_model: 'displayed as a flat lay or on a mannequin, no model, product-focused photography',
-};
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { global: { headers: { Authorization: `Bearer ${token}` } } }
+  )
+  const { data: { user } } = await supabase.auth.getUser(token)
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-async function uploadImage(supabase: ReturnType<typeof createClient>, base64: string, userId: string): Promise<string | null> {
+  // Check balance
+  const { data: profile } = await supabase.from('users').select('stars_balance').eq('id', user.id).single()
+  const balance = profile?.stars_balance ?? 0
+  if (balance < TRYON_COST) {
+    return NextResponse.json({ error: `Недостатньо зорь (потрібно ${TRYON_COST} ⭐, є ${balance})`, needStars: true, balance }, { status: 402 })
+  }
+
+  const { personPhoto, clothingPhoto, category = 'upper_body' } = await req.json()
+  if (!personPhoto || !clothingPhoto) {
+    return NextResponse.json({ error: 'Потрібне фото людини та фото одягу' }, { status: 400 })
+  }
+
+  const REPLICATE_TOKEN = process.env.REPLICATE_API_TOKEN
+  if (!REPLICATE_TOKEN) {
+    return NextResponse.json({ error: 'Replicate API не налаштований. Додай REPLICATE_API_TOKEN в Vercel env.' }, { status: 503 })
+  }
+
+  // Upload images to get URLs for Replicate
+  async function uploadToStorage(base64: string, suffix: string): Promise<string | null> {
+    const match = base64.match(/^data:(image\/\w+);base64,(.+)$/s)
+    if (!match) return null
+    const mimeType = match[1]
+    const buf = Buffer.from(match[2], 'base64')
+    const fileName = `tryon/${user!.id}/${Date.now()}-${suffix}.${mimeType.split('/')[1]}`
+    const { error } = await supabase.storage.from('card-images').upload(fileName, buf, { contentType: mimeType })
+    if (error) return null
+    return supabase.storage.from('card-images').getPublicUrl(fileName).data.publicUrl
+  }
+
+  const [personUrl, clothingUrl] = await Promise.all([
+    uploadToStorage(personPhoto, 'person'),
+    uploadToStorage(clothingPhoto, 'clothing'),
+  ])
+
+  if (!personUrl || !clothingUrl) {
+    return NextResponse.json({ error: 'Помилка завантаження фото' }, { status: 500 })
+  }
+
+  // Call Replicate IDM-VTON
   try {
-    const match = base64.match(/^data:(image\/\w+);base64,(.+)$/s);
-    if (!match) return null;
-    const mimeType = match[1];
-    const ext = mimeType.split('/')[1] || 'jpg';
-    const buffer = Buffer.from(match[2], 'base64');
-    const fileName = `tryon/${userId}/${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from('card-images').upload(fileName, buffer, { contentType: mimeType, upsert: true });
-    if (error) return null;
-    return supabase.storage.from('card-images').getPublicUrl(fileName).data.publicUrl;
-  } catch { return null; }
-}
-
-async function buildPrompt(imageBase64: string, scene: string, model: string): Promise<string> {
-  const sceneDesc = SCENE_PROMPTS[scene] || SCENE_PROMPTS.studio_white;
-  const modelDesc = MODEL_PROMPTS[model] || MODEL_PROMPTS.woman_young;
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    messages: [{
-      role: 'user',
-      content: [
-        { type: 'image_url', image_url: { url: imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`, detail: 'high' } },
-        { type: 'text', text: `You are a professional fashion photographer creating marketplace product photos.
-Analyze this clothing/product and create a Flux Kontext editing prompt.
-Target scene: ${sceneDesc}
-Target model: ${modelDesc}
-CRITICAL RULES:
-- Keep the EXACT clothing/product - same colors, patterns, design
-- Do NOT change or alter the product itself
-- Only change: background, model, lighting, setting
-- Result must look like a professional e-commerce photo, square 1:1 format
-Return ONLY the English prompt for Flux Kontext, no explanation.` },
-      ],
-    }],
-    max_tokens: 400,
-    temperature: 0.7,
-  });
-  return response.choices[0]?.message?.content?.trim() || '';
-}
-
-async function runFlux(imageUrl: string, prompt: string): Promise<string | null> {
-  if (!REPLICATE_TOKEN) return null;
-  try {
-    const res = await fetch('https://api.replicate.com/v1/models/black-forest-labs/flux-kontext-pro/predictions', {
+    const prediction = await fetch('https://api.replicate.com/v1/predictions', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${REPLICATE_TOKEN}`, 'Content-Type': 'application/json', Prefer: 'wait' },
-      body: JSON.stringify({ input: { prompt, input_image: imageUrl, output_format: 'jpg', output_quality: 92, safety_tolerance: 2, aspect_ratio: '1:1' } }),
-    });
-    let p = await res.json() as { id?: string; status?: string; output?: string | string[]; error?: string };
-    const getUrl = (x: typeof p) => Array.isArray(x.output) ? x.output[0] : x.output || null;
-    if (p.status === 'succeeded') return getUrl(p);
-    if (!p.id) { console.error('Flux no id:', p.error); return null; }
-    for (let i = 0; i < 30; i++) {
-      await new Promise(r => setTimeout(r, 3000));
-      p = await (await fetch(`https://api.replicate.com/v1/predictions/${p.id}`, { headers: { Authorization: `Bearer ${REPLICATE_TOKEN}` } })).json() as typeof p;
-      if (p.status === 'succeeded' || p.status === 'failed' || p.status === 'canceled') break;
-    }
-    if (p.status !== 'succeeded') { console.error('Flux failed:', p.error); return null; }
-    return getUrl(p);
-  } catch (e) { console.error('Flux error:', e); return null; }
-}
+      headers: {
+        'Authorization': `Token ${REPLICATE_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        version: 'c871bb9b046607b680449ecbae55fd8c6d945e0a1948644bf2361b3d021d3ff4',
+        input: {
+          human_img: personUrl,
+          garm_img: clothingUrl,
+          garment_des: `${category} clothing item`,
+          is_checked: true,
+          is_checked_crop: false,
+          denoise_steps: 30,
+          seed: Math.floor(Math.random() * 999999),
+        },
+      }),
+    })
 
-export async function POST(req: NextRequest): Promise<NextResponse> {
-  try {
-    const token = req.headers.get('authorization')?.replace('Bearer ', '');
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      token ? { global: { headers: { Authorization: `Bearer ${token}` } } } : {},
-    );
-    let userId = 'anonymous';
-    if (token) {
-      const { data: { user } } = await supabase.auth.getUser(token);
-      if (user) userId = user.id;
+    const predData = await prediction.json()
+    if (!prediction.ok) {
+      return NextResponse.json({ error: predData.detail || 'Replicate error' }, { status: 500 })
     }
-    const { imageBase64, scene = 'studio_white', model = 'woman_young' } = await req.json() as { imageBase64?: string; scene?: string; model?: string };
-    if (!imageBase64) return NextResponse.json({ error: 'No image' }, { status: 400 });
-    const publicUrl = await uploadImage(supabase, imageBase64, userId);
-    if (!publicUrl) return NextResponse.json({ error: 'Upload failed' }, { status: 500 });
-    const prompt = await buildPrompt(imageBase64, scene, model);
-    if (!prompt) return NextResponse.json({ error: 'Prompt failed' }, { status: 500 });
-    console.log('TryOn prompt:', prompt.slice(0, 150));
-    const resultUrl = await runFlux(publicUrl, prompt);
-    if (!resultUrl) return NextResponse.json({ error: 'Flux failed' }, { status: 500 });
-    return NextResponse.json({ url: resultUrl, urls: [resultUrl] });
-  } catch (err: unknown) {
-    console.error('TryOn error:', err);
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Error' }, { status: 500 });
+
+    // Poll for result
+    let result = predData
+    let attempts = 0
+    while (result.status !== 'succeeded' && result.status !== 'failed' && attempts < 30) {
+      await new Promise(r => setTimeout(r, 3000))
+      const poll = await fetch(`https://api.replicate.com/v1/predictions/${result.id}`, {
+        headers: { 'Authorization': `Token ${REPLICATE_TOKEN}` },
+      })
+      result = await poll.json()
+      attempts++
+    }
+
+    if (result.status === 'failed' || !result.output) {
+      return NextResponse.json({ error: 'Генерація не вдалась. Спробуйте ще раз.' }, { status: 500 })
+    }
+
+    const outputUrl = Array.isArray(result.output) ? result.output[0] : result.output
+
+    // Download and save to our storage
+    const imgRes = await fetch(outputUrl)
+    const imgBuf = Buffer.from(await imgRes.arrayBuffer())
+    const savePath = `tryon/${user.id}/${Date.now()}-result.jpg`
+    await supabase.storage.from('card-images').upload(savePath, imgBuf, { contentType: 'image/jpeg' })
+    const { data: { publicUrl } } = supabase.storage.from('card-images').getPublicUrl(savePath)
+
+    // Deduct stars
+    await supabase.rpc('deduct_stars', { p_user_id: user.id, p_amount: TRYON_COST })
+    await supabase.from('star_transactions').insert({
+      user_id: user.id, type: 'spend', amount: -TRYON_COST,
+      description: 'AI Приміряння одягу',
+    })
+    // Save to gallery
+    await supabase.from('studio_results').insert({
+      user_id: user.id, product_name: 'AI Приміряння',
+      mode: 'tryon', urls: [publicUrl], stars_spent: TRYON_COST,
+    }).then(() => {})
+
+    return NextResponse.json({ url: publicUrl, starsSpent: TRYON_COST, newBalance: balance - TRYON_COST })
+  } catch (e: any) {
+    console.error('Tryon error:', e)
+    return NextResponse.json({ error: e.message || 'Помилка AI приміряння' }, { status: 500 })
   }
 }

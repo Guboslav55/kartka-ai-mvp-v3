@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
       }, { status: 402 });
     }
 
-    const { productName, category, features, platform, tone, lang, generateImage, uploadedPhoto, originalPhoto } = await req.json();
+    const { productName, category, features, platform, tone, lang, generateImage, uploadedPhoto, originalPhoto, projectId } = await req.json();
     if (!productName?.trim()) return NextResponse.json({ error: "Назва товару обов'язкова" }, { status: 400 });
 
     let processedImageUrl: string | null = null;
@@ -133,7 +133,7 @@ ${features ? `ХАРАКТЕРИСТИКИ ВІД ПРОДАВЦЯ: ${features}`
     }
 
     const [insertResult] = await Promise.all([
-      supabase.from('cards').insert({ user_id: user.id, product_name: productName, platform: platform ?? 'general', title: cardData.title, description: cardData.description, bullets: cardData.bullets, keywords: cardData.keywords ?? [], image_url: imageUrl, processed_image_url: processedImageUrl }).select('id').single(),
+      supabase.from('cards').insert({ user_id: user.id, product_name: productName, platform: platform ?? 'general', title: cardData.title, description: cardData.description, bullets: cardData.bullets, keywords: cardData.keywords ?? [], image_url: imageUrl, processed_image_url: processedImageUrl, project_id: projectId || null }).select('id').single(),
       supabase.from('users').update({ cards_left: Math.max(0, (profile.cards_left ?? 0) - (hasCardsLeft && !hasEnoughStars ? 1 : 0)), cards_total: (profile.cards_total ?? 0) + 1 }).eq('id', user.id),
     ]);
 

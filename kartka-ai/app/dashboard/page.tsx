@@ -172,6 +172,26 @@ export default function DashboardPage() {
             <span className="text-white/40 text-sm font-semibold group-hover:text-white/70 group-hover:translate-x-1 transition-all">Переглянути →</span>
           </div>
         </Link>
+        <Link href="/tryon"
+          className="bg-purple-500/10 border border-purple-500/20 rounded-2xl p-6 hover:bg-purple-500/15 transition-all hover:-translate-y-1 group">
+          <div className="text-3xl mb-3">👗</div>
+          <div className="font-display font-bold text-lg mb-1">AI Приміряння</div>
+          <div className="text-white/40 text-sm">Примір одяг на модель без фотосесії</div>
+          <div className="flex items-center justify-between mt-3">
+            <span className="text-purple-300 text-sm font-semibold group-hover:translate-x-1 transition-transform">Спробувати →</span>
+            <span className="text-white/30 text-xs bg-white/5 px-2 py-1 rounded-full">6 ⭐</span>
+          </div>
+        </Link>
+        <Link href="/video"
+          className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-6 hover:bg-rose-500/15 transition-all hover:-translate-y-1 group">
+          <div className="text-3xl mb-3">🎬</div>
+          <div className="font-display font-bold text-lg mb-1">AI Відео</div>
+          <div className="text-white/40 text-sm">Перетвори фото товару у відеоролик</div>
+          <div className="flex items-center justify-between mt-3">
+            <span className="text-rose-300 text-sm font-semibold group-hover:translate-x-1 transition-transform">Створити відео →</span>
+            <span className="text-white/30 text-xs bg-white/5 px-2 py-1 rounded-full">16 ⭐</span>
+          </div>
+        </Link>
       </div>
 
       {/* Extra actions */}

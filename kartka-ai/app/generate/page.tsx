@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import Link from 'next/link';
 import type { CardResult, Platform, Tone, Lang } from '@/types';
@@ -44,7 +44,8 @@ export default function GeneratePage() {
   const supabase = createClient();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(false)
+  const [projectId, setProjectId] = useState<string | null>(null);
   const [cardsLeft, setCardsLeft] = useState(0);
   const [starsBalance, setStarsBalance] = useState(0);
   const [accessToken, setAccessToken] = useState('');
@@ -76,7 +77,11 @@ export default function GeneratePage() {
   const [editLoading, setEditLoading] = useState(false);
   const editEndRef = useRef<HTMLDivElement>(null);
 
+  const searchParams = useSearchParams()
+
   useEffect(() => {
+    const pid = searchParams.get('project')
+    if (pid) setProjectId(pid)
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) { router.push('/auth'); return; }
       setAccessToken(session.access_token);
@@ -182,7 +187,7 @@ export default function GeneratePage() {
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify({ productName, category, features, platform, tone, lang, generateImage: genImage && !photoToSend, uploadedPhoto: photoToSend }),
+        body: JSON.stringify({ productName, category, features, platform, tone, lang, generateImage: genImage && !photoToSend, uploadedPhoto: photoToSend, projectId }),
       });
       const data = await res.json();
       if (!res.ok) {

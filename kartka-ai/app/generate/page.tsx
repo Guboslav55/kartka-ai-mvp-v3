@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import Link from 'next/link';
@@ -39,7 +39,7 @@ function PhotoStepBadge({ step }: { step: PhotoStep }) {
   );
 }
 
-export default function GeneratePage() {
+function GeneratePageInner() {
   const router = useRouter();
   const supabase = createClient();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -470,4 +470,16 @@ export default function GeneratePage() {
       )}
     </div>
   );
+}
+
+export default function GeneratePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin"/>
+      </div>
+    }>
+      <GeneratePageInner />
+    </Suspense>
+  )
 }

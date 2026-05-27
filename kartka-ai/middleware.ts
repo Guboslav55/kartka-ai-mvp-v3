@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 // Protected routes that require auth
-const PROTECTED = ['/dashboard', '/generate', '/studio', '/stars', '/referral', '/profile', '/gallery', '/admin', '/onboarding']
+const PROTECTED = ['/dashboard', '/generate', '/studio', '/stars', '/referral', '/profile', '/gallery', '/admin', '/onboarding', '/projects', '/card']
 // Public routes always accessible
 const PUBLIC = ['/', '/auth', '/pricing', '/sitemap.xml', '/robots.txt']
 

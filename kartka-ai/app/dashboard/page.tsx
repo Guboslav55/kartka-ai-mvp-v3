@@ -154,6 +154,24 @@ export default function DashboardPage() {
             <span className="text-white/30 text-xs bg-white/5 px-2 py-1 rounded-full">4 ⭐</span>
           </div>
         </Link>
+        <Link href="/projects"
+          className="bg-white/[0.04] border border-white/10 rounded-2xl p-6 hover:border-white/20 transition-all hover:-translate-y-1 group">
+          <div className="text-3xl mb-3">📁</div>
+          <div className="font-display font-bold text-lg mb-1">Проекти</div>
+          <div className="text-white/40 text-sm">Організуй картки по групах і платформах</div>
+          <div className="flex items-center justify-between mt-3">
+            <span className="text-white/40 text-sm font-semibold group-hover:text-white/70 group-hover:translate-x-1 transition-all">Мої проекти →</span>
+          </div>
+        </Link>
+        <Link href="/gallery"
+          className="bg-white/[0.04] border border-white/10 rounded-2xl p-6 hover:border-white/20 transition-all hover:-translate-y-1 group">
+          <div className="text-3xl mb-3">🖼️</div>
+          <div className="font-display font-bold text-lg mb-1">Галерея</div>
+          <div className="text-white/40 text-sm">Всі згенеровані зображення зі студії</div>
+          <div className="flex items-center justify-between mt-3">
+            <span className="text-white/40 text-sm font-semibold group-hover:text-white/70 group-hover:translate-x-1 transition-all">Переглянути →</span>
+          </div>
+        </Link>
       </div>
 
       {/* Extra actions */}
@@ -173,6 +191,9 @@ export default function DashboardPage() {
         <button onClick={() => downloadCSV('rozetka')} className="border border-white/10 text-white/35 px-5 py-2.5 rounded-xl text-sm hover:border-green-500/50 hover:text-green-400 transition-colors">
           ⬇ CSV Rozetka
         </button>
+        <Link href="/profile" className="border border-white/10 text-white/35 px-5 py-2.5 rounded-xl text-sm hover:border-white/25 hover:text-white/50 transition-colors">
+          👤 Профіль
+        </Link>
         <Link href="/auth/reset-password" className="border border-white/10 text-white/35 px-5 py-2.5 rounded-xl text-sm hover:border-white/25 hover:text-white/50 transition-colors">
           🔑 Змінити пароль
         </Link>

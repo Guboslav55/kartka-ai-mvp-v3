@@ -219,6 +219,10 @@ export default function CardPage() {
   const [starsBalance, setStarsBalance] = useState(0)
   const [allCopied, setAllCopied] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [downloadModal, setDownloadModal] = useState<string | null>(null) // imageUrl
+  const [dlFormat, setDlFormat] = useState('jpeg')
+  const [dlSize, setDlSize] = useState('original')
+  const [downloading, setDownloading] = useState(false)
   const [editMode, setEditMode] = useState(false)
   const [editTitle, setEditTitle] = useState('')
   const [editDesc, setEditDesc] = useState('')
@@ -325,6 +329,35 @@ export default function CardPage() {
       }
     } catch (e: any) { alert(e.message) }
     setRegenField(null)
+  }
+
+  async function downloadImage(imageUrl: string) {
+    setDownloading(true)
+    const sizeMap: Record<string, {width?: number; height?: number}> = {
+      original: {},
+      large: { width: 1200 },
+      medium: { width: 800 },
+      small: { width: 400 },
+      prom: { width: 1000, height: 1000 },
+      rozetka: { width: 1200, height: 1200 },
+    }
+    try {
+      const res = await fetch('/api/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ imageUrl, format: dlFormat, ...sizeMap[dlSize], quality: 90 }),
+      })
+      if (!res.ok) { alert('Помилка завантаження'); return }
+      const blob = await res.blob()
+      const ext = dlFormat === 'png' ? 'png' : dlFormat === 'webp' ? 'webp' : 'jpg'
+      const a = Object.assign(document.createElement('a'), {
+        href: URL.createObjectURL(blob),
+        download: `${card?.product_name?.slice(0,30) || 'image'}-${dlSize}.${ext}`
+      })
+      a.click()
+      setDownloadModal(null)
+    } catch (e: any) { alert(e.message) }
+    setDownloading(false)
   }
 
   async function deleteCard() {
@@ -522,8 +555,14 @@ export default function CardPage() {
         </button>
         <button onClick={downloadCSV}
           className="flex-1 min-w-0 bg-green-700 text-white py-3 rounded-xl font-semibold text-sm hover:bg-green-600 transition-colors">
-          ⬇ CSV для Prom.ua
+          ⬇ CSV
         </button>
+        {displayImage && (
+          <button onClick={() => setDownloadModal(displayImage)}
+            className="flex-1 min-w-0 bg-indigo-700 text-white py-3 rounded-xl font-semibold text-sm hover:bg-indigo-600 transition-colors">
+            🖼 Фото PNG/JPG
+          </button>
+        )}
         <Link href="/generate"
           className="flex-1 min-w-0 border border-white/15 text-white/60 py-3 rounded-xl font-semibold text-sm hover:border-white/30 text-center transition-colors">
           ↺ Нова картка
@@ -533,6 +572,38 @@ export default function CardPage() {
           {deleting ? '...' : '🗑'}
         </button>
       </div>
+      {/* Download Modal */}
+      {downloadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setDownloadModal(null)}>
+          <div className="bg-[#1A1A2E] border border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="font-bold text-white text-lg mb-5">⬇ Завантажити зображення</h3>
+            <div className="space-y-4">
+              <div>
+                <p className="text-white/50 text-xs mb-2">Формат</p>
+                <div className="flex gap-2">
+                  {[['jpeg','JPEG'],['png','PNG'],['webp','WebP']].map(([v,l]) => (
+                    <button key={v} onClick={() => setDlFormat(v)}
+                      className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-all ${dlFormat===v ? 'bg-gold text-black' : 'bg-white/8 text-white/60 hover:bg-white/15'}`}>{l}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-white/50 text-xs mb-2">Розмір</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {[['original','Оригінал'],['prom','Prom (1000×1000)'],['rozetka','Rozetka (1200×1200)'],['large','Велике (1200px)'],['medium','Середнє (800px)'],['small','Мале (400px)']].map(([v,l]) => (
+                    <button key={v} onClick={() => setDlSize(v)}
+                      className={`py-2 px-2 rounded-xl text-xs font-semibold text-center transition-all ${dlSize===v ? 'bg-indigo-600 text-white' : 'bg-white/8 text-white/50 hover:bg-white/15'}`}>{l}</button>
+                  ))}
+                </div>
+              </div>
+              <button onClick={() => downloadImage(downloadModal)} disabled={downloading}
+                className="w-full bg-gold text-black py-3 rounded-xl font-bold text-sm hover:bg-gold-light disabled:opacity-50 transition-all">
+                {downloading ? 'Завантажую...' : `⬇ Завантажити ${dlFormat.toUpperCase()}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

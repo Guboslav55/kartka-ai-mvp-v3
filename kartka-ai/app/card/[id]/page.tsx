@@ -74,6 +74,8 @@ function InfographicSection({
   )
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [regenField, setRegenField] = useState<string | null>(null)
+  const [freeRegens, setFreeRegens] = useState<number | null>(null)
   const [saved, setSaved] = useState(false)
 
   const hasPhoto = !!(card.processed_image_url || card.image_url)
@@ -300,6 +302,31 @@ export default function CardPage() {
     setSaving(false)
   }
 
+  async function regenField_fn(field: string) {
+    if (!card) return
+    setRegenField(field)
+    try {
+      const res = await fetch('/api/regenerate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ cardId: card.id, field, currentValue: Array.isArray((card as any)[field]) ? (card as any)[field].join(', ') : (card as any)[field], productName: card.product_name, platform: card.platform }),
+      })
+      const d = await res.json()
+      if (!res.ok) { alert(d.error || 'Помилка регенерації'); return }
+      setCard(prev => prev ? { ...prev, [field]: d.newValue } : prev)
+      if (field === 'title') setEditTitle(d.newValue)
+      if (field === 'description') setEditDesc(d.newValue)
+      if (field === 'bullets') setEditBullets(d.newValue)
+      if (field === 'keywords') setEditKeywords(Array.isArray(d.newValue) ? d.newValue.join(', ') : d.newValue)
+      setFreeRegens(d.freeLeft ?? null)
+      if (typeof d.newBalance === 'number') {
+        setStarsBalance(d.newBalance)
+        window.dispatchEvent(new CustomEvent('stars-updated', { detail: { newBalance: d.newBalance } }))
+      }
+    } catch (e: any) { alert(e.message) }
+    setRegenField(null)
+  }
+
   async function deleteCard() {
     if (!card || !confirm('Видалити цю картку?')) return
     setDeleting(true)
@@ -360,6 +387,12 @@ export default function CardPage() {
         </div>
       </div>
 
+      {/* Regen balance */}
+      {freeRegens !== null && (
+        <div className="text-xs text-white/30 text-right -mt-4 mb-4">
+          Безкоштовних регенерацій: <span className={freeRegens > 0 ? 'text-green-400' : 'text-white/30'}>{freeRegens}</span>/3
+        </div>
+      )}
       {/* Card header info */}
       <div className="flex items-center gap-3 mb-6">
         <span className="bg-white/8 text-white/50 text-xs font-semibold px-3 py-1.5 rounded-full">{platformLabel}</span>
@@ -394,6 +427,7 @@ export default function CardPage() {
             <div className="flex items-center gap-2">
               <span className="text-white/25 text-xs">{card.title.length}/80 симв.</span>
               <CopyBtn text={editMode ? editTitle : card.title} />
+                  <button onClick={() => regenField_fn('title')} disabled={regenField==='title'} className="text-xs px-2.5 py-1.5 rounded-lg border border-white/10 text-white/40 hover:border-indigo-500/50 hover:text-indigo-400 disabled:opacity-40 transition-all">{regenField==='title' ? '...'  : '↺'}</button>
             </div>
           </div>
           {editMode ? (
@@ -409,6 +443,7 @@ export default function CardPage() {
           <div className="flex items-center justify-between mb-2">
             <span className="text-white/40 text-xs font-bold uppercase tracking-wider">Опис</span>
             <CopyBtn text={editMode ? editDesc : card.description} />
+                  <button onClick={() => regenField_fn('description')} disabled={regenField==='description'} className="text-xs px-2.5 py-1.5 rounded-lg border border-white/10 text-white/40 hover:border-indigo-500/50 hover:text-indigo-400 disabled:opacity-40 transition-all">{regenField==='description' ? '...' : '↺'}</button>
           </div>
           {editMode ? (
             <textarea value={editDesc} onChange={e => setEditDesc(e.target.value)} rows={5}

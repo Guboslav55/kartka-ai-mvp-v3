@@ -63,7 +63,7 @@ async function buildCardBgPrompt(
   const aspectNote = format === '9:16' ? '9:16 vertical' : format === '16:9' ? '16:9 horizontal' : format
 
   const res = await openai.chat.completions.create({
-    model: 'gpt-4o',
+    model: 'gpt-4o-mini',
     messages: [{
       role: 'user',
       content: [

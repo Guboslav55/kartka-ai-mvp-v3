@@ -1,88 +1,43 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-export const maxDuration = 60;
-
-const REPLICATE_TOKEN = process.env.REPLICATE_API_TOKEN;
+import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(req: NextRequest) {
+  const { imageBase64 } = await req.json()
+  if (!imageBase64) return NextResponse.json({ error: 'No image' }, { status: 400 })
+
+  const REMOVE_BG_KEY = process.env.REMOVE_BG_API_KEY
+  if (!REMOVE_BG_KEY) {
+    return NextResponse.json({ imageBase64, skipped: true, reason: 'No REMOVE_BG_API_KEY' })
+  }
+
   try {
-    const authHeader = req.headers.get('authorization');
-    const token = authHeader?.replace('Bearer ', '');
-    if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const match = imageBase64.match(/^data:(image\/\w+);base64,(.+)$/s)
+    if (!match) return NextResponse.json({ imageBase64 })
 
-    const { imageBase64 } = await req.json();
-    if (!imageBase64) return NextResponse.json({ error: 'No image provided' }, { status: 400 });
-    if (!REPLICATE_TOKEN) return NextResponse.json({ error: 'Replicate token not configured' }, { status: 500 });
+    const imgBuf = Buffer.from(match[2], 'base64')
 
-    // Upload to Supabase to get public URL
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { global: { headers: { Authorization: `Bearer ${token}` } } }
-    );
-    const { data: { user } } = await supabase.auth.getUser(token);
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // Call Remove.bg
+    const formData = new FormData()
+    formData.append('image_file', new Blob([imgBuf], { type: match[1] }), 'image.jpg')
+    formData.append('size', 'auto')
 
-    const match = imageBase64.match(/^data:(image\/\w+);base64,(.+)$/s);
-    if (!match) return NextResponse.json({ error: 'Invalid image format' }, { status: 400 });
-
-    const mimeType = match[1];
-    const ext = mimeType.split('/')[1] || 'jpg';
-    const buffer = Buffer.from(match[2], 'base64');
-    const fileName = `temp/rembg/${user.id}/${Date.now()}.${ext}`;
-
-    await supabase.storage.from('card-images').upload(fileName, buffer, { contentType: mimeType, upsert: true });
-    const publicUrl = supabase.storage.from('card-images').getPublicUrl(fileName).data.publicUrl;
-
-    // Call Replicate with standard versioned endpoint
-    const createRes = await fetch('https://api.replicate.com/v1/predictions', {
+    const res = await fetch('https://api.remove.bg/v1.0/removebg', {
       method: 'POST',
-      headers: {
-        'Authorization': `Token ${REPLICATE_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        version: 'fb8af171cfa1616ddcf1242c093f9c46bcada5ad4cf6f2fbe8b81b330ec5c003',
-        input: { image: publicUrl },
-      }),
-    });
+      headers: { 'X-Api-Key': REMOVE_BG_KEY },
+      body: formData,
+    })
 
-    const prediction = await createRes.json();
-    console.log('Replicate create status:', prediction.status, 'error:', JSON.stringify(prediction.detail || prediction.error || ''));
-
-    if (!prediction.id) {
-      return NextResponse.json({ error: 'Replicate error: ' + JSON.stringify(prediction).slice(0, 200) }, { status: 500 });
+    if (!res.ok) {
+      const err = await res.text()
+      console.warn('Remove.bg error:', res.status, err)
+      return NextResponse.json({ imageBase64 }) // return original
     }
 
-    // Poll
-    let current = prediction;
-    let attempts = 0;
-    while (current.status !== 'succeeded' && current.status !== 'failed' && current.status !== 'canceled' && attempts < 30) {
-      await new Promise(r => setTimeout(r, 2000));
-      const pollRes = await fetch(
-        `https://api.replicate.com/v1/predictions/${current.id}`,
-        { headers: { 'Authorization': `Token ${REPLICATE_TOKEN}` } }
-      );
-      current = await pollRes.json();
-      attempts++;
-    }
+    const result = await res.arrayBuffer()
+    const base64 = Buffer.from(result).toString('base64')
 
-    if (current.status !== 'succeeded' || !current.output) {
-      console.error('Replicate failed:', JSON.stringify(current).slice(0, 300));
-      return NextResponse.json({ error: 'Background removal failed: ' + current.error }, { status: 500 });
-    }
-
-    const imgRes = await fetch(current.output);
-    const buf = await imgRes.arrayBuffer();
-    const b64 = Buffer.from(buf).toString('base64');
-    return NextResponse.json({ imageBase64: `data:image/png;base64,${b64}` });
-
-  } catch (err: unknown) {
-    console.error('Remove BG error:', err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Error removing background' },
-      { status: 500 }
-    );
+    return NextResponse.json({ imageBase64: `data:image/png;base64,${base64}` })
+  } catch (e: any) {
+    console.warn('Remove.bg error:', e.message)
+    return NextResponse.json({ imageBase64 }) // return original
   }
 }

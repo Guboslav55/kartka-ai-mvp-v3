@@ -101,10 +101,13 @@ async function generateDalle(prompt: string, format: string): Promise<string | n
     })
     return res.data[0]?.url ?? null
   } catch (e: any) {
-    console.error('DALL-E error:', e?.message || e)
-    // Try with simpler prompt on failure
+    const msg = e?.message || String(e)
+    console.error('DALL-E error:', msg)
+    if (msg.includes('does not exist') || msg.includes('billing') || msg.includes('quota') || msg.includes('access')) {
+      throw new Error('DALL-E 3 недоступний. Перевірте баланс OpenAI на platform.openai.com/usage та доступ до моделі.')
+    }
     try {
-      const fallback = `Professional product photography, clean white studio background, ${format} format. NO text.`
+      const fallback = `Professional product photography, clean white studio background. NO text.`
       const res2 = await openai.images.generate({ model: 'dall-e-3', prompt: fallback, size: sizeMap[format] || '1024x1024', quality: 'standard', n: 1 })
       return res2.data[0]?.url ?? null
     } catch { return null }

@@ -66,7 +66,14 @@ function InfographicSection({
 
   const [variants, setVariants] = useState<InfographicVariant[]>(
     VARIANTS.map(v => ({
-      url: (card.infographic_urls as any)?.[v.id] || '',
+      url: (() => {
+        try {
+          const urls = card.infographic_urls
+          if (!urls) return ''
+          if (Array.isArray(urls)) return ''
+          return (urls as Record<string,string>)[v.id] || ''
+        } catch { return '' }
+      })(),
       label: v.label,
       variant: v.id,
       generating: false,
@@ -105,16 +112,18 @@ function InfographicSection({
         setVariants(prev => prev.map(v => v.variant === variantId ? { ...v, url: d.url, generating: false } : v))
         onStarsSpent(d.starsSpent || 4)
         // Auto-save
-        const allUrls = variants.reduce((acc, v) => {
-          if (v.variant === variantId) acc[v.variant] = d.url
-          else if (v.url) acc[v.variant] = v.url
+        const updatedVariants = variants.map(v => v.variant === variantId ? {...v, url: d.url} : v)
+        const allUrls = updatedVariants.reduce((acc, v) => {
+          if (v.url) acc[v.variant] = v.url
           return acc
         }, {} as Record<string, string>)
-        await fetch('/api/generate-infographic', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ allVariants: allUrls, cardId: card.id }),
-        })
+        if (Object.keys(allUrls).length > 0) {
+          await fetch('/api/generate-infographic', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ allVariants: allUrls, cardId: card.id }),
+          })
+        }
       }
     } catch (e: any) { setError(e.message) }
     setVariants(prev => prev.map(v => v.variant === variantId ? { ...v, generating: false } : v))

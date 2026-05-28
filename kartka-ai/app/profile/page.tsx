@@ -21,7 +21,7 @@ export default function ProfilePage() {
       const { data: { user: auth } } = await supabase.auth.getUser()
       if (!auth) { router.push('/auth'); return }
       setUser(auth)
-      const { data } = await supabase.from('users').select('*').eq('id', auth.id).single()
+      const { data } = await supabase.from('users').select('id, email, plan, stars_balance, cards_total, account_code, telegram_chat_id, api_key').eq('id', auth.id).single()
       setProfile(data)
       setLoading(false)
     }
@@ -83,6 +83,44 @@ export default function ProfilePage() {
             <span className="text-white text-sm">{profile?.cards_total ?? 0}</span>
           </div>
         </div>
+      </div>
+
+      {/* API Key */}
+      <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-6 mb-5">
+        <h2 className="font-bold text-white mb-4 text-sm uppercase tracking-wider text-white/40">Public API</h2>
+        <div className="space-y-3">
+          <div className="bg-black/30 rounded-xl px-4 py-3 font-mono text-sm text-white/60 break-all flex items-center justify-between gap-2">
+            <span>{profile?.api_key || 'Генерується...'}</span>
+            {profile?.api_key && (
+              <button onClick={() => navigator.clipboard.writeText(profile.api_key)}
+                className="text-xs text-gold/70 hover:text-gold shrink-0 transition-colors">Копіювати</button>
+            )}
+          </div>
+          <p className="text-white/30 text-xs">Передавай через заголовок <code className="text-gold/60">X-API-Key</code> у запитах до <code className="text-white/40">/api/public/generate</code></p>
+        </div>
+      </div>
+
+      {/* Telegram */}
+      <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-6 mb-5">
+        <h2 className="font-bold text-white mb-4 text-sm uppercase tracking-wider text-white/40">Telegram</h2>
+        {profile?.telegram_chat_id ? (
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">✅</span>
+            <div>
+              <p className="text-white font-semibold text-sm">Telegram підключено</p>
+              <p className="text-white/40 text-xs mt-0.5">Chat ID: {profile.telegram_chat_id}</p>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <p className="text-white/50 text-sm mb-3">Підключи Telegram щоб перевіряти баланс і отримувати сповіщення</p>
+            <a href={`https://t.me/${process.env.NEXT_PUBLIC_TG_BOT_USERNAME || 'KartkaAI_bot'}?start=link`}
+              target="_blank" rel="noreferrer"
+              className="inline-flex items-center gap-2 bg-[#2AABEE] text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-[#229ED9] transition-colors">
+              <span>✈️</span> Підключити Telegram
+            </a>
+          </div>
+        )}
       </div>
 
       {/* Change password */}

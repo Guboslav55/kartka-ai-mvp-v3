@@ -105,7 +105,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
         {[
           { label: 'Зорі ⭐ →', value: starsBalance.toLocaleString('uk-UA'), cls: isLowStars ? 'text-red-400' : 'text-gold', href: '/stars' },
           { label: 'Тариф', value: PLAN_LABELS[plan], cls: PLAN_COLORS[plan] },
@@ -133,7 +133,7 @@ export default function DashboardPage() {
       )}
 
       {/* Main actions */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
         <Link href="/generate"
           className="bg-gold/10 border border-gold/30 rounded-2xl p-6 hover:bg-gold/15 transition-all hover:-translate-y-1 group">
           <div className="text-3xl mb-3">✏️</div>

@@ -94,10 +94,10 @@ async function generateDalle(prompt: string, format: string): Promise<string | n
   const cleanPrompt = prompt.slice(0, 3800) + '\n\nIMPORTANT: Absolutely NO text, letters, words, labels anywhere in the image.'
   try {
     const res = await openai.images.generate({
-      model: 'dall-e-3',
+      model: 'dall-e-2',
       prompt: cleanPrompt,
-      size: sizeMap[format] || '1024x1024',
-      quality: 'standard', n: 1,
+      size: '1024x1024',
+      n: 1,
     })
     return res.data[0]?.url ?? null
   } catch (e: any) {
@@ -108,7 +108,7 @@ async function generateDalle(prompt: string, format: string): Promise<string | n
     }
     try {
       const fallback = `Professional product photography, clean white studio background. NO text.`
-      const res2 = await openai.images.generate({ model: 'dall-e-3', prompt: fallback, size: sizeMap[format] || '1024x1024', quality: 'standard', n: 1 })
+      const res2 = await openai.images.generate({ model: 'dall-e-2', prompt: fallback, size: '1024x1024', n: 1 })
       return res2.data[0]?.url ?? null
     } catch { return null }
   }

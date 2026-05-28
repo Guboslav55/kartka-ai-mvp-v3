@@ -126,7 +126,7 @@ ${features ? `ХАРАКТЕРИСТИКИ ВІД ПРОДАВЦЯ: ${features}`
     if (!imageUrl && generateImage) {
       try {
         const imgPrompt = `Ultra-high quality professional product photography of "${productName}"${category ? ` (${category})` : ''}. Pure white seamless background. Soft studio lighting. Sharp focus. Commercial e-commerce style. STRICT: NO text, NO letters, NO words.`;
-        const imgRes = await openai.images.generate({ model: 'dall-e-3', prompt: imgPrompt, size: '1024x1024', quality: 'standard', n: 1 });
+        const imgRes = await openai.images.generate({ model: 'dall-e-2', prompt: imgPrompt, size: '1024x1024', n: 1 });
         const tempUrl = imgRes.data[0]?.url;
         if (tempUrl) imageUrl = await uploadDalleUrl(supabase, tempUrl, user.id);
       } catch (e) { console.warn('Image generation failed:', e); }

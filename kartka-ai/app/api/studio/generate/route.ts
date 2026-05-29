@@ -55,11 +55,11 @@ async function pollReplicate(id: string, token: string, max = 40): Promise<any> 
 
 async function runFluxKontext(imageUrl: string, prompt: string, token: string): Promise<string | null> {
   try {
-    const pred = await fetch('https://api.replicate.com/v1/predictions', {
+    // Use models endpoint for Flux Kontext Pro (official deployment)
+    const pred = await fetch('https://api.replicate.com/v1/models/black-forest-labs/flux-kontext-pro/predictions', {
       method: 'POST',
-      headers: { Authorization: `Token ${token}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Token ${token}`, 'Content-Type': 'application/json', 'Prefer': 'wait' },
       body: JSON.stringify({
-        version: 'black-forest-labs/flux-kontext-pro',
         input: { input_image: imageUrl, prompt, aspect_ratio: '1:1', output_format: 'jpg', output_quality: 90, safety_tolerance: 2 }
       })
     })
@@ -112,7 +112,10 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser(token)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { style='catalog', productPhoto, productPhotoUrl, productName='', category='', wishes='', count=1, marketplace='general' } = await req.json()
+    const { style: rawStyle, displayStyle, productPhoto, productPhotoUrl, productName='', category='', wishes='', count=1, marketplace='general' } = await req.json()
+    // Studio page sends displayStyle (from style selector) or photoStyle
+    const style = displayStyle || rawStyle || 'catalog'
+    console.log('Style received:', { rawStyle, displayStyle, resolvedStyle: style })
     if (!productName.trim()) return NextResponse.json({ error: 'Введіть назву товару' }, { status: 400 })
 
     let prodB64 = productPhoto || ''

@@ -143,9 +143,19 @@ export async function POST(req: NextRequest) {
       // All other styles: Flux Kontext transforms scene preserving product
       const publicUrl = await uploadForReplicate(supabase, prodB64, user.id)
       if (!publicUrl) return NextResponse.json({ error: 'Помилка завантаження фото' }, { status: 500 })
+      // Variation hints for each generation
+      const VARIATIONS = [
+        '',  // first: as described
+        'slightly different angle, different lighting mood, alternative composition',
+        'from a slightly different perspective, different background depth',
+        'different time of day lighting, alternative environment detail',
+      ]
+
       for (let i = 0; i < qty; i++) {
         try {
-          const prompt = await buildFluxPrompt(prodB64, productName, category, style, wishes)
+          const variationHint = VARIATIONS[i] || `variation ${i + 1}`
+          const prompt = await buildFluxPrompt(prodB64, productName, category, style,
+            wishes + (i > 0 ? `. ${variationHint}` : ''))
           const url = await runFluxKontext(publicUrl, prompt, REPLICATE)
           if (url) results.push(await saveResult(supabase, url, user.id))
         } catch (e) { console.error(`flux ${i}:`, e) }

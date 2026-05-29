@@ -84,14 +84,31 @@ function ResultGrid({ results, loading, loadingCount }: { results: string[]; loa
   return (
     <div className={`grid gap-3 md:gap-4 ${results.length + (loading ? loadingCount : 0) > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
       {results.map((url, i) => (
-        <div key={i} className="relative group rounded-2xl overflow-hidden bg-white/5 border border-white/10">
-          <img src={url} alt="" className="w-full aspect-square object-cover" />
-          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+        <div key={i}
+          className="relative group rounded-2xl overflow-hidden bg-white/5 border border-white/10 cursor-pointer hover:border-gold/40 transition-all hover:scale-[1.01]"
+          onClick={() => setLightbox(url)}>
+          <img src={url} alt={`result-${i+1}`} className="w-full aspect-square object-cover" />
+          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+            <span className="text-white text-2xl">🔍</span>
             <a href={url} download={`studio-${i+1}.jpg`} target="_blank" rel="noreferrer"
-              className="bg-white text-black px-4 py-2 rounded-xl font-semibold text-sm hover:bg-gray-100 transition-colors">⬇ Скачати</a>
+              onClick={e => e.stopPropagation()}
+              className="bg-white text-black px-4 py-2 rounded-xl text-sm font-bold hover:bg-gray-100">⬇ Завантажити</a>
           </div>
+          <div className="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded-full">{i+1}/{results.length}</div>
         </div>
       ))}
+      {/* Lightbox */}
+      {lightbox && (
+        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
+          <div className="relative max-w-3xl w-full" onClick={e => e.stopPropagation()}>
+            <img src={lightbox} alt="" className="w-full rounded-2xl object-contain max-h-[85vh]"/>
+            <div className="absolute top-3 right-3 flex gap-2">
+              <a href={lightbox} download="studio-result.jpg" target="_blank" rel="noreferrer"
+                className="bg-gold text-black px-4 py-2 rounded-xl text-sm font-bold">⬇ Завантажити</a>
+              <button onClick={() => setLightbox(null)} className="bg-white/20 text-white w-10 h-10 rounded-xl text-lg font-bold hover:bg-white/30">✕</button>
+            </div>
+          </div>
+        </div>}
       {loading && Array.from({ length: loadingCount }).map((_, i) => (
         <div key={`loading-${i}`} className="rounded-2xl bg-white/5 border border-white/10 aspect-square flex items-center justify-center">
           <div className="text-center"><div className="w-8 h-8 border-2 border-gold/30 border-t-gold rounded-full animate-spin mx-auto mb-2"/><p className="text-white/40 text-xs">Генерую...</p></div>
@@ -134,6 +151,7 @@ export default function StudioPage() {
   // Results
   const [loading, setLoading] = useState(false)
   const [progress, setProgress] = useState(0)
+  const [lightbox, setLightbox] = useState<string|null>(null)
   const [progressMsg, setProgressMsg] = useState('')
   const [results, setResults] = useState<string[]>([])
   const [error, setError] = useState('')
@@ -199,7 +217,7 @@ export default function StudioPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          mode, productPhoto: photos[0], productName, category, displayStyle,
+          mode, productPhoto: photos[0], productPhotos: photos, productName, category, displayStyle,
           wishes, photoStyle, cardStyle, bullets: bullets.filter(Boolean),
           format, count,
         }),

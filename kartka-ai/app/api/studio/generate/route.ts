@@ -7,52 +7,34 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 const COST = 4
 
 const STYLE_PROMPTS: Record<string, string> = {
-  catalog:   'Keep this exact clothing item and person unchanged. Change only the background to pure white seamless studio backdrop, add soft even studio lighting, professional ecommerce catalog photography. Preserve EVERY detail: exact print, logo text, colors, patterns, fabric texture.',
-  model:     'Keep this exact person and clothing unchanged. Change only the background to urban city street, soft bokeh buildings behind, natural daylight. Preserve EVERY detail: exact print text, logo, camo pattern, colors.',
-  store:     'Keep this exact clothing item unchanged. Change the background to premium fashion boutique interior, hang the item on a metal clothes rail hanger, minimal white store walls, soft retail lighting. Preserve EVERY detail: exact print text, logo, colors.',
-  flatlay:   'Keep these exact clothing items unchanged. Arrange them in a flat lay top-down composition on clean white marble surface, soft studio lighting from above. Preserve EVERY detail: exact prints, logos, text, camo colors.',
-  lifestyle: 'Keep this exact person and clothing unchanged. Change only the background to outdoor nature/park/mountains, golden hour natural lighting. Preserve EVERY detail: exact print text, logo, colors.',
-  outdoor:   'Keep this exact person and clothing unchanged. Change only the background to urban street with blurred city buildings, natural daylight. Preserve EVERY detail: exact print text, logo, camo pattern.',
-  dark:      'Keep this exact person and clothing unchanged. Change only the background to dark dramatic studio, professional rim lighting from behind. Preserve EVERY detail: exact print text, logo, colors.',
+  model:     'Keep this exact person and clothing completely unchanged. Change only the background to an urban lifestyle city street with blurred buildings, soft natural daylight. Preserve EVERY detail: exact clothing, print, logo, camo pattern, colors, person face.',
+  store:     'Keep this exact clothing completely unchanged. Change the setting so the clothing hangs on a premium chrome metal hanger in a minimalist fashion boutique interior, soft retail lighting. Preserve EVERY detail: exact print, logo, colors, fabric.',
+  flatlay:   'Keep this exact clothing completely unchanged. Show ONLY the clothing item (NO people, NO body parts, NO mannequin) neatly arranged on clean white marble photographed from directly above (strict 90-degree top-down). Soft even studio lighting. Preserve EVERY detail.',
+  catalog:   'Keep this exact clothing and person completely unchanged. Change only the background to pure seamless white studio backdrop with soft professional lighting. Preserve EVERY detail.',
+  outdoor:   'Keep this exact person and clothing completely unchanged. Change only the background to dramatic outdoor nature with mountains or forest, golden hour lighting. Preserve EVERY detail.',
+  dark:      'Keep this exact person and clothing completely unchanged. Change only the background to dark moody professional studio with dramatic rim lighting. Preserve EVERY detail.',
+  lifestyle: 'Keep this exact person and clothing completely unchanged. Change only the background to warm cozy lifestyle environment with natural bokeh. Preserve EVERY detail.',
 }
 
-async function buildFluxPrompt(photo: string, name: string, category: string, style: string, wishes: string, variationHint = ''): Promise<string> {
-  const base = STYLE_PROMPTS[style] || STYLE_PROMPTS.catalog
-
-  // Translate wishes to English
-  let wishesEn = ''
-  if (wishes.trim()) {
-    try {
-      const tr = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [{ role: 'user', content: `Translate this instruction to English for an AI image editor (keep exact meaning, be specific about visual details like colors, location, lighting): "${wishes}"` }],
-        max_tokens: 80,
-      })
-      wishesEn = tr.choices[0]?.message?.content?.trim() || wishes
-    } catch { wishesEn = wishes }
-  }
-
-  // IMPORTANT: Wishes come FIRST as primary instruction, then style
-  let prompt = ''
-  if (wishesEn) {
-    // Wishes override/modify the style
-    prompt = `${wishesEn}. ${base}`
-  } else {
-    prompt = base
-  }
-  if (variationHint) prompt += `. ${variationHint}`
-  prompt += '. Keep the exact clothing item, person, colors, logos and text identical.'
-
-  return prompt.slice(0, 600)
+async function translateWishes(wishes: string): Promise<string> {
+  if (!wishes.trim()) return ''
+  try {
+    const r = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: `Translate to English for AI image editor (keep exact visual meaning): "${wishes}"` }],
+      max_tokens: 80,
+    })
+    return r.choices[0]?.message?.content?.trim() || wishes
+  } catch { return wishes }
 }
 
-async function uploadForReplicate(supabase: ReturnType<typeof createClient>, b64: string, uid: string): Promise<string | null> {
+async function uploadPhoto(supabase: ReturnType<typeof createClient>, b64: string, uid: string, folder: string): Promise<string | null> {
   try {
     const m = b64.match(/^data:(image\/[\w+]+);base64,(.+)$/s)
     if (!m) return null
     const buf = Buffer.from(m[2], 'base64')
-    const fn = `replicate-input/${uid}/${Date.now()}.${m[1].split('/')[1]}`
-    const { error } = await supabase.storage.from('card-images').upload(fn, buf, { contentType: m[1] })
+    const fn = `${folder}/${uid}/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`
+    const { error } = await supabase.storage.from('card-images').upload(fn, buf, { contentType: 'image/jpeg' })
     if (error) return null
     return supabase.storage.from('card-images').getPublicUrl(fn).data.publicUrl
   } catch { return null }
@@ -70,22 +52,19 @@ async function pollReplicate(id: string, token: string, max = 40): Promise<any> 
 
 async function runFluxKontext(imageUrl: string, prompt: string, token: string): Promise<string | null> {
   try {
-    // Use models endpoint for Flux Kontext Pro (official deployment)
     const pred = await fetch('https://api.replicate.com/v1/models/black-forest-labs/flux-kontext-pro/predictions', {
       method: 'POST',
-      headers: { Authorization: `Token ${token}`, 'Content-Type': 'application/json', 'Prefer': 'wait' },
-      body: JSON.stringify({
-        input: { input_image: imageUrl, prompt, aspect_ratio: '1:1', output_format: 'jpg', output_quality: 90, safety_tolerance: 2 }
-      })
+      headers: { Authorization: `Token ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: { input_image: imageUrl, prompt, aspect_ratio: '1:1', output_format: 'jpg', output_quality: 90, safety_tolerance: 2 } })
     })
-    if (!pred.ok) { const e = await pred.json(); console.error('Flux error:', e.detail); return null }
+    if (!pred.ok) { const e = await pred.json(); console.error('Flux:', e.detail); return null }
     const result = await pollReplicate((await pred.json()).id, token)
     if (result.status !== 'succeeded' || !result.output) return null
     return Array.isArray(result.output) ? result.output[0] : result.output
-  } catch (e) { console.error('Flux exception:', e); return null }
+  } catch (e) { console.error('Flux:', e); return null }
 }
 
-async function makeCatalogPhoto(b64: string, rmbgKey?: string): Promise<Buffer> {
+async function makeCatalog(b64: string, rmbgKey?: string): Promise<Buffer> {
   const sharp = (await import('sharp')).default
   const m = b64.match(/^data:(image\/[\w+]+);base64,(.+)$/s)
   let prodBuf = m ? Buffer.from(m[2], 'base64') : Buffer.from(b64, 'base64')
@@ -95,112 +74,172 @@ async function makeCatalogPhoto(b64: string, rmbgKey?: string): Promise<Buffer> 
       fd.append('image_file', new Blob([prodBuf], { type: m?.[1] || 'image/jpeg' }), 'p.jpg')
       fd.append('size', 'auto')
       const r = await fetch('https://api.remove.bg/v1.0/removebg', { method: 'POST', headers: { 'X-Api-Key': rmbgKey }, body: fd })
-      if (r.ok) { prodBuf = Buffer.from(await r.arrayBuffer()); console.log('BG removed') }
+      if (r.ok) prodBuf = Buffer.from(await r.arrayBuffer())
     } catch {}
   }
-  const SIZE = 1200, PAD = 96
-  const resized = await sharp(prodBuf).resize(SIZE - PAD*2, SIZE - PAD*2, { fit: 'contain', background: { r:0, g:0, b:0, alpha:0 } }).png().toBuffer()
-  const shadow = Buffer.from(`<svg width="${SIZE}" height="${SIZE}"><ellipse cx="${SIZE/2}" cy="${SIZE-PAD*0.6}" rx="${SIZE*0.28}" ry="${SIZE*0.025}" fill="rgba(0,0,0,0.07)"/></svg>`)
-  return sharp({ create: { width:SIZE, height:SIZE, channels:4, background:{r:248,g:248,b:248,alpha:255} } })
-    .composite([{ input:resized, top:PAD, left:PAD }, { input:shadow, top:0, left:0 }])
-    .jpeg({ quality:95 }).toBuffer()
+  const SIZE = 1200, PAD = 100
+  const resized = await sharp(prodBuf).resize(SIZE-PAD*2, SIZE-PAD*2, { fit:'contain', background:{r:0,g:0,b:0,alpha:0} }).png().toBuffer()
+  const shadow = Buffer.from(`<svg width="${SIZE}" height="${SIZE}"><ellipse cx="${SIZE/2}" cy="${SIZE-PAD*0.5}" rx="${SIZE*0.28}" ry="${SIZE*0.02}" fill="rgba(0,0,0,0.07)"/></svg>`)
+  return sharp({ create:{width:SIZE,height:SIZE,channels:4,background:{r:248,g:248,b:248,alpha:255}} })
+    .composite([{input:resized,top:PAD,left:PAD},{input:shadow,top:0,left:0}])
+    .jpeg({quality:95}).toBuffer()
 }
 
-async function saveResult(supabase: ReturnType<typeof createClient>, data: Buffer | string, uid: string, folder = 'studio'): Promise<string> {
+async function makeCard(bgUrl: string, prodB64: string, name: string, bullets: string[], cardStyle: string): Promise<Buffer> {
+  const sharp = (await import('sharp')).default
+  const bgBuf = Buffer.from(await (await fetch(bgUrl)).arrayBuffer())
+  const CANVAS = 1080
+  const bg = await sharp(bgBuf).resize(CANVAS, CANVAS, { fit:'cover', position:'center' }).toBuffer()
+  const m = prodB64.match(/^data:(image\/[\w+]+);base64,(.+)$/s)
+  if (!m) return bg
+  const prodBuf = Buffer.from(m[2], 'base64')
+  const prodMeta = await sharp(prodBuf).metadata()
+  const prodAspect = (prodMeta.width||512)/(prodMeta.height||512)
+  const photoH = Math.round(CANVAS*0.92)
+  const photoW = Math.round(photoH*Math.min(prodAspect,0.65))
+  const prodResized = await sharp(prodBuf).resize(photoW, photoH, {fit:'contain',background:{r:0,g:0,b:0,alpha:0}}).png().toBuffer()
+  const esc = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  const accent = cardStyle==='premium' ? '#c9a84c' : '#FFD700'
+  const bs = bullets.filter(Boolean).slice(0,5)
+  const bulletsSvg = bs.map((b,i)=>{
+    const clean = b.replace(/^[•✓\-]\s*/,'').slice(0,38).toUpperCase()
+    const y = 220+i*140
+    return `<rect x="32" y="${y}" width="${Math.min(clean.length*16+70,440)}" height="110" rx="14" fill="rgba(0,0,0,0.82)"/>
+<circle cx="72" cy="${y+55}" r="27" fill="${accent}"/>
+<text x="72" y="${y+63}" text-anchor="middle" font-family="Arial Black,Arial,sans-serif" font-size="20" font-weight="900" fill="#000">${i+1}</text>
+<text x="115" y="${y+48}" font-family="Arial Black,Arial,sans-serif" font-size="18" font-weight="900" fill="#fff">${esc(clean)}</text>`
+  }).join('\n')
+  const svg = `<svg width="${CANVAS}" height="${CANVAS}" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<linearGradient id="gl" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(0,0,0,0.92)"/><stop offset="55%" stop-color="rgba(0,0,0,0.70)"/><stop offset="100%" stop-color="rgba(0,0,0,0.0)"/></linearGradient>
+<linearGradient id="gt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(0,0,0,0.6)"/><stop offset="100%" stop-color="rgba(0,0,0,0.0)"/></linearGradient>
+<linearGradient id="gb" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(0,0,0,0.0)"/><stop offset="100%" stop-color="rgba(0,0,0,0.88)"/></linearGradient>
+</defs>
+<rect width="${CANVAS}" height="${CANVAS}" fill="url(#gl)"/>
+<rect width="${CANVAS}" height="160" fill="url(#gt)"/>
+<rect y="${CANVAS-150}" width="${CANVAS}" height="150" fill="url(#gb)"/>
+<rect x="0" y="0" width="8" height="${CANVAS}" fill="${accent}"/>
+<text x="48" y="105" font-family="Arial Black,Arial,sans-serif" font-size="58" font-weight="900" fill="#fff" letter-spacing="-2">${esc(name.slice(0,20).toUpperCase())}</text>
+<rect x="48" y="130" width="220" height="5" rx="3" fill="${accent}"/>
+${bulletsSvg}
+<rect x="0" y="${CANVAS-75}" width="${CANVAS}" height="75" fill="${accent}"/>
+<text x="${CANVAS/2}" y="${CANVAS-24}" text-anchor="middle" font-family="Arial Black,Arial,sans-serif" font-size="22" font-weight="900" fill="#000">РОЗМІРИ: XS · S · M · L · XL · XXL · 3XL</text>
+</svg>`
+  const photoLeft = CANVAS-photoW-5
+  const photoTop = Math.max(0,Math.round((CANVAS-photoH)/2))
+  return sharp(bg).composite([{input:prodResized,top:photoTop,left:photoLeft,blend:'over'},{input:Buffer.from(svg),top:0,left:0}]).jpeg({quality:94}).toBuffer()
+}
+
+async function saveBuf(supabase: ReturnType<typeof createClient>, buf: Buffer, uid: string, folder: string): Promise<string> {
   try {
-    const sharp = (await import('sharp')).default
-    let buf: Buffer
-    if (typeof data === 'string') { const r = await fetch(data); buf = Buffer.from(await r.arrayBuffer()) }
-    else buf = data
-    const fn = `${folder}/${uid}/${Date.now()}.jpg`
-    const processed = await sharp(buf).jpeg({ quality:93 }).toBuffer()
-    await supabase.storage.from('card-images').upload(fn, processed, { contentType:'image/jpeg' })
+    const fn=`${folder}/${uid}/${Date.now()}.jpg`
+    await supabase.storage.from('card-images').upload(fn,buf,{contentType:'image/jpeg'})
     return supabase.storage.from('card-images').getPublicUrl(fn).data.publicUrl
-  } catch { return typeof data === 'string' ? data : `data:image/jpeg;base64,${data.toString('base64')}` }
+  } catch { return `data:image/jpeg;base64,${buf.toString('base64')}` }
+}
+
+async function saveUrl(supabase: ReturnType<typeof createClient>, url: string, uid: string, folder: string): Promise<string> {
+  try {
+    const sharp=(await import('sharp')).default
+    const buf=Buffer.from(await (await fetch(url)).arrayBuffer())
+    const fn=`${folder}/${uid}/${Date.now()}.jpg`
+    const p=await sharp(buf).jpeg({quality:93}).toBuffer()
+    await supabase.storage.from('card-images').upload(fn,p,{contentType:'image/jpeg'})
+    return supabase.storage.from('card-images').getPublicUrl(fn).data.publicUrl
+  } catch { return url }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const token = req.headers.get('authorization')?.replace('Bearer ', '')
-    if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { global: { headers: { Authorization: `Bearer ${token}` } } })
-    const { data: { user } } = await supabase.auth.getUser(token)
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const token=req.headers.get('authorization')?.replace('Bearer ','')
+    if(!token) return NextResponse.json({error:'Unauthorized'},{status:401})
+    const supabase=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,{global:{headers:{Authorization:`Bearer ${token}`}}})
+    const {data:{user}}=await supabase.auth.getUser(token)
+    if(!user) return NextResponse.json({error:'Unauthorized'},{status:401})
 
-    const { style: rawStyle, displayStyle, productPhoto, productPhotos, productPhotoUrl, productName='', category='', wishes='', count=1, marketplace='general' } = await req.json()
-    // Use multiple photos if available (different angles for different variations)
-    const allPhotos: string[] = productPhotos?.length ? productPhotos : (productPhoto ? [productPhoto] : [])
-    // Studio page sends displayStyle (from style selector) or photoStyle
-    const style = displayStyle || rawStyle || 'catalog'
-    console.log('Style received:', { rawStyle, displayStyle, resolvedStyle: style })
-    if (!productName.trim()) return NextResponse.json({ error: 'Введіть назву товару' }, { status: 400 })
+    const {mode='photo',displayStyle='catalog',productPhoto,productPhotos,productPhotoUrl,productName='',category='',wishes='',count=1,cardStyle='classic',bullets=[],marketplace='general'}=await req.json()
 
-    let prodB64 = (productPhotos?.[0]) || productPhoto || ''
-    if (!prodB64 && productPhotoUrl) {
-      try { const r = await fetch(productPhotoUrl); const buf = Buffer.from(await r.arrayBuffer()); prodB64 = `data:${r.headers.get('content-type')||'image/jpeg'};base64,${buf.toString('base64')}` } catch {}
+    if(!productName.trim()) return NextResponse.json({error:'Введіть назву товару'},{status:400})
+
+    const allPhotos:string[]=productPhotos?.length?productPhotos:(productPhoto?[productPhoto]:[])
+    if(!allPhotos.length&&productPhotoUrl){
+      try{const r=await fetch(productPhotoUrl);const buf=Buffer.from(await r.arrayBuffer());allPhotos.push(`data:${r.headers.get('content-type')||'image/jpeg'};base64,${buf.toString('base64')}`)}catch{}
     }
-    if (!prodB64) return NextResponse.json({ error: 'Завантажте фото товару' }, { status: 400 })
+    if(!allPhotos.length) return NextResponse.json({error:'Завантажте фото товару'},{status:400})
 
-    // Always generate requested count, reuse photos with different variations if needed
-    const qty = Math.min(Math.max(1, count), 4)
-    const { data: profile } = await supabase.from('users').select('stars_balance').eq('id', user.id).single()
-    const balance = profile?.stars_balance ?? 0
-    if (balance < COST * qty) return NextResponse.json({ error: `Недостатньо зорь (${COST*qty} ⭐)`, needStars:true, balance }, { status: 402 })
+    const qty=Math.min(Math.max(1,count),4)
+    const {data:profile}=await supabase.from('users').select('stars_balance').eq('id',user.id).single()
+    const balance=profile?.stars_balance??0
+    if(balance<COST*qty) return NextResponse.json({error:`Недостатньо зорь (${COST*qty} ⭐)`,needStars:true,balance},{status:402})
 
-    const REPLICATE = process.env.REPLICATE_API_TOKEN
-    const RMBG = process.env.REMOVE_BG_API_KEY
-    const results: string[] = []
+    const REPLICATE=process.env.REPLICATE_API_TOKEN
+    const RMBG=process.env.REMOVE_BG_API_KEY
+    const results:string[]=[]
 
-    if (style === 'catalog' && !REPLICATE) {
-      // Catalog fallback: remove.bg + white background (no Replicate)
-      for (let i = 0; i < qty; i++) {
-        try { const buf = await makeCatalogPhoto(prodB64, RMBG); results.push(await saveResult(supabase, buf, user.id)) }
-        catch (e) { console.error('catalog:', e) }
-      }
-    } else if (REPLICATE) {
-      // All other styles: Flux Kontext transforms scene preserving product
-      const publicUrl = await uploadForReplicate(supabase, prodB64, user.id)
-      if (!publicUrl) return NextResponse.json({ error: 'Помилка завантаження фото' }, { status: 500 })
-      // Variation hints for each generation
-      const VARIATIONS = [
-        '',  // first: as described
-        'slightly different angle, different lighting mood, alternative composition',
-        'from a slightly different perspective, different background depth',
-        'different time of day lighting, alternative environment detail',
-      ]
+    if(mode==='card'){
+      const prodB64=allPhotos[0]
+      const cardBullets=(bullets as string[]).filter(Boolean)
+      if(!cardBullets.length) return NextResponse.json({error:'Додайте хоча б одну перевагу для карточки'},{status:400})
 
-      // Pre-upload all photos for Replicate
-      const photoUrls: string[] = []
-      for (const p of allPhotos.slice(0, qty)) {
-        const u = await uploadForReplicate(supabase, p, user.id)
-        if (u) photoUrls.push(u)
-      }
-      if (!photoUrls.length) return NextResponse.json({ error: 'Помилка завантаження фото' }, { status: 500 })
+      for(let i=0;i<qty;i++){
+        try{
+          let bgUrl:string|null=null
+          // Try gpt-image-1 for background
+          try{
+            const bgRes=await openai.images.generate({model:'gpt-image-1',prompt:`Abstract ${cardStyle==='premium'?'dark luxury gold accent':'bold dynamic colorful'} marketing background for product card. No people, no products, no text. Unique variation ${i+1}.`,size:'1024x1024',quality:'medium',n:1} as any)
+            const bgItem=bgRes.data[0] as any
+            if(bgItem?.url) bgUrl=bgItem.url
+            else if(bgItem?.b64_json){
+              const buf=Buffer.from(bgItem.b64_json,'base64')
+              bgUrl=await saveBuf(supabase,buf,user.id,'card-bg') 
+            }
+          }catch(e){console.error('bg gen:',e)}
 
-      for (let i = 0; i < qty; i++) {
-        try {
-          // Use different photo angle for each variation
-          const photoForThisGen = photoUrls[i % photoUrls.length]
-          const b64ForPrompt = allPhotos[i % allPhotos.length] || prodB64
-          const variationHint = i > 0 ? (VARIATIONS[i] || `variation ${i + 1}`) : ''
-          const prompt = await buildFluxPrompt(b64ForPrompt, productName, category, style, wishes, variationHint)
-          const url = await runFluxKontext(photoForThisGen, prompt, REPLICATE)
-          if (url) results.push(await saveResult(supabase, url, user.id))
-        } catch (e) { console.error(`flux ${i}:`, e) }
+          if(!bgUrl) continue
+          const cardBuf=await makeCard(bgUrl,prodB64,productName,cardBullets,cardStyle)
+          results.push(await saveBuf(supabase,cardBuf,user.id,'cards'))
+        }catch(e){console.error(`card ${i}:`,e)}
       }
     } else {
-      return NextResponse.json({ error: 'Для цього стилю потрібен REPLICATE_API_TOKEN у Vercel. Стиль "Каталог" доступний без нього.', needReplicate: true }, { status: 503 })
+      const wishesEn=await translateWishes(wishes)
+
+      if(displayStyle==='catalog'&&!REPLICATE){
+        for(let i=0;i<qty;i++){
+          try{const b64=allPhotos[i%allPhotos.length];const buf=await makeCatalog(b64,RMBG);results.push(await saveBuf(supabase,buf,user.id,'studio'))}
+          catch(e){console.error(`catalog ${i}:`,e)}
+        }
+      } else if(REPLICATE){
+        const photoUrls:string[]=[]
+        for(const p of allPhotos){const u=await uploadPhoto(supabase,p,user.id,'replicate-input');if(u)photoUrls.push(u)}
+        if(!photoUrls.length) return NextResponse.json({error:'Помилка завантаження фото'},{status:500})
+
+        const VARIATIONS=['','slightly different angle, different lighting mood','alternative perspective, different background depth','different time of day, alternative environment']
+        for(let i=0;i<qty;i++){
+          try{
+            const photoUrl=photoUrls[i%photoUrls.length]
+            const base=STYLE_PROMPTS[displayStyle]||STYLE_PROMPTS.catalog
+            const variation=i>0?(VARIATIONS[i]||`unique variation ${i+1}`):''
+            let prompt=wishesEn?`${wishesEn}. ${base}`:base
+            if(variation) prompt+=`. ${variation}`
+            console.log(`[${i+1}] ${displayStyle}:`,prompt.slice(0,80))
+            const url=await runFluxKontext(photoUrl,prompt.slice(0,600),REPLICATE)
+            if(url) results.push(await saveUrl(supabase,url,user.id,'studio'))
+          }catch(e){console.error(`flux ${i}:`,e)}
+        }
+      } else {
+        return NextResponse.json({error:'Для цього стилю потрібен REPLICATE_API_TOKEN в Vercel env.',needReplicate:true},{status:503})
+      }
     }
 
-    if (!results.length) return NextResponse.json({ error: 'Генерація не вдалась. Спробуйте ще раз.' }, { status: 500 })
-    const spent = COST * results.length
-    await supabase.rpc('deduct_stars', { p_user_id: user.id, p_amount: spent })
-    await supabase.from('star_transactions').insert({ user_id:user.id, type:'spend', amount:-spent, description:`AI Студія: ${productName.slice(0,35)} (${style} x${results.length})` })
-    await supabase.from('studio_results').insert({ user_id:user.id, product_name:productName.slice(0,100), mode:style, urls:results, stars_spent:spent, settings:{style,count:results.length,marketplace} }).then(()=>{})
-    return NextResponse.json({ results, starsSpent:spent, newBalance:balance-spent, count:results.length })
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Server error'
-    console.error('Studio error:', msg)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    if(!results.length) return NextResponse.json({error:'Генерація не вдалась. Спробуйте ще раз.'},{status:500})
+    const spent=COST*results.length
+    await supabase.rpc('deduct_stars',{p_user_id:user.id,p_amount:spent})
+    await supabase.from('star_transactions').insert({user_id:user.id,type:'spend',amount:-spent,description:`AI Студія: ${productName.slice(0,35)} (${mode}/${displayStyle} x${results.length})`})
+    await supabase.from('studio_results').insert({user_id:user.id,product_name:productName.slice(0,100),mode:mode==='card'?'card':displayStyle,urls:results,stars_spent:spent,settings:{displayStyle,mode,count:results.length,marketplace}}).then(()=>{})
+    return NextResponse.json({results,starsSpent:spent,newBalance:balance-spent,count:results.length})
+  }catch(err:unknown){
+    const msg=err instanceof Error?err.message:'Server error'
+    console.error('Studio error:',msg)
+    return NextResponse.json({error:msg},{status:500})
   }
 }

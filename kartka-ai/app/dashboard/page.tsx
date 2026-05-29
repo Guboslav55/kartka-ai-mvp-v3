@@ -192,6 +192,16 @@ export default function DashboardPage() {
             <span className="text-white/30 text-xs bg-white/5 px-2 py-1 rounded-full">16 ⭐</span>
           </div>
         </Link>
+        <Link href="/generate-model"
+          className="bg-pink-500/10 border border-pink-500/20 rounded-2xl p-6 hover:bg-pink-500/15 transition-all hover:-translate-y-1 group">
+          <div className="text-3xl mb-3">🧍</div>
+          <div className="font-display font-bold text-lg mb-1">AI Моделі</div>
+          <div className="text-white/40 text-sm">Генерація моделей з вибором статі, віку, пози</div>
+          <div className="flex items-center justify-between mt-3">
+            <span className="text-pink-300 text-sm font-semibold group-hover:translate-x-1 transition-transform">Генерувати →</span>
+            <span className="text-white/30 text-xs bg-white/5 px-2 py-1 rounded-full">8 ⭐</span>
+          </div>
+        </Link>
       </div>
 
       {/* Extra actions */}

@@ -41,3 +41,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ imageBase64 }) // return original
   }
 }
+
+// Additional function for BRIA RMBG via Replicate
+export async function removeBgReplicate(imageUrl: string, replicateToken: string): Promise<string | null> {
+  try {
+    const pred = await fetch('https://api.replicate.com/v1/predictions', {
+      method: 'POST',
+      headers: { Authorization: `Token ${replicateToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        version: 'a029dff38972b5fda4ec5d15c20c8c5945c8c12aa0f06d0bfc4f48fdc3ed7461',
+        input: { image: imageUrl }
+      })
+    })
+    const predData = await pred.json()
+    if (!pred.ok) return null
+
+    let result = predData
+    for (let i = 0; i < 20; i++) {
+      await new Promise(r => setTimeout(r, 2000))
+      const poll = await fetch(`https://api.replicate.com/v1/predictions/${result.id}`, {
+        headers: { Authorization: `Token ${replicateToken}` }
+      })
+      result = await poll.json()
+      if (result.status === 'succeeded' || result.status === 'failed') break
+    }
+
+    return result.status === 'succeeded' ? (result.output || null) : null
+  } catch { return null }
+}

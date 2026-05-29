@@ -47,6 +47,34 @@ export async function POST(req: NextRequest) {
     mimeType = 'image/jpeg'; ext = 'jpg'
   }
 
+  // Add watermark for free users
+  if (isFree) {
+    try {
+      const meta = await sharp(outputBuf).metadata()
+      const w = meta.width || 800
+      const h = meta.height || 800
+      const fontSize = Math.round(w * 0.025)
+      const watermark = Buffer.from(`<svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">
+        <text x="${w-10}" y="${h-10}" text-anchor="end" font-family="Arial" font-size="${fontSize}" fill="rgba(255,255,255,0.5)" font-weight="bold">КарткаАІ</text>
+      </svg>`)
+      outputBuf = await sharp(outputBuf).composite([{ input: watermark, gravity: 'southeast' }]).jpeg({ quality }).toBuffer()
+    } catch {}
+  }
+
+  // Add watermark for free users
+  if (isFree) {
+    try {
+      const meta = await sharp(outputBuf).metadata()
+      const w = meta.width || 800
+      const h = meta.height || 800
+      const fontSize = Math.round(w * 0.025)
+      const watermark = Buffer.from(`<svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">
+        <text x="${w-10}" y="${h-10}" text-anchor="end" font-family="Arial" font-size="${fontSize}" fill="rgba(255,255,255,0.5)" font-weight="bold">КарткаАІ</text>
+      </svg>`)
+      outputBuf = await sharp(outputBuf).composite([{ input: watermark, gravity: 'southeast' }]).jpeg({ quality }).toBuffer()
+    } catch {}
+  }
+
   return new NextResponse(outputBuf, {
     headers: {
       'Content-Type': mimeType,

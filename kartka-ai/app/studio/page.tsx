@@ -166,6 +166,217 @@ function ResultGrid({ results, loading, loadingCount }: { results: string[]; loa
   )
 }
 
+// ─── Canvas Card Renderer (Canva-style engine) ────────────────────────────────
+// Renders infographic card client-side using HTML Canvas
+// Supports Cyrillic, custom layouts, dynamic colors
+async function renderCardCanvas(
+  bgUrl: string,
+  productB64: string,
+  name: string,
+  bullets: string[],
+  cardStyle: string,
+  layoutIdx: number
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const CANVAS = 1080
+    const canvas = document.createElement('canvas')
+    canvas.width = CANVAS
+    canvas.height = CANVAS
+    const ctx = canvas.getContext('2d')!
+
+    const accent = cardStyle === 'premium' ? '#c9a84c' : '#FFD700'
+    const isDark = true
+    const textColor = '#FFFFFF'
+    const layout = layoutIdx % 4
+    const bs = bullets.filter(Boolean).slice(0, 5)
+    const title = name.slice(0, 24).toUpperCase()
+
+    function drawRoundedRect(x: number, y: number, w: number, h: number, r: number, fill: string) {
+      ctx.beginPath()
+      ctx.moveTo(x + r, y)
+      ctx.lineTo(x + w - r, y)
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r)
+      ctx.lineTo(x + w, y + h - r)
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
+      ctx.lineTo(x + r, y + h)
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r)
+      ctx.lineTo(x, y + r)
+      ctx.quadraticCurveTo(x, y, x + r, y)
+      ctx.closePath()
+      ctx.fillStyle = fill
+      ctx.fill()
+    }
+
+    function drawGradient(x: number, y: number, w: number, h: number, fromColor: string, toColor: string, horizontal = false) {
+      const grad = horizontal
+        ? ctx.createLinearGradient(x, y, x + w, y)
+        : ctx.createLinearGradient(x, y, x, y + h)
+      grad.addColorStop(0, fromColor)
+      grad.addColorStop(1, toColor)
+      ctx.fillStyle = grad
+      ctx.fillRect(x, y, w, h)
+    }
+
+    function drawBullets(startX: number, startY: number, maxW: number, spacing = 130) {
+      bs.forEach((b, i) => {
+        const clean = b.replace(/^[•✓\-]\s*/, '')
+        const by = startY + i * spacing
+        // Background pill
+        const textW = Math.min(clean.length * 14 + 90, maxW)
+        drawRoundedRect(startX, by, textW, 112, 14, 'rgba(0,0,0,0.82)')
+        // Number circle
+        ctx.beginPath()
+        ctx.arc(startX + 46, by + 56, 30, 0, Math.PI * 2)
+        ctx.fillStyle = accent
+        ctx.fill()
+        ctx.fillStyle = '#000'
+        ctx.font = 'bold 22px Arial, sans-serif'
+        ctx.textAlign = 'center'
+        ctx.fillText(String(i + 1), startX + 46, by + 63)
+        ctx.textAlign = 'left'
+        // Bullet text
+        ctx.fillStyle = textColor
+        ctx.font = '20px Arial, sans-serif'
+        const words = clean.split(' ')
+        let line = '', lineY = by + 46
+        for (const word of words) {
+          const test = line ? line + ' ' + word : word
+          if (ctx.measureText(test).width > maxW - 100 && line) {
+            ctx.fillText(line, startX + 88, lineY)
+            line = word; lineY += 26
+          } else line = test
+        }
+        if (line) ctx.fillText(line, startX + 88, lineY)
+      })
+    }
+
+    function drawTitle(x: number, y: number, fontSize = 64) {
+      ctx.font = `bold ${fontSize}px Arial Black, Arial, sans-serif`
+      ctx.fillStyle = textColor
+      ctx.fillText(title, x, y)
+      // Accent line
+      ctx.fillStyle = accent
+      ctx.fillRect(x, y + 10, Math.min(title.length * (fontSize * 0.52), 320), 6)
+    }
+
+    function drawBottomBar() {
+      ctx.fillStyle = accent
+      ctx.fillRect(0, CANVAS - 78, CANVAS, 78)
+      ctx.fillStyle = '#000000'
+      ctx.font = 'bold 24px Arial Black, Arial, sans-serif'
+      ctx.textAlign = 'center'
+      ctx.fillText('РОЗМІРИ: XS · S · M · L · XL · 2XL · 3XL', CANVAS / 2, CANVAS - 26)
+      ctx.textAlign = 'left'
+    }
+
+    function drawAccentBar(x: number, y: number, w: number, h: number) {
+      ctx.fillStyle = accent
+      ctx.fillRect(x, y, w, h)
+    }
+
+    function composite(bgImg: HTMLImageElement, prodImg: HTMLImageElement) {
+      ctx.drawImage(bgImg, 0, 0, CANVAS, CANVAS)
+
+      // Layout-specific overlays and product placement
+      let prodX = 0, prodY = 0, prodW = 0, prodH = 0
+
+      if (layout === 0) {
+        // Product RIGHT, text LEFT
+        const aspect = prodImg.width / prodImg.height
+        prodH = Math.round(CANVAS * 0.9)
+        prodW = Math.round(prodH * Math.min(aspect, 0.62))
+        prodX = CANVAS - prodW - 5
+        prodY = Math.round((CANVAS - prodH) / 2)
+        drawGradient(0, 0, CANVAS, CANVAS, 'rgba(0,0,0,0.92)', 'rgba(0,0,0,0)', true)
+        drawAccentBar(0, 0, 9, CANVAS)
+        drawTitle(48, 110)
+        drawBullets(28, 240, 460)
+        drawBottomBar()
+      } else if (layout === 1) {
+        // Product LEFT, text RIGHT
+        const aspect = prodImg.width / prodImg.height
+        prodH = Math.round(CANVAS * 0.85)
+        prodW = Math.round(prodH * Math.min(aspect, 0.58))
+        prodX = 8; prodY = Math.round((CANVAS - prodH) / 2)
+        const tx = prodW + 40
+        drawGradient(0, 0, CANVAS, CANVAS, 'rgba(0,0,0,0)', 'rgba(0,0,0,0.92)', true)
+        drawAccentBar(CANVAS - 9, 0, 9, CANVAS)
+        ctx.font = 'bold 54px Arial Black, Arial, sans-serif'
+        ctx.fillStyle = textColor
+        ctx.fillText(title, tx, 120)
+        ctx.fillStyle = accent
+        ctx.fillRect(tx, 140, 220, 5)
+        drawBullets(tx, 200, CANVAS - tx - 20, 140)
+        drawBottomBar()
+      } else if (layout === 2) {
+        // Product center-right, bullets 2x2 grid bottom-left
+        const aspect = prodImg.width / prodImg.height
+        prodH = Math.round(CANVAS * 0.76)
+        prodW = Math.round(prodH * Math.min(aspect, 0.62))
+        prodX = CANVAS - prodW - 20; prodY = Math.round((CANVAS - prodH) / 2)
+        drawGradient(0, 0, CANVAS, CANVAS, 'rgba(0,0,0,0.9)', 'rgba(0,0,0,0.15)', true)
+        drawAccentBar(0, 0, CANVAS, 9)
+        drawAccentBar(0, CANVAS - 9, CANVAS, 9)
+        drawTitle(40, 95, 60)
+        // 2x2 bullet grid
+        bs.slice(0, 4).forEach((b, i) => {
+          const clean = b.replace(/^[•✓\-]\s*/, '')
+          const bx = 30 + (i % 2) * 255, by = CANVAS - 360 + Math.floor(i / 2) * 148
+          drawRoundedRect(bx, by, 240, 130, 14, 'rgba(0,0,0,0.85)')
+          ctx.fillStyle = accent; ctx.font = 'bold 20px Arial'; ctx.fillText(`${i+1}.`, bx + 14, by + 48)
+          ctx.fillStyle = textColor; ctx.font = '17px Arial'
+          const words = clean.split(' '); let line = '', ly = by + 48
+          for (const w of words) {
+            const t = line ? line + ' ' + w : w
+            if (ctx.measureText(t).width > 190 && line) { ctx.fillText(line, bx + 38, ly); line = w; ly += 22 }
+            else line = t
+          }
+          if (line) ctx.fillText(line, bx + 38, ly)
+        })
+      } else {
+        // Diagonal split: product fills right, dark band left
+        const aspect = prodImg.width / prodImg.height
+        prodH = CANVAS; prodW = Math.round(CANVAS * 0.7)
+        prodX = CANVAS - prodW; prodY = 0
+        drawGradient(0, 0, CANVAS * 0.52, CANVAS, 'rgba(0,0,0,0.96)', 'rgba(0,0,0,0)', true)
+        drawAccentBar(0, 0, 9, CANVAS)
+        drawTitle(42, 110)
+        drawBullets(30, 230, 490, 118)
+        drawBottomBar()
+      }
+
+      // Draw product photo
+      if (prodW > 0 && prodH > 0) {
+        ctx.drawImage(prodImg, prodX, prodY, prodW, prodH)
+      }
+
+      resolve(canvas.toDataURL('image/jpeg', 0.92))
+    }
+
+    // Load both images
+    const bgImg = new Image()
+    bgImg.crossOrigin = 'anonymous'
+
+    const prodImg = new Image()
+
+    let bgLoaded = false, prodLoaded = false
+    const tryComposite = () => { if (bgLoaded && prodLoaded) composite(bgImg, prodImg) }
+
+    bgImg.onload = () => { bgLoaded = true; tryComposite() }
+    bgImg.onerror = reject
+
+    prodImg.onload = () => { prodLoaded = true; tryComposite() }
+    prodImg.onerror = () => {
+      // Use placeholder if product load fails
+      prodLoaded = true
+      tryComposite()
+    }
+
+    bgImg.src = bgUrl
+    prodImg.src = productB64
+  })
+}
+
 export default function StudioPage() {
   const router = useRouter()
   const supabase = createClient()
@@ -272,6 +483,24 @@ export default function StudioPage() {
       if (!res.ok) {
         setError(d.error || 'Помилка')
         if (d.needStars) setStarsBalance(d.balance ?? 0)
+      } else if (d.mode === 'card' && d.backgroundUrls?.length) {
+        // CARD MODE: render on Canvas client-side (proper font support)
+        setProgressMsg('Збираю карточки...')
+        const cardResults: string[] = []
+        for (let i = 0; i < d.backgroundUrls.length; i++) {
+          try {
+            const dataUrl = await renderCardCanvas(
+              d.backgroundUrls[i], d.productPhoto,
+              d.productName, d.bullets, d.cardStyle, i
+            )
+            cardResults.push(dataUrl)
+          } catch (e) { console.error('Canvas render error:', e) }
+        }
+        setResults(cardResults)
+        if (typeof d.newBalance === 'number') {
+          setStarsBalance(d.newBalance)
+          window.dispatchEvent(new CustomEvent('stars-updated', { detail: { newBalance: d.newBalance } }))
+        }
       } else {
         setResults(d.results || [])
         if (typeof d.newBalance === 'number') {

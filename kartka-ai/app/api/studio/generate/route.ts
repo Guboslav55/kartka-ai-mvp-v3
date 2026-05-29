@@ -16,19 +16,29 @@ const STYLE_PROMPTS: Record<string, string> = {
   dark:      'Keep this exact person and clothing unchanged. Change only the background to dark dramatic studio, professional rim lighting from behind. Preserve EVERY detail: exact print text, logo, colors.',
 }
 
-async function buildFluxPrompt(photo: string, name: string, category: string, style: string, wishes: string): Promise<string> {
+async function buildFluxPrompt(photo: string, name: string, category: string, style: string, wishes: string, variationHint = ''): Promise<string> {
   const base = STYLE_PROMPTS[style] || STYLE_PROMPTS.catalog
-  try {
-    const res = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: [
-        { type: 'image_url', image_url: { url: photo, detail: 'low' } },
-        { type: 'text', text: `Product: "${name}", Category: "${category}". Style: "${style}". ${wishes ? `Extra: "${wishes}"` : ''}\n\nEnhance this Flux image-editing prompt (must preserve EXACT product/colors/prints/logos):\n"${base}"\n\nCRITICAL: The prompt MUST emphasize preserving exact logo text, print pattern, colors. Return ONLY enhanced English prompt under 80 words:` }
-      ]}],
-      max_tokens: 120, temperature: 0.5,
-    })
-    return res.choices[0]?.message?.content?.trim() || base
-  } catch { return base }
+
+  // Translate wishes to English if not empty
+  let wishesEn = ''
+  if (wishes.trim()) {
+    try {
+      const tr = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: `Translate to English (1-2 sentences max, keep the meaning exactly): "${wishes}"` }],
+        max_tokens: 60,
+      })
+      wishesEn = tr.choices[0]?.message?.content?.trim() || wishes
+    } catch { wishesEn = wishes }
+  }
+
+  // Build prompt directly without GPT rewriting (more reliable)
+  let prompt = base
+  if (wishesEn) prompt += `. Additional requirement: ${wishesEn}`
+  if (variationHint) prompt += `. ${variationHint}`
+  prompt += '. Preserve exact product details, logo, text, colors unchanged.'
+
+  return prompt.slice(0, 500)
 }
 
 async function uploadForReplicate(supabase: ReturnType<typeof createClient>, b64: string, uid: string): Promise<string | null> {
@@ -126,7 +136,11 @@ export async function POST(req: NextRequest) {
     }
     if (!prodB64) return NextResponse.json({ error: 'Завантажте фото товару' }, { status: 400 })
 
-    const qty = Math.min(Math.max(1, count), 4)
+    // If fewer photos than count - limit to avoid exact duplicates
+    const effectiveQty = Math.min(Math.max(1, count), 4)
+    const qty = allPhotos.length > 0 && allPhotos.length < effectiveQty
+      ? allPhotos.length  // limit to unique photos available
+      : effectiveQty
     const { data: profile } = await supabase.from('users').select('stars_balance').eq('id', user.id).single()
     const balance = profile?.stars_balance ?? 0
     if (balance < COST * qty) return NextResponse.json({ error: `Недостатньо зорь (${COST*qty} ⭐)`, needStars:true, balance }, { status: 402 })
@@ -166,9 +180,8 @@ export async function POST(req: NextRequest) {
           // Use different photo angle for each variation
           const photoForThisGen = photoUrls[i % photoUrls.length]
           const b64ForPrompt = allPhotos[i % allPhotos.length] || prodB64
-          const variationHint = VARIATIONS[i] || `variation ${i + 1}`
-          const prompt = await buildFluxPrompt(b64ForPrompt, productName, category, style,
-            wishes + (i > 0 ? `. ${variationHint}` : ''))
+          const variationHint = i > 0 ? (VARIATIONS[i] || `variation ${i + 1}`) : ''
+          const prompt = await buildFluxPrompt(b64ForPrompt, productName, category, style, wishes, variationHint)
           const url = await runFluxKontext(photoForThisGen, prompt, REPLICATE)
           if (url) results.push(await saveResult(supabase, url, user.id))
         } catch (e) { console.error(`flux ${i}:`, e) }

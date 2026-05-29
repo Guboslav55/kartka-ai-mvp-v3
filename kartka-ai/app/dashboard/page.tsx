@@ -202,6 +202,26 @@ export default function DashboardPage() {
             <span className="text-white/30 text-xs bg-white/5 px-2 py-1 rounded-full">8 ⭐</span>
           </div>
         </Link>
+        <Link href="/upscale"
+          className="bg-cyan-500/10 border border-cyan-500/20 rounded-2xl p-6 hover:bg-cyan-500/15 transition-all hover:-translate-y-1 group">
+          <div className="text-3xl mb-3">🔍</div>
+          <div className="font-display font-bold text-lg mb-1">Покращення якості</div>
+          <div className="text-white/40 text-sm">RealESRGAN ×2 або ×4 збільшення роздільності</div>
+          <div className="flex items-center justify-between mt-3">
+            <span className="text-cyan-300 text-sm font-semibold group-hover:translate-x-1 transition-transform">Покращити →</span>
+            <span className="text-white/30 text-xs bg-white/5 px-2 py-1 rounded-full">2 ⭐</span>
+          </div>
+        </Link>
+        <Link href="/editor"
+          className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-6 hover:bg-amber-500/15 transition-all hover:-translate-y-1 group">
+          <div className="text-3xl mb-3">🎨</div>
+          <div className="font-display font-bold text-lg mb-1">Редактор</div>
+          <div className="text-white/40 text-sm">Canvas editor з шарами, текстом та фігурами</div>
+          <div className="flex items-center justify-between mt-3">
+            <span className="text-amber-300 text-sm font-semibold group-hover:translate-x-1 transition-transform">Відкрити →</span>
+            <span className="text-white/30 text-xs bg-white/5 px-2 py-1 rounded-full">free</span>
+          </div>
+        </Link>
       </div>
 
       {/* Extra actions */}

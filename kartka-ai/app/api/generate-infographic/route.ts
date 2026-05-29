@@ -31,14 +31,26 @@ Return ONLY the English prompt (max 150 words):` }
 }
 
 async function genBg(prompt: string): Promise<Buffer | null> {
+  const cleanPrompt = `${prompt}\n\nNO text, NO words, NO letters anywhere.`
+  // Try gpt-image-1 first
   try {
-    const r = await openai.images.generate({ model:'dall-e-2', prompt:`${prompt}\n\nNO text, NO words, NO letters anywhere.`, size:'1024x1024', n:1 })
-    const url = r.data[0]?.url
-    if (!url) return null
-    return Buffer.from(await (await fetch(url)).arrayBuffer())
-  } catch(e:any) {
-    console.error('DALL-E infographic:', e?.message)
+    const r = await openai.images.generate({ model:'gpt-image-1', prompt:cleanPrompt, size:'1024x1024', quality:'medium', n:1 } as any)
+    const item = r.data[0] as any
+    if (item?.b64_json) return Buffer.from(item.b64_json, 'base64')
+    if (item?.url) return Buffer.from(await (await fetch(item.url)).arrayBuffer())
     return null
+  } catch(e1:any) {
+    console.error('gpt-image-1 infographic:', e1?.message)
+    // Fallback dall-e-2
+    try {
+      const r2 = await openai.images.generate({ model:'dall-e-2', prompt:cleanPrompt.slice(0,900), size:'1024x1024', n:1 })
+      const url = r2.data[0]?.url
+      if (!url) return null
+      return Buffer.from(await (await fetch(url)).arrayBuffer())
+    } catch(e2:any) {
+      console.error('dall-e-2 infographic fallback:', e2?.message)
+      return null
+    }
   }
 }
 

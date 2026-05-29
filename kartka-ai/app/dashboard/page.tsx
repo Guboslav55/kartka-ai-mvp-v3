@@ -241,6 +241,12 @@ export default function DashboardPage() {
         <button onClick={() => downloadCSV('rozetka')} className="border border-white/10 text-white/35 px-5 py-2.5 rounded-xl text-sm hover:border-green-500/50 hover:text-green-400 transition-colors">
           ⬇ CSV Rozetka
         </button>
+        <Link href="/templates" className="border border-white/10 text-white/35 px-5 py-2.5 rounded-xl text-sm hover:border-white/25 hover:text-white/50 transition-colors">
+          📋 Шаблони
+        </Link>
+        <Link href="/seo" className="border border-white/10 text-white/35 px-5 py-2.5 rounded-xl text-sm hover:border-green-500/40 hover:text-green-400 transition-colors">
+          🔎 SEO генерація
+        </Link>
         <Link href="/profile" className="border border-white/10 text-white/35 px-5 py-2.5 rounded-xl text-sm hover:border-white/25 hover:text-white/50 transition-colors">
           👤 Профіль
         </Link>

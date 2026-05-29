@@ -45,12 +45,29 @@ Return ONLY the prompt (max 200 words):` }
 }
 
 async function genDalle(prompt: string): Promise<string | null> {
+  const cleanPrompt = `${prompt}\n\nIMPORTANT: NO text, NO letters, NO words anywhere in the image.`
+  // Try gpt-image-1 (available on Tier 1)
   try {
-    const r = await openai.images.generate({ model:'dall-e-2', prompt:`${prompt}\n\nNO text, NO letters, NO words anywhere.`, size:'1024x1024', n:1 })
-    return r.data[0]?.url ?? null
-  } catch(e:any) {
-    console.error('DALL-E:', e?.message)
-    return null
+    const r = await openai.images.generate({
+      model: 'gpt-image-1',
+      prompt: cleanPrompt,
+      size: '1024x1024',
+      quality: 'medium',
+      n: 1,
+    } as any)
+    const item = r.data[0] as any
+    if (item?.b64_json) return `data:image/png;base64,${item.b64_json}`
+    return item?.url ?? null
+  } catch(e1:any) {
+    console.error('gpt-image-1 error:', e1?.message)
+    // Fallback to dall-e-2
+    try {
+      const r2 = await openai.images.generate({ model: 'dall-e-2', prompt: cleanPrompt.slice(0, 900), size: '1024x1024', n: 1 })
+      return r2.data[0]?.url ?? null
+    } catch(e2:any) {
+      console.error('dall-e-2 fallback error:', e2?.message)
+      return null
+    }
   }
 }
 

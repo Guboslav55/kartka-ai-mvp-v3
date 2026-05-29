@@ -58,7 +58,20 @@ async function compositeInfographic(bgBuf: Buffer, prodB64: string, name: string
   const sharp = (await import('sharp')).default
   const m = prodB64.match(/^data:(image\/[\w+]+);base64,(.+)$/s)
   if (!m) return bgBuf
-  const prodBuf = Buffer.from(m[2],'base64')
+  let prodBuf = Buffer.from(m[2],'base64')
+
+  // Auto remove background for clean infographic
+  const RMBG_KEY = process.env.REMOVE_BG_API_KEY
+  if (RMBG_KEY) {
+    try {
+      const fd = new FormData()
+      fd.append('image_file', new Blob([prodBuf], { type: m[1] }), 'p.jpg')
+      fd.append('size', 'auto')
+      const r = await fetch('https://api.remove.bg/v1.0/removebg', { method:'POST', headers:{'X-Api-Key':RMBG_KEY}, body:fd })
+      if (r.ok) prodBuf = Buffer.from(await r.arrayBuffer())
+    } catch {}
+  }
+
   const prodResized = await sharp(prodBuf).resize(430,430,{fit:'contain',background:{r:0,g:0,b:0,alpha:0}}).png().toBuffer()
   const esc=(s:string)=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   const accent = {lifestyle:'#6366f1',benefits:'#f59e0b',studio:'#1a1a2e'}[variant]||'#6366f1'

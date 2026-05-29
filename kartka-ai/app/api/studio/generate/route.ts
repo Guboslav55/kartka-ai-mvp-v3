@@ -19,26 +19,31 @@ const STYLE_PROMPTS: Record<string, string> = {
 async function buildFluxPrompt(photo: string, name: string, category: string, style: string, wishes: string, variationHint = ''): Promise<string> {
   const base = STYLE_PROMPTS[style] || STYLE_PROMPTS.catalog
 
-  // Translate wishes to English if not empty
+  // Translate wishes to English
   let wishesEn = ''
   if (wishes.trim()) {
     try {
       const tr = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
-        messages: [{ role: 'user', content: `Translate to English (1-2 sentences max, keep the meaning exactly): "${wishes}"` }],
-        max_tokens: 60,
+        messages: [{ role: 'user', content: `Translate this instruction to English for an AI image editor (keep exact meaning, be specific about visual details like colors, location, lighting): "${wishes}"` }],
+        max_tokens: 80,
       })
       wishesEn = tr.choices[0]?.message?.content?.trim() || wishes
     } catch { wishesEn = wishes }
   }
 
-  // Build prompt directly without GPT rewriting (more reliable)
-  let prompt = base
-  if (wishesEn) prompt += `. Additional requirement: ${wishesEn}`
+  // IMPORTANT: Wishes come FIRST as primary instruction, then style
+  let prompt = ''
+  if (wishesEn) {
+    // Wishes override/modify the style
+    prompt = `${wishesEn}. ${base}`
+  } else {
+    prompt = base
+  }
   if (variationHint) prompt += `. ${variationHint}`
-  prompt += '. Preserve exact product details, logo, text, colors unchanged.'
+  prompt += '. Keep the exact clothing item, person, colors, logos and text identical.'
 
-  return prompt.slice(0, 500)
+  return prompt.slice(0, 600)
 }
 
 async function uploadForReplicate(supabase: ReturnType<typeof createClient>, b64: string, uid: string): Promise<string | null> {
@@ -136,11 +141,8 @@ export async function POST(req: NextRequest) {
     }
     if (!prodB64) return NextResponse.json({ error: 'Завантажте фото товару' }, { status: 400 })
 
-    // If fewer photos than count - limit to avoid exact duplicates
-    const effectiveQty = Math.min(Math.max(1, count), 4)
-    const qty = allPhotos.length > 0 && allPhotos.length < effectiveQty
-      ? allPhotos.length  // limit to unique photos available
-      : effectiveQty
+    // Always generate requested count, reuse photos with different variations if needed
+    const qty = Math.min(Math.max(1, count), 4)
     const { data: profile } = await supabase.from('users').select('stars_balance').eq('id', user.id).single()
     const balance = profile?.stars_balance ?? 0
     if (balance < COST * qty) return NextResponse.json({ error: `Недостатньо зорь (${COST*qty} ⭐)`, needStars:true, balance }, { status: 402 })

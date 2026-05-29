@@ -133,6 +133,8 @@ export default function StudioPage() {
 
   // Results
   const [loading, setLoading] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [progressMsg, setProgressMsg] = useState('')
   const [results, setResults] = useState<string[]>([])
   const [error, setError] = useState('')
 
@@ -174,6 +176,24 @@ export default function StudioPage() {
   async function generate() {
     if (!canGenerate) return
     setLoading(true); setError(''); setResults([])
+    setProgress(0); setProgressMsg('Аналізую фото товару...')
+
+    // Simulate progress stages
+    const stages = [
+      [15, 'Будую промпт...'],
+      [35, 'Відправляю запит до AI...'],
+      [55, 'Генерую зображення...'],
+      [75, 'Накладаю товар на сцену...'],
+      [90, 'Зберігаю результат...'],
+    ]
+    let stageIdx = 0
+    const progressInterval = setInterval(() => {
+      if (stageIdx < stages.length) {
+        setProgress(stages[stageIdx][0] as number)
+        setProgressMsg(stages[stageIdx][1] as string)
+        stageIdx++
+      }
+    }, 2500)
     try {
       const res = await fetch('/api/studio/generate', {
         method: 'POST',
@@ -196,6 +216,10 @@ export default function StudioPage() {
         }
       }
     } catch (e: any) { setError(e.message) }
+    clearInterval(progressInterval)
+    setProgress(100)
+    setProgressMsg('Готово!')
+    setTimeout(() => { setProgress(0); setProgressMsg('') }, 1000)
     setLoading(false)
   }
 
@@ -396,6 +420,15 @@ export default function StudioPage() {
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex items-center justify-between px-8 py-4 border-b border-white/8 shrink-0">
             <span className="text-white/40 text-sm">Результати</span>
+            {loading && progress > 0 && (
+              <div className="flex-1 mx-4">
+                <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-gold to-gold-light rounded-full transition-all duration-500"
+                    style={{ width: `${progress}%` }}/>
+                </div>
+                <p className="text-white/40 text-xs mt-1 text-center">{progressMsg}</p>
+              </div>
+            )}
             {results.length > 0 && (
               <button onClick={() => setResults([])} className="text-white/30 text-xs hover:text-white/60 transition-colors">Очистити ×</button>
             )}

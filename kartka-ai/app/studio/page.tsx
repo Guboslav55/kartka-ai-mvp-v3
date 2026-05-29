@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
@@ -76,28 +76,36 @@ function ModeTab({ mode, active, onClick, locked }: { mode: Mode; active: boolea
 }
 
 function ResultGrid({ results, loading, loadingCount }: { results: string[]; loading: boolean; loadingCount: number }) {
+  const [lightbox, setLightbox] = React.useState<string|null>(null)
+
   if (!loading && results.length === 0) return (
     <div className="flex-1 flex items-center justify-center">
       <p className="text-white/20 text-sm">Тут з'являться результати після генерації</p>
     </div>
   )
   return (
-    <div className={`grid gap-3 md:gap-4 ${results.length + (loading ? loadingCount : 0) > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-      {results.map((url, i) => (
-        <div key={i}
-          className="relative group rounded-2xl overflow-hidden bg-white/5 border border-white/10 cursor-pointer hover:border-gold/40 transition-all hover:scale-[1.01]"
-          onClick={() => setLightbox(url)}>
-          <img src={url} alt={`result-${i+1}`} className="w-full aspect-square object-cover" />
-          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
-            <span className="text-white text-2xl">🔍</span>
-            <a href={url} download={`studio-${i+1}.jpg`} target="_blank" rel="noreferrer"
-              onClick={e => e.stopPropagation()}
-              className="bg-white text-black px-4 py-2 rounded-xl text-sm font-bold hover:bg-gray-100">⬇ Завантажити</a>
+    <>
+      <div className={`grid gap-3 md:gap-4 ${results.length + (loading ? loadingCount : 0) > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+        {results.map((url, i) => (
+          <div key={i}
+            className="relative group rounded-2xl overflow-hidden bg-white/5 border border-white/10 cursor-pointer hover:border-gold/40 transition-all hover:scale-[1.01]"
+            onClick={() => setLightbox(url)}>
+            <img src={url} alt={`result-${i+1}`} className="w-full aspect-square object-cover" />
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+              <span className="text-white text-2xl">🔍</span>
+              <a href={url} download={`studio-${i+1}.jpg`} target="_blank" rel="noreferrer"
+                onClick={e => e.stopPropagation()}
+                className="bg-white text-black px-4 py-2 rounded-xl text-sm font-bold hover:bg-gray-100">⬇ Завантажити</a>
+            </div>
+            <div className="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded-full">{i+1}/{results.length}</div>
           </div>
-          <div className="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded-full">{i+1}/{results.length}</div>
-        </div>
-      ))}
-      {/* Lightbox */}
+        ))}
+        {loading && Array.from({ length: loadingCount }).map((_, i) => (
+          <div key={`loading-${i}`} className="rounded-2xl bg-white/5 border border-white/10 aspect-square flex items-center justify-center">
+            <div className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin"/>
+          </div>
+        ))}
+      </div>
       {lightbox && (
         <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
           <div className="relative max-w-3xl w-full" onClick={e => e.stopPropagation()}>
@@ -108,17 +116,12 @@ function ResultGrid({ results, loading, loadingCount }: { results: string[]; loa
               <button onClick={() => setLightbox(null)} className="bg-white/20 text-white w-10 h-10 rounded-xl text-lg font-bold hover:bg-white/30">✕</button>
             </div>
           </div>
-        </div>}
-      {loading && Array.from({ length: loadingCount }).map((_, i) => (
-        <div key={`loading-${i}`} className="rounded-2xl bg-white/5 border border-white/10 aspect-square flex items-center justify-center">
-          <div className="text-center"><div className="w-8 h-8 border-2 border-gold/30 border-t-gold rounded-full animate-spin mx-auto mb-2"/><p className="text-white/40 text-xs">Генерую...</p></div>
         </div>
-      ))}
-    </div>
+      )}
+    </>
   )
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function StudioPage() {
   const router = useRouter()
   const supabase = createClient()
@@ -151,7 +154,6 @@ export default function StudioPage() {
   // Results
   const [loading, setLoading] = useState(false)
   const [progress, setProgress] = useState(0)
-  const [lightbox, setLightbox] = useState<string|null>(null)
   const [progressMsg, setProgressMsg] = useState('')
   const [results, setResults] = useState<string[]>([])
   const [error, setError] = useState('')

@@ -92,49 +92,77 @@ function ModeTab({ mode, active, onClick, locked }: { mode: Mode; active: boolea
 }
 
 function ResultGrid({ results, loading, loadingCount }: { results: string[]; loading: boolean; loadingCount: number }) {
-  const [lightbox, setLightbox] = React.useState<string|null>(null)
+  const [active, setActive] = React.useState(0)
+  const total = results.length + (loading ? loadingCount : 0)
+
+  React.useEffect(() => { if (results.length > 0) setActive(results.length - 1) }, [results.length])
 
   if (!loading && results.length === 0) return (
-    <div className="flex-1 flex items-center justify-center">
+    <div className="flex-1 flex items-center justify-center flex-col gap-3">
+      <div className="text-4xl opacity-20">📸</div>
       <p className="text-white/20 text-sm">Тут з'являться результати після генерації</p>
     </div>
   )
+
+  const current = results[active]
+
   return (
-    <>
-      <div className={`grid gap-3 md:gap-4 ${results.length + (loading ? loadingCount : 0) > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-        {results.map((url, i) => (
-          <div key={i}
-            className="relative group rounded-2xl overflow-hidden bg-white/5 border border-white/10 cursor-pointer hover:border-gold/40 transition-all hover:scale-[1.01]"
-            onClick={() => setLightbox(url)}>
-            <img src={url} alt={`result-${i+1}`} className="w-full aspect-square object-cover" />
-            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
-              <span className="text-white text-2xl">🔍</span>
-              <a href={url} download={`studio-${i+1}.jpg`} target="_blank" rel="noreferrer"
-                onClick={e => e.stopPropagation()}
-                className="bg-white text-black px-4 py-2 rounded-xl text-sm font-bold hover:bg-gray-100">⬇ Завантажити</a>
-            </div>
-            <div className="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded-full">{i+1}/{results.length}</div>
-          </div>
-        ))}
-        {loading && Array.from({ length: loadingCount }).map((_, i) => (
-          <div key={`loading-${i}`} className="rounded-2xl bg-white/5 border border-white/10 aspect-square flex items-center justify-center">
-            <div className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin"/>
-          </div>
-        ))}
-      </div>
-      {lightbox && (
-        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
-          <div className="relative max-w-3xl w-full" onClick={e => e.stopPropagation()}>
-            <img src={lightbox} alt="" className="w-full rounded-2xl object-contain max-h-[85vh]"/>
+    <div className="flex flex-col gap-3 h-full">
+      {/* Main image */}
+      <div className="relative flex-1 min-h-0 rounded-2xl overflow-hidden bg-white/5 border border-white/10">
+        {current ? (
+          <>
+            <img src={current} alt="" className="w-full h-full object-contain" />
+            {/* Download button */}
             <div className="absolute top-3 right-3 flex gap-2">
-              <a href={lightbox} download="studio-result.jpg" target="_blank" rel="noreferrer"
-                className="bg-gold text-black px-4 py-2 rounded-xl text-sm font-bold">⬇ Завантажити</a>
-              <button onClick={() => setLightbox(null)} className="bg-white/20 text-white w-10 h-10 rounded-xl text-lg font-bold hover:bg-white/30">✕</button>
+              <a href={current} download={`studio-${active+1}.jpg`} target="_blank" rel="noreferrer"
+                className="bg-black/60 backdrop-blur text-white px-3 py-1.5 rounded-xl text-xs font-semibold hover:bg-black/80 border border-white/20">
+                ⬇ Завантажити
+              </a>
             </div>
+            {/* Counter */}
+            <div className="absolute top-3 left-3 bg-black/60 backdrop-blur text-white text-xs px-2.5 py-1 rounded-full">
+              {active + 1} / {results.length}
+            </div>
+            {/* Prev/Next arrows */}
+            {results.length > 1 && (
+              <>
+                <button onClick={() => setActive(a => Math.max(0, a - 1))} disabled={active === 0}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/60 backdrop-blur text-white font-bold hover:bg-black/80 disabled:opacity-30 transition-all text-lg flex items-center justify-center">
+                  ‹
+                </button>
+                <button onClick={() => setActive(a => Math.min(results.length - 1, a + 1))} disabled={active === results.length - 1}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/60 backdrop-blur text-white font-bold hover:bg-black/80 disabled:opacity-30 transition-all text-lg flex items-center justify-center">
+                  ›
+                </button>
+              </>
+            )}
+          </>
+        ) : loading ? (
+          <div className="w-full h-full flex flex-col items-center justify-center gap-3">
+            <div className="w-10 h-10 border-2 border-gold border-t-transparent rounded-full animate-spin"/>
+            <p className="text-white/40 text-sm">Генерую...</p>
           </div>
+        ) : null}
+      </div>
+
+      {/* Thumbnails strip */}
+      {(results.length > 1 || loading) && (
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {results.map((url, i) => (
+            <button key={i} onClick={() => setActive(i)}
+              className={`shrink-0 w-16 h-16 rounded-xl overflow-hidden border-2 transition-all ${active === i ? 'border-gold scale-105' : 'border-white/15 hover:border-white/40'}`}>
+              <img src={url} alt="" className="w-full h-full object-cover"/>
+            </button>
+          ))}
+          {loading && Array.from({ length: loadingCount }).map((_, i) => (
+            <div key={`l${i}`} className="shrink-0 w-16 h-16 rounded-xl bg-white/5 border-2 border-white/10 flex items-center justify-center">
+              <div className="w-5 h-5 border-2 border-gold/50 border-t-transparent rounded-full animate-spin"/>
+            </div>
+          ))}
         </div>
       )}
-    </>
+    </div>
   )
 }
 

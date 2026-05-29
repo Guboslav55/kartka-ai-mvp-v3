@@ -109,10 +109,10 @@ function ResultGrid({ results, loading, loadingCount }: { results: string[]; loa
   return (
     <div className="flex flex-col gap-3 h-full">
       {/* Main image */}
-      <div className="relative flex-1 min-h-0 rounded-2xl overflow-hidden bg-white/5 border border-white/10">
+      <div className="relative rounded-2xl overflow-hidden bg-white/5 border border-white/10" style={{maxHeight: "calc(100vh - 220px)"}}>
         {current ? (
           <>
-            <img src={current} alt="" className="w-full h-full object-contain" />
+            <img src={current} alt="" className="w-full object-contain" style={{maxHeight: "calc(100vh - 240px)"}} />
             {/* Download button */}
             <div className="absolute top-3 right-3 flex gap-2">
               <a href={current} download={`studio-${active+1}.jpg`} target="_blank" rel="noreferrer"
@@ -499,7 +499,7 @@ export default function StudioPage() {
             <span className="text-white/25 text-xs font-mono ml-auto">03</span>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 md:p-8">
+          <div className="flex-1 overflow-hidden p-3 md:p-5 flex flex-col">
             {error && (
               <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-red-300 text-sm flex flex-wrap items-center justify-between gap-2">
                 <span>{error}</span>

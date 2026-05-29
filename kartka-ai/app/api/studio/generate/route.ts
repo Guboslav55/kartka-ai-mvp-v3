@@ -112,13 +112,15 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser(token)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { style: rawStyle, displayStyle, productPhoto, productPhotoUrl, productName='', category='', wishes='', count=1, marketplace='general' } = await req.json()
+    const { style: rawStyle, displayStyle, productPhoto, productPhotos, productPhotoUrl, productName='', category='', wishes='', count=1, marketplace='general' } = await req.json()
+    // Use multiple photos if available (different angles for different variations)
+    const allPhotos: string[] = productPhotos?.length ? productPhotos : (productPhoto ? [productPhoto] : [])
     // Studio page sends displayStyle (from style selector) or photoStyle
     const style = displayStyle || rawStyle || 'catalog'
     console.log('Style received:', { rawStyle, displayStyle, resolvedStyle: style })
     if (!productName.trim()) return NextResponse.json({ error: 'Введіть назву товару' }, { status: 400 })
 
-    let prodB64 = productPhoto || ''
+    let prodB64 = (productPhotos?.[0]) || productPhoto || ''
     if (!prodB64 && productPhotoUrl) {
       try { const r = await fetch(productPhotoUrl); const buf = Buffer.from(await r.arrayBuffer()); prodB64 = `data:${r.headers.get('content-type')||'image/jpeg'};base64,${buf.toString('base64')}` } catch {}
     }
@@ -151,12 +153,23 @@ export async function POST(req: NextRequest) {
         'different time of day lighting, alternative environment detail',
       ]
 
+      // Pre-upload all photos for Replicate
+      const photoUrls: string[] = []
+      for (const p of allPhotos.slice(0, qty)) {
+        const u = await uploadForReplicate(supabase, p, user.id)
+        if (u) photoUrls.push(u)
+      }
+      if (!photoUrls.length) return NextResponse.json({ error: 'Помилка завантаження фото' }, { status: 500 })
+
       for (let i = 0; i < qty; i++) {
         try {
+          // Use different photo angle for each variation
+          const photoForThisGen = photoUrls[i % photoUrls.length]
+          const b64ForPrompt = allPhotos[i % allPhotos.length] || prodB64
           const variationHint = VARIATIONS[i] || `variation ${i + 1}`
-          const prompt = await buildFluxPrompt(prodB64, productName, category, style,
+          const prompt = await buildFluxPrompt(b64ForPrompt, productName, category, style,
             wishes + (i > 0 ? `. ${variationHint}` : ''))
-          const url = await runFluxKontext(publicUrl, prompt, REPLICATE)
+          const url = await runFluxKontext(photoForThisGen, prompt, REPLICATE)
           if (url) results.push(await saveResult(supabase, url, user.id))
         } catch (e) { console.error(`flux ${i}:`, e) }
       }

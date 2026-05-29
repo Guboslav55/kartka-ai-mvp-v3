@@ -1,244 +1,182 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import { createClient } from '@supabase/supabase-js'
+import { buildCacheKey, checkCache, saveToCache } from '@/lib/cache'
 
 export const maxDuration = 120
-
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+const COST = 4
 
-const COSTS = { photo: 4, card: 4, video: 16 } as const
-
-const DISPLAY_STYLES = {
-  model:   'Realistic lifestyle photo: professional model wearing/holding the product. Natural lighting, urban or studio background.',
-  store:   'Professional store display: product on elegant mannequin or display stand. Clean retail environment, soft lighting.',
-  flatlay: 'Overhead flat lay: product neatly arranged from directly above on clean surface. Minimalist composition.',
-  catalog: 'Studio catalog photo: product on pure white background. Perfect studio lighting, no shadows, sharp details.',
+const STYLES: Record<string,string> = {
+  catalog:   'Pure white/light grey seamless background, professional product photography, even soft lighting, no shadows, e-commerce style',
+  lifestyle: 'Realistic lifestyle environment, natural lighting, authentic atmosphere, the product used in daily life',
+  studio:    'Professional photography studio, gradient background, dramatic moody lighting, commercial look',
+  flatlay:   'Flat lay from directly above, clean minimal surface, perfect for online stores',
+  outdoor:   'Outdoor setting, natural daylight, environmental context matching the product',
+  dark:      'Dark premium background, moody dramatic lighting, luxury product presentation',
+}
+const LIGHT: Record<string,string> = {
+  natural: 'soft natural daylight',
+  studio:  'professional studio with multiple light sources',
+  dramatic:'dramatic single-source side lighting, strong contrast',
+  soft:    'soft diffused lighting with no hard shadows',
+  golden:  'warm golden hour lighting',
 }
 
-const PHOTO_STYLES = {
-  commercial: 'Commercial photography: perfect lighting, professional composition, vibrant colors, studio quality',
-  home:       'Lifestyle photography: natural light, authentic environment, warm tones, relatable setting',
-}
-
-async function buildPhotoPrompt(
-  productBase64: string, productName: string, category: string,
-  displayStyle: string, wishes: string, photoStyle: string, format: string
-): Promise<string> {
-  const styleGuide = DISPLAY_STYLES[displayStyle as keyof typeof DISPLAY_STYLES] || DISPLAY_STYLES.catalog
-  const photoGuide = PHOTO_STYLES[photoStyle as keyof typeof PHOTO_STYLES] || PHOTO_STYLES.commercial
-  const aspectNote = format === '9:16' ? 'vertical portrait' : format === '16:9' ? 'horizontal landscape' : 'square format'
-
-  const res = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    messages: [{
-      role: 'user',
-      content: [
-        { type: 'image_url', image_url: { url: productBase64, detail: 'high' } },
-        { type: 'text', text: `You are a professional product photographer. Analyze this product image carefully.
-Product: "${productName}", Category: "${category}"
-Create a detailed DALL-E 3 image generation prompt for: ${styleGuide}
-Photography style: ${photoGuide}
-Format: ${aspectNote}
-${wishes ? `Additional requirements (translate to English if needed): ${wishes}` : ''}
-RULES:
-- The product must be the main subject
-- CRITICAL: Write the prompt ONLY in English (translate product name if needed)
-- NO text, NO labels, NO watermarks in the image
-- Be specific about lighting, angles, colors, atmosphere
-Return ONLY the English prompt text, max 250 words.` }
-      ]
-    }],
-    max_tokens: 400,
-  })
-  return res.choices[0]?.message?.content?.trim() || `Professional product photo of ${productName} on white background`
-}
-
-async function buildCardBgPrompt(
-  productBase64: string, productName: string, bullets: string[],
-  cardStyle: string, format: string
-): Promise<string> {
-  const styleNote = cardStyle === 'premium'
-    ? 'Dark elegant premium design with gold accents, luxury feel, dark gradient background'
-    : 'Clean modern commercial design with light background, space for product and text'
-  const aspectNote = format === '9:16' ? '9:16 vertical' : format === '16:9' ? '16:9 horizontal' : format
-
-  const res = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [{
-      role: 'user',
-      content: [
-        { type: 'image_url', image_url: { url: productBase64, detail: 'low' } },
-        { type: 'text', text: `Create a DALL-E 3 background design prompt for a product infographic card.
-Product type: translate "${productName}" to English if needed.
-Design style: ${styleNote}
-Format: ${aspectNote}
-RULES:
-- Background design ONLY — product image will be placed on top
-- CRITICAL: Write prompt ONLY in English
-- Absolutely NO text, NO letters, NO words anywhere in the image
-- Describe colors, textures, gradients, geometric elements
-Return ONLY the English design prompt, max 150 words.` }
-      ]
-    }],
-    max_tokens: 300,
-  })
-  return res.choices[0]?.message?.content?.trim() || `Clean ${cardStyle === 'premium' ? 'dark premium' : 'white modern'} infographic background`
-}
-
-async function generateDalle(prompt: string, format: string): Promise<string | null> {
-  const sizeMap: Record<string, '1024x1024' | '1792x1024' | '1024x1792'> = {
-    '1:1': '1024x1024', '4:3': '1792x1024', '3:4': '1024x1792',
-    '16:9': '1792x1024', '9:16': '1024x1792',
-  }
-  // Ensure prompt is within limits and clean
-  const cleanPrompt = prompt.slice(0, 3800) + '\n\nIMPORTANT: Absolutely NO text, letters, words, labels anywhere in the image.'
+async function buildPrompt(photo: string, name: string, cat: string, style: string, light: string, wishes: string, mkt: string, variation = 0): Promise<string> {
+  const styleDesc = STYLES[style] || STYLES.catalog
+  const lightDesc = LIGHT[light] || LIGHT.studio
+  const mktNote = {prom:'Prom.ua',rozetka:'Rozetka',olx:'OLX'}[mkt] || 'e-commerce'
+  const variNote = variation > 0 ? ` Variation ${variation+1}: slightly different angle/composition.` : ''
   try {
-    const res = await openai.images.generate({
-      model: 'dall-e-2',
-      prompt: cleanPrompt,
-      size: '1024x1024',
-      n: 1,
+    const r = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role:'user', content:[
+        { type:'image_url', image_url:{ url:photo, detail:'low' }},
+        { type:'text', text:`Professional product photographer for ${mktNote}. Product: "${name}", Category: "${cat}".
+Create a DALL-E 2 background scene prompt. Style: ${styleDesc}. Lighting: ${lightDesc}.${wishes ? ` Requirements: ${wishes}` : ''}${variNote}
+Rules: English only, product is main subject, preserve logo/text/shape, NO text in background, photorealistic.
+Return ONLY the prompt (max 200 words):` }
+      ]}],
+      max_tokens:300, temperature:0.8,
     })
-    return res.data[0]?.url ?? null
-  } catch (e: any) {
-    const msg = e?.message || String(e)
-    console.error('DALL-E error:', msg)
-    if (msg.includes('does not exist') || msg.includes('billing') || msg.includes('quota') || msg.includes('access')) {
-      throw new Error('DALL-E 3 недоступний. Перевірте баланс OpenAI на platform.openai.com/usage та доступ до моделі.')
-    }
-    try {
-      const fallback = `Professional product photography, clean white studio background. NO text.`
-      const res2 = await openai.images.generate({ model: 'dall-e-2', prompt: fallback, size: '1024x1024', n: 1 })
-      return res2.data[0]?.url ?? null
-    } catch { return null }
+    return r.choices[0]?.message?.content?.trim() || `${styleDesc}. ${lightDesc}. Professional product photo. NO text.`
+  } catch { return `${styleDesc}. ${lightDesc}. Product: ${name}. High quality. NO text.` }
+}
+
+async function genDalle(prompt: string): Promise<string | null> {
+  try {
+    const r = await openai.images.generate({ model:'dall-e-2', prompt:`${prompt}\n\nNO text, NO letters, NO words anywhere.`, size:'1024x1024', n:1 })
+    return r.data[0]?.url ?? null
+  } catch(e:any) {
+    console.error('DALL-E:', e?.message)
+    return null
   }
 }
 
-async function uploadUrl(supabase: ReturnType<typeof createClient>, url: string, userId: string): Promise<string> {
-  try {
-    const res = await fetch(url)
-    const buf = Buffer.from(await res.arrayBuffer())
-    const fileName = `studio/${userId}/${Date.now()}.jpg`
-    const { error } = await supabase.storage.from('card-images').upload(fileName, buf, { contentType: 'image/jpeg' })
-    if (error) return url
-    return supabase.storage.from('card-images').getPublicUrl(fileName).data.publicUrl
-  } catch { return url }
+async function composite(sceneBuf: Buffer, prodB64: string): Promise<Buffer> {
+  const sharp = (await import('sharp')).default
+  const m = prodB64.match(/^data:(image\/[\w+]+);base64,(.+)$/s)
+  if (!m) return sceneBuf
+  const prodBuf = Buffer.from(m[2],'base64')
+  const meta = await sharp(sceneBuf).metadata()
+  const size = Math.round(Math.min(meta.width||1024, meta.height||1024) * 0.55)
+  const resized = await sharp(prodBuf).resize(size,size,{fit:'contain',background:{r:0,g:0,b:0,alpha:0}}).png().toBuffer()
+  const left = Math.round(((meta.width||1024)-size)/2)
+  const top  = Math.round(((meta.height||1024)-size)/2)
+  return sharp(sceneBuf).composite([{input:resized,top,left,blend:'over'}]).jpeg({quality:92}).toBuffer()
 }
 
-async function compositeCard(
-  supabase: ReturnType<typeof createClient>,
-  bgUrl: string, productBase64: string, productName: string,
-  bullets: string[], userId: string, cardStyle: string
-): Promise<string> {
+async function compositeCard(sceneBuf: Buffer, prodB64: string, name: string, bullets: string[], cardStyle: string): Promise<Buffer> {
   const sharp = (await import('sharp')).default
-  const bgRes = await fetch(bgUrl)
-  const bgBuf = Buffer.from(await bgRes.arrayBuffer())
-  const match = productBase64.match(/^data:(image\/\w+);base64,(.+)$/s)
-  if (!match) return bgUrl
-  const prodBuf = Buffer.from(match[2], 'base64')
-  const prodResized = await sharp(prodBuf).resize(420, 420, { fit: 'contain', background: { r:0,g:0,b:0,alpha:0 } }).png().toBuffer()
-  const esc = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
-  const shortName = productName.slice(0, 45)
-  const topBullets = bullets.slice(0, 3).map(b => b.replace(/^[•✓]\s*/,'').slice(0,40))
-  const accent = cardStyle === 'premium' ? '#c9a84c' : '#6366f1'
-  const textColor = cardStyle === 'premium' ? '#ffffff' : '#1a1a2e'
-  const textBg = cardStyle === 'premium' ? 'rgba(0,0,0,0.82)' : 'rgba(255,255,255,0.93)'
+  const m = prodB64.match(/^data:(image\/[\w+]+);base64,(.+)$/s)
+  if (!m) return sceneBuf
+  const prodBuf = Buffer.from(m[2],'base64')
+  const prodResized = await sharp(prodBuf).resize(440,440,{fit:'contain',background:{r:0,g:0,b:0,alpha:0}}).png().toBuffer()
+  const esc=(s:string)=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  const accent = cardStyle==='premium'?'#c9a84c':'#6366f1'
+  const textBg = cardStyle==='premium'?'rgba(0,0,0,0.88)':'rgba(255,255,255,0.93)'
+  const tc = cardStyle==='premium'?'#fff':'#111827'
+  const sn = name.slice(0,45)
+  const bs = bullets.filter(Boolean).slice(0,3).map(b=>b.replace(/^[•✓]\s*/,'').slice(0,42))
   const svg = `<svg width="1024" height="1024" xmlns="http://www.w3.org/2000/svg">
-<rect x="0" y="0" width="6" height="1024" fill="${accent}"/>
-<rect x="20" y="20" width="${Math.min(shortName.length*17+40,700)}" height="56" rx="10" fill="${textBg}"/>
-<text x="40" y="58" font-family="Arial,sans-serif" font-size="28" font-weight="bold" fill="${textColor}">${esc(shortName)}</text>
-${topBullets.map((b,i)=>`<rect x="20" y="${880+i*42}" width="${Math.min(b.length*13+50,700)}" height="36" rx="6" fill="${textBg}"/><text x="50" y="${904+i*42}" font-family="Arial,sans-serif" font-size="19" fill="${textColor}">✓ ${esc(b)}</text>`).join('')}
-<rect x="1018" y="0" width="6" height="1024" fill="${accent}"/>
-</svg>`
-  const finalBuf = await sharp(bgBuf)
-    .composite([{ input: prodResized, top: 280, left: 302, blend: 'over' }, { input: Buffer.from(svg), top: 0, left: 0 }])
-    .jpeg({ quality: 92 }).toBuffer()
-  const fileName = `studio/${userId}/${Date.now()}-card.jpg`
-  const { error } = await supabase.storage.from('card-images').upload(fileName, finalBuf, { contentType: 'image/jpeg' })
-  if (error) return `data:image/jpeg;base64,${finalBuf.toString('base64')}`
-  return supabase.storage.from('card-images').getPublicUrl(fileName).data.publicUrl
+<defs><linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(0,0,0,0.7)"/><stop offset="100%" stop-color="rgba(0,0,0,0)"/></linearGradient>
+<linearGradient id="g2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(0,0,0,0)"/><stop offset="100%" stop-color="rgba(0,0,0,0.82)"/></linearGradient></defs>
+<rect width="1024" height="180" fill="url(#g1)"/><rect y="844" width="1024" height="180" fill="url(#g2)"/>
+<rect x="0" y="0" width="8" height="1024" fill="${accent}"/>
+<rect x="20" y="18" width="${Math.min(sn.length*17+40,720)}" height="60" rx="10" fill="${textBg}"/>
+<text x="40" y="58" font-family="Arial,sans-serif" font-size="30" font-weight="bold" fill="${tc}">${esc(sn)}</text>
+${bs.map((b,i)=>`<rect x="20" y="${880+i*44}" width="${Math.min(b.length*13+55,720)}" height="38" rx="8" fill="${textBg}"/>
+<text x="50" y="${905+i*44}" font-family="Arial,sans-serif" font-size="20" fill="${tc}">✓ ${esc(b)}</text>`).join('\n')}
+<rect x="1016" y="0" width="8" height="1024" fill="${accent}"/></svg>`
+  return sharp(sceneBuf).composite([{input:prodResized,top:292,left:292,blend:'over'},{input:Buffer.from(svg),top:0,left:0}]).jpeg({quality:92}).toBuffer()
+}
+
+async function upload(supabase: ReturnType<typeof createClient>, buf: Buffer, uid: string, folder='studio'): Promise<string> {
+  try {
+    const fn=`${folder}/${uid}/${Date.now()}.jpg`
+    await supabase.storage.from('card-images').upload(fn, buf, {contentType:'image/jpeg'})
+    return supabase.storage.from('card-images').getPublicUrl(fn).data.publicUrl
+  } catch { return `data:image/jpeg;base64,${buf.toString('base64')}` }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const token = req.headers.get('authorization')?.replace('Bearer ', '')
-    if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const token = req.headers.get('authorization')?.replace('Bearer ','')
+    if (!token) return NextResponse.json({error:'Unauthorized'},{status:401})
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { global: { headers: { Authorization: `Bearer ${token}` } } }
-    )
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {global:{headers:{Authorization:`Bearer ${token}`}}})
+    const {data:{user}} = await supabase.auth.getUser(token)
+    if (!user) return NextResponse.json({error:'Unauthorized'},{status:401})
 
-    const { data: { user } } = await supabase.auth.getUser(token)
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const { mode='photo', productPhoto, productPhotoUrl, productName='', category='', style='catalog', lighting='studio', wishes='', marketplace='general', format='1:1', count=1, cardStyle='classic', bullets=[] } = await req.json()
 
-    const {
-      mode = 'photo',
-      productPhoto,
-      productName = '',
-      category = '',
-      displayStyle = 'catalog',
-      wishes = '',
-      photoStyle = 'commercial',
-      cardStyle = 'classic',
-      bullets = [],
-      format = '1:1',
-      count = 1,
-    } = await req.json()
+    if (!productName.trim()) return NextResponse.json({error:"Введіть назву товару"},{status:400})
 
-    if (!productName.trim()) return NextResponse.json({ error: "Назва товару обов'язкова" }, { status: 400 })
-    if (!productPhoto) return NextResponse.json({ error: 'Завантажте фото товару' }, { status: 400 })
-    if (mode === 'video') return NextResponse.json({ error: 'Відео-генерація буде доступна незабаром' }, { status: 400 })
+    let prodB64 = productPhoto || ''
+    if (!prodB64 && productPhotoUrl) {
+      try {
+        const r = await fetch(productPhotoUrl)
+        const buf = Buffer.from(await r.arrayBuffer())
+        prodB64 = `data:${r.headers.get('content-type')||'image/jpeg'};base64,${buf.toString('base64')}`
+      } catch {}
+    }
+    if (!prodB64) return NextResponse.json({error:'Завантажте фото товару'},{status:400})
+    if (mode==='video') return NextResponse.json({error:'Відео потребує Replicate API токену'},{status:400})
 
-    const cost = COSTS[mode as keyof typeof COSTS] || 4
-    const qty = Math.min(count, 4)
-    const totalCost = cost * qty
+    const qty = Math.min(Math.max(1,count),4)
+    const totalCost = COST*qty
 
-    const { data: profile } = await supabase.from('users').select('stars_balance').eq('id', user.id).single()
+    const {data:profile} = await supabase.from('users').select('stars_balance').eq('id',user.id).single()
     const balance = profile?.stars_balance ?? 0
-    if (balance < totalCost) {
-      return NextResponse.json({ error: `Недостатньо зорь (потрібно ${totalCost}, є ${balance})`, needStars: true, balance }, { status: 402 })
+    if (balance < totalCost) return NextResponse.json({error:`Недостатньо зорь (потрібно ${totalCost} ⭐, є ${balance})`,needStars:true,balance,required:totalCost},{status:402})
+
+    // Check result cache (skip for mode=video)
+    if (mode !== 'video') {
+      const cacheKey = buildCacheKey({ mode, style, lighting, wishes: wishes.slice(0,50), productName: productName.slice(0,30), format, qty })
+      const cached = await checkCache(supabase, cacheKey)
+      if (cached) {
+        return NextResponse.json({ results: cached, starsSpent: 0, newBalance: balance, cached: true })
+      }
     }
 
     const results: string[] = []
 
-    for (let i = 0; i < qty; i++) {
-      if (mode === 'photo') {
-        const prompt = await buildPhotoPrompt(productPhoto, productName, category, displayStyle, wishes, photoStyle, format)
-        const url = await generateDalle(prompt + (i > 0 ? ` Variation ${i+1}, different angle or composition.` : ''), format)
-        if (url) results.push(await uploadUrl(supabase, url, user.id))
-      } else if (mode === 'card') {
-        const bgPrompt = await buildCardBgPrompt(productPhoto, productName, bullets, cardStyle, format)
-        const bgUrl = await generateDalle(bgPrompt, format)
-        if (bgUrl) {
-          const composited = await compositeCard(supabase, bgUrl, productPhoto, productName, bullets, user.id, cardStyle)
-          results.push(composited)
+    for (let i=0; i<qty; i++) {
+      try {
+        const prompt = await buildPrompt(prodB64, productName, category, style, lighting, wishes, marketplace, i)
+        const url = await genDalle(prompt)
+        if (!url) { console.warn(`image ${i+1} failed`); continue }
+        const sceneBuf = Buffer.from(await (await fetch(url)).arrayBuffer())
+        let finalBuf: Buffer
+        if (mode==='card') {
+          finalBuf = await compositeCard(sceneBuf, prodB64, productName, bullets as string[], cardStyle)
+        } else {
+          finalBuf = await composite(sceneBuf, prodB64)
         }
-      }
+        const finalUrl = await upload(supabase, finalBuf, user.id, mode==='card'?'infographic':'studio')
+        results.push(finalUrl)
+      } catch(e) { console.error(`img ${i+1}:`, e) }
     }
 
-    if (results.length === 0) return NextResponse.json({ error: 'Не вдалось згенерувати. Спробуйте ще раз.' }, { status: 500 })
+    if (!results.length) return NextResponse.json({error:'Не вдалось згенерувати. Перевірте ключ OpenAI та спробуйте ще раз.'},{status:500})
 
-    await supabase.rpc('deduct_stars', { p_user_id: user.id, p_amount: totalCost })
-    await supabase.from('star_transactions').insert({
-      user_id: user.id, type: 'spend', amount: -totalCost,
-      description: `AI Студія: ${productName.slice(0,30)} (${mode} ×${results.length})`
-    })
+    const spent = COST*results.length
 
-    // Save results to gallery DB
-    await supabase.from('studio_results').insert({
-      user_id: user.id,
-      product_name: productName.slice(0, 100),
-      mode,
-      urls: results,
-      stars_spent: totalCost,
-      settings: { displayStyle, photoStyle, cardStyle, format, count },
-    }).then(() => {})
+    // Save to cache for future requests
+    if (results.length > 0 && mode !== 'video') {
+      const cacheKey = buildCacheKey({ mode, style, lighting, wishes: wishes.slice(0,50), productName: productName.slice(0,30), format, qty })
+      saveToCache(supabase, cacheKey, results).then(() => {})
+    }
 
-    return NextResponse.json({ results, starsSpent: totalCost, newBalance: balance - totalCost })
-  } catch (err: unknown) {
-    console.error('Studio error:', err)
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Помилка сервера' }, { status: 500 })
+    await supabase.rpc('deduct_stars',{p_user_id:user.id,p_amount:spent})
+    await supabase.from('star_transactions').insert({user_id:user.id,type:'spend',amount:-spent,description:`AI Студія: ${productName.slice(0,35)} (${mode} ×${results.length})`})
+    await supabase.from('studio_results').insert({user_id:user.id,product_name:productName.slice(0,100),mode,urls:results,stars_spent:spent,settings:{style,lighting,format,count:results.length,marketplace}}).then(()=>{})
+
+    return NextResponse.json({results,starsSpent:spent,newBalance:balance-spent,count:results.length})
+  } catch(err:unknown) {
+    const msg = err instanceof Error ? err.message : 'Server error'
+    console.error('Studio error:', msg)
+    return NextResponse.json({error:msg},{status:500})
   }
 }

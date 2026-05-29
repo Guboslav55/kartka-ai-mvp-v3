@@ -7,13 +7,13 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 const COST = 4
 
 const STYLE_PROMPTS: Record<string, string> = {
-  catalog:   'The exact same clothing item placed on pure white background, no shadows, professional ecommerce catalog photography, clean studio look',
-  model:     'The exact same clothing outfit worn by a fashion model, urban lifestyle setting, soft natural bokeh background, magazine style photography, preserve all prints and colors exactly',
-  store:     'The exact same clothing item hanging on a premium metal hanger in a boutique store, minimal white interior, soft lighting, retail photography',
-  flatlay:   'The exact same clothing items arranged in a flat lay composition, aerial top-down view, clean light marble surface, soft even studio lighting, ecommerce photography, preserve all prints',
-  lifestyle: 'The exact same clothing worn in an outdoor lifestyle scene, natural environment, mountains or park, golden hour lighting, dynamic realistic photography',
-  outdoor:   'The exact same clothing in an outdoor urban street setting, city background blurred, natural daylight, street fashion photography style',
-  dark:      'The exact same clothing on a dramatic dark studio background, professional rim lighting, luxury fashion photography, moody cinematic atmosphere',
+  catalog:   'Keep this exact clothing item and person unchanged. Change only the background to pure white seamless studio backdrop, add soft even studio lighting, professional ecommerce catalog photography. Preserve EVERY detail: exact print, logo text, colors, patterns, fabric texture.',
+  model:     'Keep this exact person and clothing unchanged. Change only the background to urban city street, soft bokeh buildings behind, natural daylight. Preserve EVERY detail: exact print text, logo, camo pattern, colors.',
+  store:     'Keep this exact clothing item unchanged. Change the background to premium fashion boutique interior, hang the item on a metal clothes rail hanger, minimal white store walls, soft retail lighting. Preserve EVERY detail: exact print text, logo, colors.',
+  flatlay:   'Keep these exact clothing items unchanged. Arrange them in a flat lay top-down composition on clean white marble surface, soft studio lighting from above. Preserve EVERY detail: exact prints, logos, text, camo colors.',
+  lifestyle: 'Keep this exact person and clothing unchanged. Change only the background to outdoor nature/park/mountains, golden hour natural lighting. Preserve EVERY detail: exact print text, logo, colors.',
+  outdoor:   'Keep this exact person and clothing unchanged. Change only the background to urban street with blurred city buildings, natural daylight. Preserve EVERY detail: exact print text, logo, camo pattern.',
+  dark:      'Keep this exact person and clothing unchanged. Change only the background to dark dramatic studio, professional rim lighting from behind. Preserve EVERY detail: exact print text, logo, colors.',
 }
 
 async function buildFluxPrompt(photo: string, name: string, category: string, style: string, wishes: string): Promise<string> {
@@ -23,7 +23,7 @@ async function buildFluxPrompt(photo: string, name: string, category: string, st
       model: 'gpt-4o-mini',
       messages: [{ role: 'user', content: [
         { type: 'image_url', image_url: { url: photo, detail: 'low' } },
-        { type: 'text', text: `Product: "${name}", Category: "${category}". Style: "${style}". ${wishes ? `Extra: "${wishes}"` : ''}\n\nEnhance this Flux image-editing prompt (must preserve EXACT product/colors/prints/logos):\n"${base}"\n\nReturn ONLY enhanced English prompt under 80 words:` }
+        { type: 'text', text: `Product: "${name}", Category: "${category}". Style: "${style}". ${wishes ? `Extra: "${wishes}"` : ''}\n\nEnhance this Flux image-editing prompt (must preserve EXACT product/colors/prints/logos):\n"${base}"\n\nCRITICAL: The prompt MUST emphasize preserving exact logo text, print pattern, colors. Return ONLY enhanced English prompt under 80 words:` }
       ]}],
       max_tokens: 120, temperature: 0.5,
     })
@@ -133,8 +133,8 @@ export async function POST(req: NextRequest) {
     const RMBG = process.env.REMOVE_BG_API_KEY
     const results: string[] = []
 
-    if (style === 'catalog') {
-      // Catalog: just remove bg + white background, no AI generation
+    if (style === 'catalog' && !REPLICATE) {
+      // Catalog fallback: remove.bg + white background (no Replicate)
       for (let i = 0; i < qty; i++) {
         try { const buf = await makeCatalogPhoto(prodB64, RMBG); results.push(await saveResult(supabase, buf, user.id)) }
         catch (e) { console.error('catalog:', e) }

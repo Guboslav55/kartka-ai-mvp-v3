@@ -28,12 +28,28 @@ function PhotoUploader({ photos, onAdd, onRemove, onClear }: {
   photos: string[]; onAdd: (b64: string) => void; onRemove: (i: number) => void; onClear: () => void
 }) {
   const ref = useRef<HTMLInputElement>(null)
+  async function compress(file: File): Promise<string> {
+    return new Promise(resolve => {
+      const img = new Image(), url = URL.createObjectURL(file)
+      img.onload = () => {
+        const MAX = 1024
+        let [w, h] = [img.width, img.height]
+        if (w > MAX || h > MAX) { if (w > h) { h = Math.round(h*MAX/w); w = MAX } else { w = Math.round(w*MAX/h); h = MAX } }
+        const c = document.createElement('canvas'); c.width = w; c.height = h
+        c.getContext('2d')!.drawImage(img, 0, 0, w, h)
+        URL.revokeObjectURL(url)
+        resolve(c.toDataURL('image/jpeg', 0.82))
+      }
+      img.onerror = () => { URL.revokeObjectURL(url); const r = new FileReader(); r.onload = () => resolve(r.result as string); r.readAsDataURL(file) }
+      img.src = url
+    })
+  }
+
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || [])
-    files.slice(0, MAX_PHOTOS - photos.length).forEach(file => {
-      const reader = new FileReader()
-      reader.onload = () => onAdd(reader.result as string)
-      reader.readAsDataURL(file)
+    files.slice(0, MAX_PHOTOS - photos.length).forEach(async file => {
+      try { onAdd(await compress(file)) }
+      catch { const r = new FileReader(); r.onload = () => onAdd(r.result as string); r.readAsDataURL(file) }
     })
     if (ref.current) ref.current.value = ''
   }

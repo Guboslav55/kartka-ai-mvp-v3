@@ -75,20 +75,73 @@ async function composite(sceneBuf: Buffer, prodB64: string): Promise<Buffer> {
   const sharp = (await import('sharp')).default
   const m = prodB64.match(/^data:(image\/[\w+]+);base64,(.+)$/s)
   if (!m) return sceneBuf
-  const prodBuf = Buffer.from(m[2],'base64')
+
+  let prodBuf = Buffer.from(m[2],'base64')
+
+  // Try to remove background via Remove.bg API for clean compositing
+  const RMBG_KEY = process.env.REMOVE_BG_API_KEY
+  if (RMBG_KEY) {
+    try {
+      const formData = new FormData()
+      formData.append('image_file', new Blob([prodBuf], { type: m[1] }), 'product.jpg')
+      formData.append('size', 'auto')
+      const rmbgRes = await fetch('https://api.remove.bg/v1.0/removebg', {
+        method: 'POST',
+        headers: { 'X-Api-Key': RMBG_KEY },
+        body: formData,
+      })
+      if (rmbgRes.ok) {
+        prodBuf = Buffer.from(await rmbgRes.arrayBuffer())
+      }
+    } catch (e) { console.warn('remove.bg skip:', e) }
+  }
+
   const meta = await sharp(sceneBuf).metadata()
-  const size = Math.round(Math.min(meta.width||1024, meta.height||1024) * 0.55)
-  const resized = await sharp(prodBuf).resize(size,size,{fit:'contain',background:{r:0,g:0,b:0,alpha:0}}).png().toBuffer()
-  const left = Math.round(((meta.width||1024)-size)/2)
-  const top  = Math.round(((meta.height||1024)-size)/2)
-  return sharp(sceneBuf).composite([{input:resized,top,left,blend:'over'}]).jpeg({quality:92}).toBuffer()
+  const sceneW = meta.width || 1024
+  const sceneH = meta.height || 1024
+
+  // Resize product to fill ~60% of scene, maintain aspect ratio
+  const prodMeta = await sharp(prodBuf).metadata()
+  const prodW = prodMeta.width || 512
+  const prodH = prodMeta.height || 512
+  const aspect = prodW / prodH
+  const maxSize = Math.round(Math.min(sceneW, sceneH) * 0.62)
+  const resizeW = aspect >= 1 ? maxSize : Math.round(maxSize * aspect)
+  const resizeH = aspect < 1 ? maxSize : Math.round(maxSize / aspect)
+
+  const resized = await sharp(prodBuf)
+    .resize(resizeW, resizeH, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png()
+    .toBuffer()
+
+  // Center product on scene, slightly below center for visual balance
+  const left = Math.round((sceneW - resizeW) / 2)
+  const top = Math.round((sceneH - resizeH) / 2 + sceneH * 0.02)
+
+  return sharp(sceneBuf)
+    .composite([{ input: resized, top: Math.max(0, top), left: Math.max(0, left), blend: 'over' }])
+    .jpeg({ quality: 93, mozjpeg: true })
+    .toBuffer()
 }
 
 async function compositeCard(sceneBuf: Buffer, prodB64: string, name: string, bullets: string[], cardStyle: string): Promise<Buffer> {
   const sharp = (await import('sharp')).default
   const m = prodB64.match(/^data:(image\/[\w+]+);base64,(.+)$/s)
   if (!m) return sceneBuf
-  const prodBuf = Buffer.from(m[2],'base64')
+  let prodBuf = Buffer.from(m[2],'base64')
+
+  // Remove background for clean card
+  const RMBG_KEY = process.env.REMOVE_BG_API_KEY
+  if (RMBG_KEY) {
+    try {
+      const fd = new FormData()
+      fd.append('image_file', new Blob([prodBuf], { type: m[1] }), 'p.jpg')
+      fd.append('size', 'auto')
+      const r = await fetch('https://api.remove.bg/v1.0/removebg', { method:'POST', headers:{'X-Api-Key':RMBG_KEY}, body:fd })
+      if (r.ok) prodBuf = Buffer.from(await r.arrayBuffer())
+    } catch {}
+  }
+
   const prodResized = await sharp(prodBuf).resize(440,440,{fit:'contain',background:{r:0,g:0,b:0,alpha:0}}).png().toBuffer()
   const esc=(s:string)=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   const accent = cardStyle==='premium'?'#c9a84c':'#6366f1'

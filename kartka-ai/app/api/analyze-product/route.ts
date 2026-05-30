@@ -3,6 +3,12 @@ import OpenAI from 'openai'
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
+const CATEGORIES = [
+  'Одяг та взуття', 'Електроніка', 'Спорт та відпочинок', 'Дім та сад',
+  'Краса та здоров\'я', 'Дитячі товари', 'Авто', 'Їжа та напої',
+  'Книги та канцелярія', 'Меблі', 'Іграшки', 'Інше'
+]
+
 export async function POST(req: NextRequest) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '')
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -18,17 +24,44 @@ export async function POST(req: NextRequest) {
         role: 'user',
         content: [
           { type: 'image_url', image_url: { url: imageBase64, detail: 'low' } },
-          { type: 'text', text: `Analyze this product photo. Respond in ${langHint}. Return JSON:
-{"productName":"product name","category":"category","bullets":["feature 1","feature 2","feature 3"],"keepBackground":false,"bbox":{"w":0.8,"h":0.8}}
-keepBackground=true if background is already clean/white. bbox is approximate product area (0-1).` }
+          {
+            type: 'text',
+            text: `Analyze this product photo carefully. Respond in ${langHint}.
+
+Return JSON:
+{
+  "productName": "specific product name with brand if visible (e.g. 'Куртка тактична POMSTA мультикам')",
+  "category": "one of: ${CATEGORIES.join(', ')}",
+  "bullets": [
+    "specific benefit 1 (e.g. 'Водовідштовхувальна тканина')",
+    "specific benefit 2",
+    "specific benefit 3",
+    "specific benefit 4",
+    "specific benefit 5"
+  ]
+}
+
+Rules:
+- productName: be specific, mention visible brand/logo/text, material, style
+- bullets: real product features you can SEE in the photo (not generic marketing phrases)
+- If you see a logo or text, include it in the name
+- Return exactly 5 bullets`
+          }
         ]
       }],
-      max_tokens: 300,
-      response_format: { type: 'json_object' }
+      max_tokens: 400,
+      response_format: { type: 'json_object' },
+      temperature: 0.3,
     })
+
     const data = JSON.parse(res.choices[0]?.message?.content || '{}')
-    return NextResponse.json(data)
+    return NextResponse.json({
+      productName: data.productName || '',
+      category: data.category || '',
+      bullets: Array.isArray(data.bullets) ? data.bullets.slice(0, 5) : [],
+    })
   } catch (e: any) {
-    return NextResponse.json({ productName: '', category: '', bullets: [], keepBackground: false }, { status: 200 })
+    console.error('analyze-product error:', e.message)
+    return NextResponse.json({ productName: '', category: '', bullets: [] })
   }
 }

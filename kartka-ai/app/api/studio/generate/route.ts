@@ -125,38 +125,46 @@ async function pollReplicate(id: string, token: string, max = 40): Promise<any> 
 // ─── Ideogram v2: generate complete infographic card ─────────────────────────
 async function runIdeogram(
   prompt: string,
-  imageUrl: string | null,
+  _imageUrl: string | null,
   token: string,
   aspectRatio = '2:3'
 ): Promise<string | null> {
   try {
-    const input: Record<string, any> = {
+    const input = {
       prompt,
       aspect_ratio: aspectRatio,
       style_type: 'DESIGN',
       magic_prompt_option: 'OFF',
-      negative_prompt: 'blurry, low quality, ugly, deformed, text errors, illegible text',
+      negative_prompt: 'blurry, low quality, text errors, illegible text, watermark',
+      resolution: 'None',
     }
-    // Use product photo as style reference if available
-    if (imageUrl) input.image_path = imageUrl
+
+    console.log('Ideogram request:', JSON.stringify({ input }).slice(0, 200))
 
     const pred = await fetch('https://api.replicate.com/v1/models/ideogram-ai/ideogram-v2-turbo/predictions', {
       method: 'POST',
       headers: { Authorization: `Token ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ input })
     })
-    if (!pred.ok) {
-      const e = await pred.json()
-      console.error('Ideogram error:', e.detail)
-      // Fallback: try without image reference
-      if (imageUrl) return runIdeogram(prompt, null, token, aspectRatio)
-      return null
-    }
-    const data = await pred.json()
+
+    const predText = await pred.text()
+    console.log('Ideogram response status:', pred.status, predText.slice(0, 300))
+
+    if (!pred.ok) return null
+
+    const data = JSON.parse(predText)
+    if (!data.id) { console.error('No prediction ID:', data); return null }
+
     const result = await pollReplicate(data.id, token)
+    console.log('Ideogram result status:', result.status, JSON.stringify(result.output || result.error || '').slice(0,200))
+
     if (result.status !== 'succeeded' || !result.output) return null
     const output = result.output
-    return Array.isArray(output) ? output[0]?.url || output[0] : output?.url || output
+    // Ideogram returns array of objects with url property
+    if (Array.isArray(output)) {
+      return output[0]?.url || output[0] || null
+    }
+    return output?.url || output || null
   } catch (e) { console.error('Ideogram exception:', e); return null }
 }
 

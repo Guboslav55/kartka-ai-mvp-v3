@@ -223,6 +223,38 @@ export default function StudioPage() {
   }, [])
 
   const totalCost = COST_MAP[mode] * count
+  // Auto-analyze when switching to card mode if bullets empty
+  React.useEffect(() => {
+    if (mode === 'card' && photos.length > 0 && token) {
+      const hasAnyBullet = bullets.some(b => b.trim())
+      if (!hasAnyBullet) analyzePhoto(photos[0], token)
+    }
+  }, [mode])
+
+  async function analyzePhoto(photo: string, tok: string) {
+    if (!photo || !tok || analyzing) return
+    setAnalyzing(true)
+    try {
+      const res = await fetch('/api/analyze-product', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
+        body: JSON.stringify({ imageBase64: photo, lang: 'uk' }),
+      })
+      if (!res.ok) return
+      const d = await res.json()
+      if (d.productName) setProductName(prev => prev.trim() ? prev : d.productName)
+      if (d.category) setCategory(prev => prev ? prev : d.category)
+      if (d.bullets?.length) {
+        setBullets(prev => {
+          const hasAny = prev.some(b => b.trim())
+          if (hasAny) return prev
+          return [...d.bullets.slice(0, 5), '', '', '', '', ''].slice(0, 5)
+        })
+      }
+    } catch (e) { console.warn('analyze error:', e) }
+    setAnalyzing(false)
+  }
+
   const canGenerate = photos.length > 0 && productName.trim() && starsBalance >= totalCost && !loading && mode !== 'video'
 
   async function getAiIdea(type: 'random' | 'detailed') {
@@ -319,7 +351,12 @@ export default function StudioPage() {
               onAdd={b64 => {
               setPhotos(p => {
                 const next = [...p, b64].slice(0, MAX_PHOTOS)
-                if (p.length === 0) setTimeout(() => analyzePhoto(b64), 100)
+                if (p.length === 0) {
+                  // Get fresh token from session to avoid race condition
+                  supabase.auth.getSession().then(({ data: { session } }) => {
+                    if (session?.access_token) analyzePhoto(b64, session.access_token)
+                  })
+                }
                 return next
               })
             }}

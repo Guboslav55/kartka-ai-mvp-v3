@@ -223,11 +223,24 @@ export default function StudioPage() {
   }, [])
 
   const totalCost = COST_MAP[mode] * count
-  // Auto-analyze when switching to card mode if bullets empty
+  // Auto-analyze: fires when first photo added, or when switching to card mode
   React.useEffect(() => {
-    if (mode === 'card' && photos.length > 0 && token) {
+    if (photos.length === 1 && token && !analyzing) {
+      // First photo was just added - analyze it
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.access_token) analyzePhoto(photos[0], session.access_token)
+      })
+    }
+  }, [photos.length])
+
+  React.useEffect(() => {
+    if (mode === 'card' && photos.length > 0 && token && !analyzing) {
       const hasAnyBullet = bullets.some(b => b.trim())
-      if (!hasAnyBullet) analyzePhoto(photos[0], token)
+      if (!hasAnyBullet) {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (session?.access_token) analyzePhoto(photos[0], session.access_token)
+        })
+      }
     }
   }, [mode])
 
@@ -368,7 +381,14 @@ export default function StudioPage() {
                 <input value={productName} onChange={e => setProductName(e.target.value)}
                   placeholder={analyzing ? "🔍 Аналізую фото..." : "Назва товару"}
                   className={`w-full bg-white/5 border rounded-xl px-3 py-2.5 text-white text-sm placeholder-white/25 focus:outline-none transition-all ${analyzing ? 'border-gold/40 placeholder-gold/50' : 'border-white/10 focus:border-gold/50'}`} />
-                {analyzing && <div className="absolute right-3 top-3 w-4 h-4 border-2 border-gold border-t-transparent rounded-full animate-spin"/>}
+                {analyzing
+                  ? <div className="absolute right-3 top-3 w-4 h-4 border-2 border-gold border-t-transparent rounded-full animate-spin"/>
+                  : photos.length > 0 && (
+                    <button onClick={() => supabase.auth.getSession().then(({data:{session}}) => { if(session?.access_token) analyzePhoto(photos[0], session.access_token) })}
+                      className="absolute right-2 top-1.5 text-xs bg-gold/15 text-gold px-2 py-1 rounded-lg hover:bg-gold/25 transition-colors"
+                      title="AI аналіз фото">🔍</button>
+                  )
+                }
               </div>
               <select value={category} onChange={e => setCategory(e.target.value)}
                 className="w-full bg-[#1a1a2e] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white/70 focus:outline-none focus:border-gold/50">

@@ -1,33 +1,183 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import { createClient } from '@supabase/supabase-js'
+import path from 'path'
+import fs from 'fs'
 
 export const maxDuration = 120
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 const COST = 4
-const FONT_PATH = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
-const FONT_REG = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
 
-const STYLE_PROMPTS: Record<string, string> = {
-  model:     'Keep this exact person and clothing completely unchanged. Change only the background to urban city street with blurred buildings, soft natural daylight. Preserve EVERY detail: exact clothing, prints, logos, colors, person face.',
-  store:     'Keep this exact clothing completely unchanged. Change setting to premium boutique with clothing on chrome hanger, minimal white walls, soft retail lighting. Preserve EVERY detail: exact prints, logo, colors.',
-  flatlay:   'Keep this exact clothing completely unchanged. Show ONLY the clothing (NO people, NO body parts) neatly laid flat on clean white marble, strict 90-degree top-down view. Soft even studio lighting. Preserve EVERY detail.',
-  catalog:   'Keep this exact clothing and person completely unchanged. Change only background to pure seamless white studio with soft professional lighting. Preserve EVERY detail.',
-  outdoor:   'Keep this exact person and clothing completely unchanged. Change only background to dramatic outdoor nature with mountains or forest, golden hour lighting. Preserve EVERY detail.',
-  dark:      'Keep this exact person and clothing completely unchanged. Change only background to dark moody professional studio with dramatic rim lighting. Preserve EVERY detail.',
-  lifestyle: 'Keep this exact person and clothing completely unchanged. Change only background to warm cozy lifestyle environment with natural bokeh. Preserve EVERY detail.',
-}
+const FONT_BOLD = [
+  path.join(process.cwd(), 'public/fonts/DejaVuSans-Bold.ttf'),
+  '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+].find(p => { try { return fs.existsSync(p) } catch { return false } }) || ''
 
-async function translateWishes(wishes: string): Promise<string> {
-  if (!wishes.trim()) return ''
+const FONT_REG = [
+  path.join(process.cwd(), 'public/fonts/DejaVuSans.ttf'),
+  '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+].find(p => { try { return fs.existsSync(p) } catch { return false } }) || ''
+
+// Step 1: Get Flux prompt based on product analysis
+async function getFluxPrompt(photo: string, name: string, category: string, style: string, wishes: string, variationIdx: number): Promise<string> {
+  const styleMap: Record<string, string> = {
+    model: 'urban lifestyle street scene, city environment',
+    store: 'premium boutique store, clothes hanger, retail environment',
+    flatlay: 'flat lay top-down view on marble surface, NO people',
+    catalog: 'pure clean white seamless studio background',
+    outdoor: 'outdoor nature, mountains or forest, golden hour',
+    dark: 'dark dramatic studio, moody rim lighting',
+    lifestyle: 'cozy lifestyle indoor environment, natural light',
+  }
+  const sceneDesc = styleMap[style] || styleMap.catalog
+  const variationHints = ['', 'slightly different angle', 'alternative lighting', 'different mood']
+  const wishesEn = wishes ? await translateToEn(wishes) : ''
+
   try {
     const r = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: `Translate to English for AI image editor (exact visual meaning): "${wishes}"` }],
-      max_tokens: 80,
+      messages: [{ role: 'user', content: [
+        { type: 'image_url', image_url: { url: photo, detail: 'low' } },
+        { type: 'text', text: `Product: "${name}", Category: "${category}".
+Target scene: ${sceneDesc}.${wishesEn ? ` User requirement: ${wishesEn}.` : ''}
+Variation: ${variationHints[variationIdx] || variationIdx + 1}.
+
+Write a Flux Kontext image editing prompt (English, max 80 words):
+- Start with: "Keep this exact product/person/clothing completely unchanged."
+- Describe the specific target scene vividly (environment, lighting, mood)
+- Mention: preserve all logos, prints, colors, textures exactly
+- End with: "Professional marketing photography."
+Return ONLY the prompt:` }
+      ]}],
+      max_tokens: 150, temperature: 0.8,
     })
-    return r.choices[0]?.message?.content?.trim() || wishes
-  } catch { return wishes }
+    return r.choices[0]?.message?.content?.trim() || `Keep this exact product unchanged. ${sceneDesc}. Preserve all details. Professional photography.`
+  } catch {
+    return `Keep this exact product and person unchanged. ${sceneDesc}. Preserve all logos and colors. Professional marketing photography.`
+  }
+}
+
+// Step 2: After Flux generates the scene, GPT-4o analyzes it and decides WHERE to put text
+async function analyzeSceneForLayout(sceneImageUrl: string, name: string, bullets: string[]): Promise<{
+  titleX: number; titleY: number; titleSize: number; titleAlign: 'left' | 'center' | 'right'
+  bulletsX: number; bulletsY: number; bulletsDirection: 'down' | 'right'
+  accentColor: string; textBg: string; accentBar: 'left' | 'top' | 'bottom' | 'right'
+  bottomBarColor: string
+}> {
+  try {
+    const r = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: [
+        { type: 'image_url', image_url: { url: sceneImageUrl, detail: 'low' } },
+        { type: 'text', text: `This is a 1024x1024 marketing product photo. I need to add text overlays.
+
+Product name: "${name.slice(0,20).toUpperCase()}"
+Benefits count: ${Math.min(bullets.filter(Boolean).length, 5)}
+
+Analyze the image and decide WHERE to place text to avoid covering the main product:
+- Find the darkest/emptiest areas (left side, right side, top, bottom)
+- Extract the dominant brand/accent color from the product
+
+Return JSON ONLY:
+{
+  "titleX": number (0-900, pixel X for title),
+  "titleY": number (80-300, pixel Y for title),  
+  "titleSize": number (48-80, font size based on name length),
+  "titleAlign": "left" | "center",
+  "bulletsX": number (10-700, pixel X for bullets list),
+  "bulletsY": number (200-700, pixel Y start for bullets),
+  "bulletsDirection": "down",
+  "accentColor": "#hexcolor (from product logo/branding or complementary)",
+  "textBg": "rgba(0,0,0,0.80)" | "rgba(255,255,255,0.88)",
+  "accentBar": "left" | "top",
+  "bottomBarColor": "#hexcolor"
+}` }
+      ]}],
+      max_tokens: 200,
+      response_format: { type: 'json_object' },
+      temperature: 0.3,
+    })
+    const d = JSON.parse(r.choices[0]?.message?.content || '{}')
+    return {
+      titleX: Math.max(20, Math.min(d.titleX || 40, 900)),
+      titleY: Math.max(80, Math.min(d.titleY || 120, 300)),
+      titleSize: Math.max(48, Math.min(d.titleSize || 64, 80)),
+      titleAlign: d.titleAlign || 'left',
+      bulletsX: Math.max(10, Math.min(d.bulletsX || 30, 700)),
+      bulletsY: Math.max(200, Math.min(d.bulletsY || 240, 700)),
+      bulletsDirection: 'down',
+      accentColor: d.accentColor || '#FFD700',
+      textBg: d.textBg || 'rgba(0,0,0,0.80)',
+      bottomBarColor: d.bottomBarColor || d.accentColor || '#FFD700',
+    }
+  } catch {
+    return {
+      titleX: 36, titleY: 110, titleSize: 64, titleAlign: 'left',
+      bulletsX: 30, bulletsY: 230, bulletsDirection: 'down',
+      accentColor: '#FFD700', textBg: 'rgba(0,0,0,0.80)', accentBar: 'left',
+      bottomBarColor: '#FFD700',
+    }
+  }
+}
+
+// Step 3: Overlay infographic elements using GPT-4o's layout decision
+async function overlayInfographic(imageUrl: string, name: string, bullets: string[], layout: Awaited<ReturnType<typeof analyzeSceneForLayout>>): Promise<Buffer> {
+  const sharp = (await import('sharp')).default
+  const imgBuf = Buffer.from(await (await fetch(imageUrl)).arrayBuffer())
+  const meta = await sharp(imgBuf).metadata()
+  const W = meta.width || 1024, H = meta.height || 1024
+
+  const esc = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  const bs = bullets.filter(Boolean).slice(0,5)
+  const title = esc(name.slice(0,24).toUpperCase())
+  const { titleX, titleY, titleSize, accentColor, textBg, bulletsX, bulletsY, bottomBarColor } = layout
+
+  const bulletItems = bs.map((b, i) => {
+    const clean = esc(b.replace(/^[•✓\-]\s*/, '').slice(0, 38))
+    const y = bulletsY + i * 105
+    const bw = Math.min(clean.length * 13 + 85, W * 0.52)
+    return `<rect x="${bulletsX}" y="${y}" width="${bw}" height="92" rx="13" fill="${textBg}"/>
+<circle cx="${bulletsX + 42}" cy="${y + 46}" r="26" fill="${accentColor}"/>
+<text x="${bulletsX + 42}" y="${y + 53}" text-anchor="middle" font-family="Bold" font-size="19" fill="#000">${i+1}</text>
+<text x="${bulletsX + 82}" y="${y + 37}" font-family="Bold" font-size="18" fill="white">${clean.slice(0,28)}</text>
+${clean.length > 28 ? `<text x="${bulletsX + 82}" y="${y + 62}" font-family="Reg" font-size="15" fill="rgba(255,255,255,0.70)">${esc(clean.slice(28))}</text>` : ''}`
+  }).join('\n')
+
+  const fontStyle = FONT_BOLD ? `@font-face { font-family: 'Bold'; src: url('${FONT_BOLD}'); }
+  @font-face { font-family: 'Reg'; src: url('${FONT_REG}'); }` : ''
+
+  const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <style>${fontStyle}</style>
+  <linearGradient id="gt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(0,0,0,0.75)"/><stop offset="100%" stop-color="rgba(0,0,0,0)"/></linearGradient>
+  <linearGradient id="gb" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(0,0,0,0)"/><stop offset="100%" stop-color="rgba(0,0,0,0.88)"/></linearGradient>
+</defs>
+<rect width="${W}" height="${Math.round(H*0.22)}" fill="url(#gt)"/>
+<rect y="${Math.round(H*0.78)}" width="${W}" height="${Math.round(H*0.22)}" fill="url(#gb)"/>
+<rect x="0" y="0" width="9" height="${H}" fill="${accentColor}"/>
+<rect x="${titleX - 16}" y="${titleY - titleSize - 4}" width="${Math.min(title.length * titleSize * 0.54 + 24, W - titleX)}" height="${titleSize + 24}" rx="10" fill="${textBg}"/>
+<text x="${titleX}" y="${titleY}" font-family="Bold,Arial Black,sans-serif" font-size="${titleSize}" fill="white">${title}</text>
+<rect x="${titleX - 4}" y="${titleY + 8}" width="${Math.min(title.length * titleSize * 0.3, 260)}" height="5" rx="3" fill="${accentColor}"/>
+${bulletItems}
+<rect x="0" y="${H - 72}" width="${W}" height="72" fill="${bottomBarColor}"/>
+<text x="${W/2}" y="${H - 24}" text-anchor="middle" font-family="Bold,Arial Black,sans-serif" font-size="22" fill="#000">XS · S · M · L · XL · 2XL · 3XL</text>
+</svg>`
+
+  return sharp(imgBuf)
+    .composite([{ input: Buffer.from(svg), top: 0, left: 0 }])
+    .jpeg({ quality: 93 })
+    .toBuffer()
+}
+
+async function translateToEn(text: string): Promise<string> {
+  try {
+    const r = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: `Translate to English (keep exact visual meaning, be specific): "${text}"` }],
+      max_tokens: 60,
+    })
+    return r.choices[0]?.message?.content?.trim() || text
+  } catch { return text }
 }
 
 async function uploadPhoto(supabase: any, b64: string, uid: string, folder: string): Promise<string | null> {
@@ -35,7 +185,7 @@ async function uploadPhoto(supabase: any, b64: string, uid: string, folder: stri
     const m = b64.match(/^data:(image\/[\w+]+);base64,(.+)$/s)
     if (!m) return null
     const buf = Buffer.from(m[2], 'base64')
-    const fn = `${folder}/${uid}/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`
+    const fn = `${folder}/${uid}/${Date.now()}.jpg`
     const { error } = await supabase.storage.from('card-images').upload(fn, buf, { contentType: 'image/jpeg' })
     if (error) return null
     return supabase.storage.from('card-images').getPublicUrl(fn).data.publicUrl
@@ -60,220 +210,28 @@ async function runFluxKontext(imageUrl: string, prompt: string, token: string): 
       body: JSON.stringify({ input: { input_image: imageUrl, prompt, aspect_ratio: '1:1', output_format: 'jpg', output_quality: 90, safety_tolerance: 2 } })
     })
     if (!pred.ok) { const e = await pred.json(); console.error('Flux:', e.detail); return null }
-    const result = await pollReplicate((await pred.json()).id, token)
+    const data = await pred.json()
+    const result = await pollReplicate(data.id, token)
     if (result.status !== 'succeeded' || !result.output) return null
     return Array.isArray(result.output) ? result.output[0] : result.output
   } catch (e) { console.error('Flux:', e); return null }
 }
 
-// Extract dominant colors from product image
-async function extractColors(prodBuf: Buffer): Promise<{ primary: string; secondary: string; accent: string }> {
-  try {
-    const sharp = (await import('sharp')).default
-    const { dominant } = await sharp(prodBuf).resize(50, 50).stats()
-    const r = dominant.r, g = dominant.g, b = dominant.b
-    // Create complementary colors
-    const primary = `rgb(${r},${g},${b})`
-    // Brighten for accent
-    const ar = Math.min(255, r + 80), ag = Math.min(255, g + 80), ab = Math.min(255, b + 80)
-    const accent = `rgb(${ar},${ag},${ab})`
-    return { primary, secondary: 'rgba(255,255,255,0.9)', accent }
-  } catch {
-    return { primary: '#FFD700', secondary: '#FFFFFF', accent: '#FFD700' }
-  }
-}
-
-// Generate unique card layout with proper Cyrillic font
-async function makeCard(bgUrl: string, prodB64: string, name: string, bullets: string[], cardStyle: string, layoutIdx = 0): Promise<Buffer> {
-  const sharp = (await import('sharp')).default
-  const CANVAS = 1080
-
-  // Download and resize background
-  const bgBuf = Buffer.from(await (await fetch(bgUrl)).arrayBuffer())
-  const bg = await sharp(bgBuf).resize(CANVAS, CANVAS, { fit: 'cover', position: 'center' }).toBuffer()
-
-  // Decode product
-  const m = prodB64.match(/^data:(image\/[\w+]+);base64,(.+)$/s)
-  if (!m) return bg
-  const prodBuf = Buffer.from(m[2], 'base64')
-
-  // Extract colors for dynamic theming
-  const colors = await extractColors(prodBuf)
-  const accent = cardStyle === 'premium' ? '#c9a84c' : '#FFD700'
-  const isDark = cardStyle === 'premium'
-
-  // Product resize
-  const prodMeta = await sharp(prodBuf).metadata()
-  const prodAspect = (prodMeta.width || 512) / (prodMeta.height || 512)
-
-  const esc = (s: string) => s
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&apos;')
-
-  const bs = bullets.filter(Boolean).slice(0, 5)
-  const titleText = esc(name.slice(0, 22).toUpperCase())
-  const fontDecl = `@font-face { font-family: 'CardFont'; src: url('${FONT_PATH}'); font-weight: bold; }
-  @font-face { font-family: 'CardFontReg'; src: url('${FONT_REG}'); }`
-
-  let svg = ''
-  let prodTop = 0, prodLeft = 0, photoW = 0, photoH = 0
-  let prodResized: Buffer
-
-  // ── Layout selection (4 unique compositions) ──────────────────────────────
-  const layout = layoutIdx % 4
-
-  if (layout === 0) {
-    // Layout 0: Product RIGHT, text LEFT (Aidentika-style)
-    photoH = Math.round(CANVAS * 0.92)
-    photoW = Math.round(photoH * Math.min(prodAspect, 0.62))
-    prodResized = await sharp(prodBuf).resize(photoW, photoH, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer()
-    prodLeft = CANVAS - photoW - 5
-    prodTop = Math.max(0, Math.round((CANVAS - photoH) / 2))
-
-    const bulletsSvg = bs.map((b, i) => {
-      const clean = esc(b.replace(/^[•✓\-]\s*/, '').slice(0, 35))
-      const y = 240 + i * 130
-      return `<rect x="30" y="${y}" width="${Math.min(clean.length * 14 + 85, 450)}" height="110" rx="16" fill="rgba(0,0,0,0.82)"/>
-<circle cx="74" cy="${y + 55}" r="30" fill="${accent}"/>
-<text x="74" y="${y + 63}" text-anchor="middle" font-family="CardFont,sans-serif" font-size="22" fill="#000">${i + 1}</text>
-<text x="120" y="${y + 45}" font-family="CardFont,sans-serif" font-size="20" fill="white">${clean}</text>`
-    }).join('\n')
-
-    svg = `<svg width="${CANVAS}" height="${CANVAS}" xmlns="http://www.w3.org/2000/svg">
-<defs><style>${fontDecl}</style>
-<linearGradient id="gl" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(0,0,0,0.92)"/><stop offset="58%" stop-color="rgba(0,0,0,0.65)"/><stop offset="100%" stop-color="rgba(0,0,0,0)"/></linearGradient>
-<linearGradient id="gt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(0,0,0,0.65)"/><stop offset="100%" stop-color="rgba(0,0,0,0)"/></linearGradient>
-<linearGradient id="gb" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(0,0,0,0)"/><stop offset="100%" stop-color="rgba(0,0,0,0.88)"/></linearGradient>
-</defs>
-<rect width="${CANVAS}" height="${CANVAS}" fill="url(#gl)"/>
-<rect width="${CANVAS}" height="170" fill="url(#gt)"/>
-<rect y="${CANVAS - 155}" width="${CANVAS}" height="155" fill="url(#gb)"/>
-<rect x="0" y="0" width="9" height="${CANVAS}" fill="${accent}"/>
-<text x="50" y="110" font-family="CardFont,sans-serif" font-size="66" fill="white">${titleText}</text>
-<rect x="50" y="132" width="240" height="6" rx="3" fill="${accent}"/>
-${bulletsSvg}
-<rect x="0" y="${CANVAS - 78}" width="${CANVAS}" height="78" fill="${accent}"/>
-<text x="50" y="${CANVAS - 26}" font-family="CardFont,sans-serif" font-size="26" fill="#000">РОЗМІРИ: XS · S · M · L · XL · 2XL · 3XL</text>
-</svg>`
-
-  } else if (layout === 1) {
-    // Layout 1: Product LEFT, text RIGHT
-    photoH = Math.round(CANVAS * 0.85)
-    photoW = Math.round(photoH * Math.min(prodAspect, 0.58))
-    prodResized = await sharp(prodBuf).resize(photoW, photoH, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer()
-    prodLeft = 10
-    prodTop = Math.max(0, Math.round((CANVAS - photoH) / 2))
-    const textX = photoW + 40
-
-    const bulletsSvg = bs.map((b, i) => {
-      const clean = esc(b.replace(/^[•✓\-]\s*/, '').slice(0, 28))
-      const y = 210 + i * 140
-      return `<rect x="${textX}" y="${y}" width="${CANVAS - textX - 20}" height="120" rx="16" fill="rgba(0,0,0,0.80)"/>
-<rect x="${textX + 10}" y="${y + 10}" width="6" height="100" rx="3" fill="${accent}"/>
-<text x="${textX + 32}" y="${y + 55}" font-family="CardFont,sans-serif" font-size="21" fill="white">${clean}</text>
-<text x="${textX + 32}" y="${y + 90}" font-family="CardFontReg,sans-serif" font-size="16" fill="rgba(255,255,255,0.55)">переваги товару</text>`
-    }).join('\n')
-
-    svg = `<svg width="${CANVAS}" height="${CANVAS}" xmlns="http://www.w3.org/2000/svg">
-<defs><style>${fontDecl}</style>
-<linearGradient id="gr" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(0,0,0,0.0)"/><stop offset="45%" stop-color="rgba(0,0,0,0.70)"/><stop offset="100%" stop-color="rgba(0,0,0,0.92)"/></linearGradient>
-<linearGradient id="gt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(0,0,0,0.65)"/><stop offset="100%" stop-color="rgba(0,0,0,0)"/></linearGradient>
-</defs>
-<rect width="${CANVAS}" height="${CANVAS}" fill="url(#gr)"/>
-<rect width="${CANVAS}" height="170" fill="url(#gt)"/>
-<rect x="${CANVAS - 9}" y="0" width="9" height="${CANVAS}" fill="${accent}"/>
-<text x="${textX}" y="120" font-family="CardFont,sans-serif" font-size="58" fill="white">${titleText}</text>
-<rect x="${textX}" y="140" width="200" height="5" rx="3" fill="${accent}"/>
-${bulletsSvg}
-<rect x="0" y="${CANVAS - 78}" width="${CANVAS}" height="78" fill="${accent}"/>
-<text x="${CANVAS / 2}" y="${CANVAS - 26}" text-anchor="middle" font-family="CardFont,sans-serif" font-size="24" fill="#000">XS · S · M · L · XL · 2XL · 3XL</text>
-</svg>`
-
-  } else if (layout === 2) {
-    // Layout 2: Product CENTER-RIGHT, title TOP-LEFT, bullets bottom-left
-    photoH = Math.round(CANVAS * 0.78)
-    photoW = Math.round(photoH * Math.min(prodAspect, 0.65))
-    prodResized = await sharp(prodBuf).resize(photoW, photoH, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer()
-    prodLeft = CANVAS - photoW - 20
-    prodTop = Math.round((CANVAS - photoH) / 2)
-
-    const bulletsSvg = bs.slice(0, 4).map((b, i) => {
-      const clean = esc(b.replace(/^[•✓\-]\s*/, '').slice(0, 30))
-      const row = Math.floor(i / 2), col = i % 2
-      const bx = 30 + col * 260, by = CANVAS - 340 + row * 140
-      return `<rect x="${bx}" y="${by}" width="240" height="115" rx="14" fill="rgba(0,0,0,0.85)"/>
-<rect x="${bx + 10}" y="${by + 10}" width="${220}" height="4" rx="2" fill="${accent}"/>
-<text x="${bx + 15}" y="${by + 55}" font-family="CardFont,sans-serif" font-size="18" fill="${accent}">${i + 1}</text>
-<text x="${bx + 38}" y="${by + 55}" font-family="CardFont,sans-serif" font-size="18" fill="white">${clean}</text>`
-    }).join('\n')
-
-    svg = `<svg width="${CANVAS}" height="${CANVAS}" xmlns="http://www.w3.org/2000/svg">
-<defs><style>${fontDecl}</style>
-<linearGradient id="gm" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(0,0,0,0.88)"/><stop offset="35%" stop-color="rgba(0,0,0,0.30)"/><stop offset="65%" stop-color="rgba(0,0,0,0.20)"/><stop offset="100%" stop-color="rgba(0,0,0,0.88)"/></linearGradient>
-</defs>
-<rect width="${CANVAS}" height="${CANVAS}" fill="url(#gm)"/>
-<rect x="0" y="0" width="${CANVAS}" height="9" fill="${accent}"/>
-<rect x="0" y="${CANVAS - 9}" width="${CANVAS}" height="9" fill="${accent}"/>
-<text x="40" y="95" font-family="CardFont,sans-serif" font-size="70" fill="white">${titleText}</text>
-<rect x="40" y="115" width="260" height="6" rx="3" fill="${accent}"/>
-${bulletsSvg}
-</svg>`
-
-  } else {
-    // Layout 3: SPLIT DIAGONAL - product full-bleed, dark overlay band
-    photoH = CANVAS
-    photoW = Math.round(CANVAS * 0.72)
-    prodResized = await sharp(prodBuf).resize(photoW, photoH, { fit: 'cover', position: 'center' }).jpeg({ quality: 90 }).toBuffer()
-    prodLeft = CANVAS - photoW
-    prodTop = 0
-
-    const bulletsSvg = bs.map((b, i) => {
-      const clean = esc(b.replace(/^[•✓\-]\s*/, '').slice(0, 32))
-      const y = 230 + i * 118
-      return `<text x="44" y="${y}" font-family="CardFont,sans-serif" font-size="22" fill="${accent}">✓</text>
-<text x="72" y="${y}" font-family="CardFontReg,sans-serif" font-size="22" fill="white">${clean}</text>`
-    }).join('\n')
-
-    svg = `<svg width="${CANVAS}" height="${CANVAS}" xmlns="http://www.w3.org/2000/svg">
-<defs><style>${fontDecl}</style>
-<linearGradient id="gd" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(0,0,0,0.96)"/><stop offset="100%" stop-color="rgba(0,0,0,0.0)"/></linearGradient>
-</defs>
-<rect width="${CANVAS * 0.45}" height="${CANVAS}" fill="url(#gd)"/>
-<rect x="0" y="0" width="9" height="${CANVAS}" fill="${accent}"/>
-<text x="44" y="110" font-family="CardFont,sans-serif" font-size="62" fill="white">${titleText}</text>
-<rect x="44" y="130" width="220" height="6" rx="3" fill="${accent}"/>
-${bulletsSvg}
-<rect x="0" y="${CANVAS - 78}" width="${CANVAS * 0.48}" height="78" fill="${accent}"/>
-<text x="44" y="${CANVAS - 26}" font-family="CardFont,sans-serif" font-size="22" fill="#000">XS · S · M · L · XL · 2XL</text>
-</svg>`
-  }
-
-  const layers: any[] = [{ input: prodResized!, top: prodTop, left: prodLeft, blend: 'over' }]
-  if (svg) layers.push({ input: Buffer.from(svg), top: 0, left: 0 })
-
-  return sharp(bg).composite(layers).jpeg({ quality: 94 }).toBuffer()
-}
-
-// Catalog: Remove.bg + white background
 async function makeCatalog(b64: string, rmbgKey?: string): Promise<Buffer> {
   const sharp = (await import('sharp')).default
   const m = b64.match(/^data:(image\/[\w+]+);base64,(.+)$/s)
   let prodBuf = m ? Buffer.from(m[2], 'base64') : Buffer.from(b64, 'base64')
   if (rmbgKey) {
     try {
-      const fd = new FormData()
-      fd.append('image_file', new Blob([prodBuf], { type: m?.[1] || 'image/jpeg' }), 'p.jpg')
-      fd.append('size', 'auto')
+      const fd = new FormData(); fd.append('image_file', new Blob([prodBuf], { type: m?.[1] || 'image/jpeg' }), 'p.jpg'); fd.append('size', 'auto')
       const r = await fetch('https://api.remove.bg/v1.0/removebg', { method: 'POST', headers: { 'X-Api-Key': rmbgKey }, body: fd })
       if (r.ok) prodBuf = Buffer.from(await r.arrayBuffer())
     } catch {}
   }
   const SIZE = 1200, PAD = 100
-  const resized = await sharp(prodBuf).resize(SIZE - PAD * 2, SIZE - PAD * 2, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer()
-  const shadow = Buffer.from(`<svg width="${SIZE}" height="${SIZE}"><ellipse cx="${SIZE / 2}" cy="${SIZE - PAD * 0.5}" rx="${SIZE * 0.28}" ry="${SIZE * 0.02}" fill="rgba(0,0,0,0.07)"/></svg>`)
-  return sharp({ create: { width: SIZE, height: SIZE, channels: 4, background: { r: 248, g: 248, b: 248, alpha: 255 } } })
-    .composite([{ input: resized, top: PAD, left: PAD }, { input: shadow, top: 0, left: 0 }])
-    .jpeg({ quality: 95 }).toBuffer()
+  const resized = await sharp(prodBuf).resize(SIZE-PAD*2, SIZE-PAD*2, { fit:'contain', background:{r:0,g:0,b:0,alpha:0} }).png().toBuffer()
+  return sharp({ create:{width:SIZE,height:SIZE,channels:4,background:{r:248,g:248,b:248,alpha:255}} })
+    .composite([{input:resized,top:PAD,left:PAD}]).jpeg({quality:95}).toBuffer()
 }
 
 async function saveBuf(supabase: any, buf: Buffer, uid: string, folder: string): Promise<string> {
@@ -289,8 +247,7 @@ async function saveUrl(supabase: any, url: string, uid: string, folder: string):
     const sharp = (await import('sharp')).default
     const buf = Buffer.from(await (await fetch(url)).arrayBuffer())
     const fn = `${folder}/${uid}/${Date.now()}.jpg`
-    const p = await sharp(buf).jpeg({ quality: 93 }).toBuffer()
-    await supabase.storage.from('card-images').upload(fn, p, { contentType: 'image/jpeg' })
+    await supabase.storage.from('card-images').upload(fn, await sharp(buf).jpeg({quality:93}).toBuffer(), { contentType: 'image/jpeg' })
     return supabase.storage.from('card-images').getPublicUrl(fn).data.publicUrl
   } catch { return url }
 }
@@ -303,87 +260,99 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser(token)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { mode = 'photo', displayStyle = 'catalog', productPhoto, productPhotos, productPhotoUrl, productName = '', category = '', wishes = '', count = 1, cardStyle = 'classic', bullets = [], marketplace = 'general' } = await req.json()
+    const { mode='photo', displayStyle='catalog', productPhoto, productPhotos, productPhotoUrl, productName='', category='', wishes='', count=1, cardStyle='classic', bullets=[] } = await req.json()
     if (!productName.trim()) return NextResponse.json({ error: 'Введіть назву товару' }, { status: 400 })
 
     const allPhotos: string[] = productPhotos?.length ? productPhotos : (productPhoto ? [productPhoto] : [])
     if (!allPhotos.length && productPhotoUrl) {
-      try { const r = await fetch(productPhotoUrl); const buf = Buffer.from(await r.arrayBuffer()); allPhotos.push(`data:${r.headers.get('content-type') || 'image/jpeg'};base64,${buf.toString('base64')}`) } catch {}
+      try { const r = await fetch(productPhotoUrl); const buf = Buffer.from(await r.arrayBuffer()); allPhotos.push(`data:${r.headers.get('content-type')||'image/jpeg'};base64,${buf.toString('base64')}`) } catch {}
     }
     if (!allPhotos.length) return NextResponse.json({ error: 'Завантажте фото товару' }, { status: 400 })
 
     const qty = Math.min(Math.max(1, count), 4)
     const { data: profile } = await supabase.from('users').select('stars_balance').eq('id', user.id).single()
     const balance = profile?.stars_balance ?? 0
-    if (balance < COST * qty) return NextResponse.json({ error: `Недостатньо зорь (${COST * qty} ⭐)`, needStars: true, balance }, { status: 402 })
+    if (balance < COST * qty) return NextResponse.json({ error: `Недостатньо зорь (${COST*qty} ⭐)`, needStars:true, balance }, { status: 402 })
 
     const REPLICATE = process.env.REPLICATE_API_TOKEN
     const RMBG = process.env.REMOVE_BG_API_KEY
     const results: string[] = []
 
     if (mode === 'card') {
-      const prodB64 = allPhotos[0]
+      // CARD MODE:
+      // 1. Flux generates unique scene for this product
+      // 2. GPT-4o analyzes the generated scene → decides layout
+      // 3. sharp overlays infographic text in AI-decided positions
+      if (!REPLICATE) return NextResponse.json({ error: 'Карточка потребує REPLICATE_API_TOKEN' }, { status: 503 })
+
       const cardBullets = (bullets as string[]).filter(Boolean)
-      if (!cardBullets.length) return NextResponse.json({ error: 'Додайте хоча б одну перевагу для карточки' }, { status: 400 })
+      if (!cardBullets.length) return NextResponse.json({ error: 'Додайте хоча б одну перевагу' }, { status: 400 })
+
+      const photoUrl = await uploadPhoto(supabase, allPhotos[0], user.id, 'card-input')
+      if (!photoUrl) return NextResponse.json({ error: 'Помилка завантаження фото' }, { status: 500 })
 
       for (let i = 0; i < qty; i++) {
         try {
-          let bgUrl: string | null = null
-          const bgVariants = ['dark luxury premium', 'bold dynamic energetic', 'gradient abstract modern', 'dramatic atmospheric cinematic']
-          try {
-            const bgRes = await openai.images.generate({
-              model: 'gpt-image-1',
-              prompt: `${bgVariants[i % bgVariants.length]} abstract background for product marketing card. ${category || 'clothing'}. No people, no products, no text, no logos. Pure atmospheric design.`,
-              size: '1024x1024', quality: 'medium', n: 1
-            } as any)
-            const bgItem = bgRes.data[0] as any
-            if (bgItem?.url) bgUrl = bgItem.url
-            else if (bgItem?.b64_json) {
-              const buf = Buffer.from(bgItem.b64_json, 'base64')
-              bgUrl = await saveBuf(supabase, buf, user.id, 'card-bg')
-            }
-          } catch (e) { console.error('bg gen:', e) }
+          // Step 1: Generate unique Flux scene
+          const fluxPrompt = await getFluxPrompt(allPhotos[0], productName, category, 'lifestyle', wishes, i)
+          console.log(`[card ${i+1}] Flux prompt:`, fluxPrompt.slice(0,80))
 
-          if (!bgUrl) continue
-          const cardBuf = await makeCard(bgUrl, prodB64, productName, cardBullets, cardStyle, i)
+          const fluxUrl = await runFluxKontext(photoUrl, fluxPrompt, REPLICATE)
+          if (!fluxUrl) { console.warn(`Card ${i+1} Flux failed`); continue }
+
+          // Step 2: GPT-4o analyzes the Flux result → decides where to put text
+          console.log(`[card ${i+1}] Analyzing layout...`)
+          const layout = await analyzeSceneForLayout(fluxUrl, productName, cardBullets)
+          console.log(`[card ${i+1}] Layout:`, layout)
+
+          // Step 3: Overlay infographic text in AI-decided positions
+          const cardBuf = await overlayInfographic(fluxUrl, productName, cardBullets, layout)
           results.push(await saveBuf(supabase, cardBuf, user.id, 'cards'))
         } catch (e) { console.error(`card ${i}:`, e) }
       }
     } else {
-      const wishesEn = await translateWishes(wishes)
+      // PHOTO MODE: Flux transforms scene
+      const wishesEn = wishes ? await translateToEn(wishes) : ''
+      const STYLE_PROMPTS: Record<string,string> = {
+        model:    'Keep this exact person and clothing completely unchanged. Change only the background to urban city street, blurred buildings, natural daylight. Preserve EVERY detail.',
+        store:    'Keep this exact clothing completely unchanged. Show hanging on premium chrome hanger in minimalist boutique, soft retail lighting. Preserve EVERY detail.',
+        flatlay:  'Keep this exact clothing completely unchanged. Show ONLY clothing (NO people) neatly arranged on clean white marble, strict top-down view. Preserve EVERY detail.',
+        catalog:  'Keep this exact clothing and person completely unchanged. Change only background to pure seamless white studio. Preserve EVERY detail.',
+        outdoor:  'Keep this exact person and clothing completely unchanged. Outdoor nature, mountains or forest, golden hour. Preserve EVERY detail.',
+        dark:     'Keep this exact person and clothing completely unchanged. Dark moody studio, dramatic rim lighting. Preserve EVERY detail.',
+        lifestyle:'Keep this exact person and clothing completely unchanged. Warm cozy lifestyle environment, natural bokeh. Preserve EVERY detail.',
+      }
+      const VARIATIONS = ['', 'slightly different angle, different lighting mood', 'alternative perspective, different depth', 'different time of day, alternative environment']
 
       if (displayStyle === 'catalog' && !REPLICATE) {
-        for (let i = 0; i < qty; i++) {
-          try { const buf = await makeCatalog(allPhotos[i % allPhotos.length], RMBG); results.push(await saveBuf(supabase, buf, user.id, 'studio')) }
-          catch (e) { console.error(`catalog ${i}:`, e) }
+        for (let i=0; i<qty; i++) {
+          try { const buf = await makeCatalog(allPhotos[i%allPhotos.length], RMBG); results.push(await saveBuf(supabase, buf, user.id, 'studio')) }
+          catch(e) { console.error(`catalog ${i}:`, e) }
         }
       } else if (REPLICATE) {
         const photoUrls: string[] = []
-        for (const p of allPhotos) { const u = await uploadPhoto(supabase, p, user.id, 'replicate-input'); if (u) photoUrls.push(u) }
+        for (const p of allPhotos) { const u = await uploadPhoto(supabase, p, user.id, 'replicate-input'); if(u) photoUrls.push(u) }
         if (!photoUrls.length) return NextResponse.json({ error: 'Помилка завантаження фото' }, { status: 500 })
 
-        const VARIATIONS = ['', 'slightly different angle, different lighting mood', 'alternative perspective, different background depth', 'different time of day, alternative environment']
-        for (let i = 0; i < qty; i++) {
+        for (let i=0; i<qty; i++) {
           try {
-            const photoUrl = photoUrls[i % photoUrls.length]
             const base = STYLE_PROMPTS[displayStyle] || STYLE_PROMPTS.catalog
-            const variation = i > 0 ? (VARIATIONS[i] || `unique variation ${i + 1}`) : ''
             let prompt = wishesEn ? `${wishesEn}. ${base}` : base
-            if (variation) prompt += `. ${variation}`
-            const url = await runFluxKontext(photoUrl, prompt.slice(0, 600), REPLICATE)
+            if (i > 0) prompt += `. ${VARIATIONS[i]||`variation ${i+1}`}`
+            const url = await runFluxKontext(photoUrls[i%photoUrls.length], prompt.slice(0,600), REPLICATE)
             if (url) results.push(await saveUrl(supabase, url, user.id, 'studio'))
-          } catch (e) { console.error(`flux ${i}:`, e) }
+          } catch(e) { console.error(`flux ${i}:`, e) }
         }
       } else {
-        return NextResponse.json({ error: 'Для цього стилю потрібен REPLICATE_API_TOKEN в Vercel env.', needReplicate: true }, { status: 503 })
+        return NextResponse.json({ error: 'Потрібен REPLICATE_API_TOKEN в Vercel env.', needReplicate: true }, { status: 503 })
       }
     }
 
     if (!results.length) return NextResponse.json({ error: 'Генерація не вдалась. Спробуйте ще раз.' }, { status: 500 })
     const spent = COST * results.length
     await supabase.rpc('deduct_stars', { p_user_id: user.id, p_amount: spent })
-    await supabase.from('star_transactions').insert({ user_id: user.id, type: 'spend', amount: -spent, description: `Студія: ${productName.slice(0, 35)} (${mode}/${displayStyle} x${results.length})` })
-    await supabase.from('studio_results').insert({ user_id: user.id, product_name: productName.slice(0, 100), mode: mode === 'card' ? 'card' : displayStyle, urls: results, stars_spent: spent, settings: { displayStyle, mode, count: results.length } }).then(() => {})
+    await supabase.from('star_transactions').insert({ user_id: user.id, type: 'spend', amount: -spent, description: `Студія: ${productName.slice(0,35)} (${mode} x${results.length})` })
+    await supabase.from('studio_results').insert({ user_id: user.id, product_name: productName.slice(0,100), mode: mode==='card'?'card':displayStyle, urls: results, stars_spent: spent, settings: { displayStyle, mode, count: results.length } }).then(()=>{})
     return NextResponse.json({ results, starsSpent: spent, newBalance: balance - spent, count: results.length })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Server error'

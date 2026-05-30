@@ -130,15 +130,10 @@ async function runIdeogram(
   aspectRatio = '2:3'
 ): Promise<string | null> {
   try {
-    const input: Record<string, any> = {
-      prompt,
-      aspect_ratio: aspectRatio,
-      style_type: 'DESIGN',
-      magic_prompt_option: 'OFF',
-      negative_prompt: 'blurry, low quality, text errors, illegible text, watermark',
-    }
+    // Minimal valid Ideogram v2-turbo input
+    const input = { prompt, aspect_ratio: aspectRatio }
 
-    console.log('Ideogram request:', JSON.stringify({ input }).slice(0, 200))
+    console.log('Ideogram INPUT:', JSON.stringify(input).slice(0, 300))
 
     const pred = await fetch('https://api.replicate.com/v1/models/ideogram-ai/ideogram-v2-turbo/predictions', {
       method: 'POST',
@@ -147,23 +142,36 @@ async function runIdeogram(
     })
 
     const predText = await pred.text()
-    console.log('Ideogram response status:', pred.status, predText.slice(0, 300))
+    console.log('Ideogram HTTP:', pred.status, predText.slice(0, 500))
 
-    if (!pred.ok) return null
+    if (!pred.ok) {
+      console.error('Ideogram failed, trying v2 (non-turbo)...')
+      // Try standard v2
+      const pred2 = await fetch('https://api.replicate.com/v1/models/ideogram-ai/ideogram-v2/predictions', {
+        method: 'POST',
+        headers: { Authorization: `Token ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input })
+      })
+      const predText2 = await pred2.text()
+      console.log('Ideogram v2 HTTP:', pred2.status, predText2.slice(0, 400))
+      if (!pred2.ok) return null
+      const data2 = JSON.parse(predText2)
+      if (!data2.id) return null
+      const result2 = await pollReplicate(data2.id, token)
+      if (result2.status !== 'succeeded' || !result2.output) return null
+      const out2 = result2.output
+      return Array.isArray(out2) ? (out2[0]?.url || out2[0]) : (out2?.url || out2) || null
+    }
 
     const data = JSON.parse(predText)
-    if (!data.id) { console.error('No prediction ID:', data); return null }
+    if (!data.id) { console.error('Ideogram no ID:', JSON.stringify(data).slice(0,200)); return null }
 
     const result = await pollReplicate(data.id, token)
-    console.log('Ideogram result status:', result.status, JSON.stringify(result.output || result.error || '').slice(0,200))
+    console.log('Ideogram RESULT:', result.status, JSON.stringify(result.output || result.error || '').slice(0,300))
 
     if (result.status !== 'succeeded' || !result.output) return null
     const output = result.output
-    // Ideogram returns array of objects with url property
-    if (Array.isArray(output)) {
-      return output[0]?.url || output[0] || null
-    }
-    return output?.url || output || null
+    return Array.isArray(output) ? (output[0]?.url || output[0]) : (output?.url || output) || null
   } catch (e) { console.error('Ideogram exception:', e); return null }
 }
 

@@ -130,13 +130,12 @@ async function runIdeogram(
   aspectRatio = '2:3'
 ): Promise<string | null> {
   try {
-    const input = {
+    const input: Record<string, any> = {
       prompt,
       aspect_ratio: aspectRatio,
       style_type: 'DESIGN',
       magic_prompt_option: 'OFF',
       negative_prompt: 'blurry, low quality, text errors, illegible text, watermark',
-      resolution: 'None',
     }
 
     console.log('Ideogram request:', JSON.stringify({ input }).slice(0, 200))

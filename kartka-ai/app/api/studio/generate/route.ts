@@ -9,9 +9,22 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 const COST = 4
 
 function findFont(bold: boolean): string {
-  const names = bold ? ['arialbd.ttf','DejaVuSans-Bold.ttf'] : ['arial.ttf','DejaVuSans.ttf']
-  const dirs = [path.join(process.cwd(),'public/fonts'), '/var/task/public/fonts', '/usr/share/fonts/truetype/dejavu']
-  for (const d of dirs) for (const n of names) { const p=path.join(d,n); try{ if(fs.existsSync(p)) return p }catch{} }
+  // Vercel runtime: process.cwd() = /vercel/path0/kartka-ai
+  // Files uploaded by user have UPPERCASE names: ARIALBD.TTF, ARIAL.TTF
+  const names = bold
+    ? ['ARIALBD.TTF', 'arialbd.ttf', 'DejaVuSans-Bold.ttf', 'ARIBLK.TTF']
+    : ['ARIAL.TTF', 'arial.ttf', 'DejaVuSans.ttf']
+  const dirs = [
+    path.join(process.cwd(), 'public/fonts'),
+    '/vercel/path0/kartka-ai/public/fonts',
+    '/var/task/public/fonts',
+    '/usr/share/fonts/truetype/dejavu',
+  ]
+  for (const d of dirs) for (const n of names) {
+    const p = path.join(d, n)
+    try { if (fs.existsSync(p)) { console.log('Font found:', p); return p } } catch {}
+  }
+  console.warn('No font found, will use system default')
   return ''
 }
 

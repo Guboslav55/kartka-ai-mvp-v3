@@ -105,47 +105,70 @@ async function runFlux(imageUrl: string, prompt: string, token: string): Promise
 }
 
 async function overlayCardText(sceneUrl: string, name: string, bullets: string[], cardPreset: string): Promise<Buffer> {
-  const sharp=(await import('sharp')).default
-  const imgBuf=Buffer.from(await(await fetch(sceneUrl)).arrayBuffer())
-  const meta=await sharp(imgBuf).metadata()
-  const W=meta.width||768, H=meta.height||1024
-  const FB=findFont(true), FR=findFont(false)
-  const fontDecl=FB?`@font-face{font-family:'B';src:url('${FB}');}@font-face{font-family:'R';src:url('${FR||FB}');}`:''
-  const BF=FB?'B':'Arial Black,Arial,sans-serif', RF=FR?'R':'Arial,sans-serif'
-  const preset=CARD_STYLES[cardPreset]||CARD_STYLES.urban
-  const {accent,titleColor,bulletBg,bottomColor,bottomText}=preset
-  const esc=(s:string)=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-  const bs=bullets.filter(Boolean).slice(0,5)
+  const sharp = (await import('sharp')).default
+  const imgBuf = Buffer.from(await (await fetch(sceneUrl)).arrayBuffer())
+  const meta = await sharp(imgBuf).metadata()
+  const W = meta.width || 768, H = meta.height || 1024
 
-  // Title lines (max 18 chars per line)
-  const words=name.toUpperCase().split(' ')
-  const lines:string[]=[]
-  let cur=''
-  for(const w of words){ if((cur+' '+w).trim().length>18&&cur){lines.push(cur);cur=w}else cur=(cur+' '+w).trim() }
-  if(cur) lines.push(cur)
-  const tLines=lines.slice(0,3)
-  const tFS=Math.max(44,Math.min(68,Math.round(H*0.065)))
-  const titleH=tLines.length*(tFS+8)
+  // Load font as base64 data URI — the ONLY way rsvg can use fonts on Vercel
+  function loadFontUri(bold: boolean): string {
+    const boldNames = ['ARIALBD.TTF','ARIBLK.TTF','arialbd.ttf','DejaVuSans-Bold.ttf']
+    const regNames  = ['ARIAL.TTF','arial.ttf','DejaVuSans.ttf']
+    const names = bold ? boldNames : regNames
+    const dirs = ['/vercel/path0/kartka-ai/public/fonts', path.join(process.cwd(),'public/fonts')]
+    for (const dir of dirs) {
+      for (const n of names) {
+        const p = path.join(dir, n)
+        try { if (fs.existsSync(p)) { const buf = fs.readFileSync(p); console.log('Font:',p,buf.length,'b'); return `data:font/truetype;base64,${buf.toString('base64')}` } } catch {}
+      }
+      // Fallback: first TTF in dir
+      try { if (fs.existsSync(dir)) { const files = fs.readdirSync(dir); const f = files.find(f => /\.(ttf|otf)$/i.test(f)); if(f){ const p=path.join(dir,f); const buf=fs.readFileSync(p); return `data:font/truetype;base64,${buf.toString('base64')}` } } } catch {}
+    }
+    return ''
+  }
 
-  const titleSvg=tLines.map((l,i)=>`<text x="30" y="${80+i*(tFS+8)}" font-family="${BF}" font-size="${tFS}" fill="${titleColor}">${esc(l)}</text>`).join('')
+  const boldUri = loadFontUri(true)
+  const regUri  = loadFontUri(false) || boldUri
+  const BF = boldUri ? 'B' : 'Arial Black,Arial,sans-serif'
+  const RF = regUri  ? 'R' : 'Arial,sans-serif'
+  const fontDecl = boldUri
+    ? `@font-face{font-family:'B';src:url("${boldUri}") format("truetype");}@font-face{font-family:'R';src:url("${regUri}") format("truetype");}`
+    : ''
 
-  const bulletY0=80+titleH+30
-  const bSpacing=Math.round(H*0.103)
-  const bulletSvg=bs.map((b,i)=>{
-    const clean=esc(b.replace(/^[•✓\-]\s*/,'').slice(0,36))
-    const y=bulletY0+i*bSpacing
-    const long=clean.length>22
-    const l1=clean.slice(0,22), l2=long?clean.slice(22):''
-    const bh=long?90:76
-    const cy=y+Math.round(bh/2)
+  const preset = CARD_STYLES[cardPreset] || CARD_STYLES.urban
+  const {accent, titleColor, bulletBg, bottomColor, bottomText} = preset
+  const esc = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  const bs = bullets.filter(Boolean).slice(0, 5)
+
+  const words = name.toUpperCase().split(' ')
+  const lines: string[] = []
+  let cur = ''
+  for (const w of words) { if ((cur+' '+w).trim().length>18 && cur) {lines.push(cur); cur=w} else cur=(cur+' '+w).trim() }
+  if (cur) lines.push(cur)
+  const tLines = lines.slice(0, 3)
+  const tFS = Math.max(44, Math.min(68, Math.round(H*0.065)))
+  const titleH = tLines.length * (tFS + 8)
+
+  const titleSvg = tLines.map((l, i) =>
+    `<text x="30" y="${80+i*(tFS+8)}" font-family="${BF}" font-size="${tFS}" fill="${titleColor}">${esc(l)}</text>`
+  ).join('')
+
+  const bulletY0 = 80 + titleH + 30
+  const bSpacing = Math.round(H * 0.103)
+  const bulletSvg = bs.map((b, i) => {
+    const clean = esc(b.replace(/^[\u2022\u2713\-]\s*/u,'').slice(0,36))
+    const y = bulletY0 + i * bSpacing
+    const long = clean.length > 22
+    const l1 = clean.slice(0, 22), l2 = long ? clean.slice(22) : ''
+    const bh = long ? 90 : 76, cy = y + Math.round(bh/2)
     return `<rect x="16" y="${y}" width="${Math.min(clean.length*12+85,W*0.52)}" height="${bh}" rx="12" fill="${bulletBg}"/>
 <circle cx="52" cy="${cy}" r="23" fill="${accent}"/>
 <text x="52" y="${cy+7}" text-anchor="middle" font-family="${BF}" font-size="16" fill="${bottomText}">${i+1}</text>
 <text x="87" y="${y+(long?30:44)}" font-family="${BF}" font-size="17" fill="white">${l1}</text>
-${l2?`<text x="87" y="${y+54}" font-family="${RF}" font-size="13" fill="rgba(255,255,255,0.72)">${l2}</text>`:''}`
+${l2 ? `<text x="87" y="${y+54}" font-family="${RF}" font-size="13" fill="rgba(255,255,255,0.72)">${l2}</text>` : ''}`
   }).join('')
 
-  const svg=`<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+  const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
 <defs><style>${fontDecl}</style>
 <linearGradient id="gl" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(0,0,0,0.90)"/><stop offset="52%" stop-color="rgba(0,0,0,0.55)"/><stop offset="100%" stop-color="rgba(0,0,0,0)"/></linearGradient>
 <linearGradient id="gt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(0,0,0,0.65)"/><stop offset="100%" stop-color="rgba(0,0,0,0)"/></linearGradient>
@@ -159,10 +182,12 @@ ${titleSvg}
 <rect x="28" y="${80+titleH+8}" width="200" height="5" rx="3" fill="${accent}"/>
 ${bulletSvg}
 <rect x="0" y="${H-66}" width="${W}" height="66" fill="${bottomColor}"/>
-<text x="${W/2}" y="${H-20}" text-anchor="middle" font-family="${BF}" font-size="20" fill="${bottomText}">XS · S · M · L · XL · 2XL · 3XL</text>
+<text x="${W/2}" y="${H-20}" text-anchor="middle" font-family="${BF}" font-size="20" fill="${bottomText}">XS \xB7 S \xB7 M \xB7 L \xB7 XL \xB7 2XL \xB7 3XL</text>
 </svg>`
-  return sharp(imgBuf).composite([{input:Buffer.from(svg),top:0,left:0}]).jpeg({quality:93}).toBuffer()
+
+  return sharp(imgBuf).composite([{input: Buffer.from(svg), top: 0, left: 0}]).jpeg({quality: 93}).toBuffer()
 }
+
 
 async function uploadPhoto(supabase:any,b64:string,uid:string,folder:string):Promise<string|null>{
   try{const m=b64.match(/^data:(image\/[\w+]+);base64,(.+)$/s);if(!m)return null;const buf=Buffer.from(m[2],'base64');const fn=`${folder}/${uid}/${Date.now()}.jpg`;const{error}=await supabase.storage.from('card-images').upload(fn,buf,{contentType:'image/jpeg'});if(error)return null;return supabase.storage.from('card-images').getPublicUrl(fn).data.publicUrl}catch{return null}

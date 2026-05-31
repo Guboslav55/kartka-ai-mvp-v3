@@ -9,22 +9,35 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 const COST = 4
 
 function findFont(bold: boolean): string {
-  // Vercel runtime: process.cwd() = /vercel/path0/kartka-ai
-  // Files uploaded by user have UPPERCASE names: ARIALBD.TTF, ARIAL.TTF
-  const names = bold
-    ? ['ARIALBD.TTF', 'arialbd.ttf', 'DejaVuSans-Bold.ttf', 'ARIBLK.TTF']
-    : ['ARIAL.TTF', 'arial.ttf', 'DejaVuSans.ttf']
+  // From debug: Vercel serves from /vercel/path0/kartka-ai/public/fonts/
+  // User uploaded files are UPPERCASE: ARIALBD.TTF, ARIAL.TTF
+  const boldNames = ['ARIALBD.TTF', 'ARIBLK.TTF', 'arialbd.ttf', 'DejaVuSans-Bold.ttf']
+  const regNames  = ['ARIAL.TTF', 'arial.ttf', 'DejaVuSans.ttf']
+  const names = bold ? boldNames : regNames
   const dirs = [
-    path.join(process.cwd(), 'public/fonts'),
     '/vercel/path0/kartka-ai/public/fonts',
+    path.join(process.cwd(), 'public/fonts'),
     '/var/task/public/fonts',
-    '/usr/share/fonts/truetype/dejavu',
   ]
-  for (const d of dirs) for (const n of names) {
-    const p = path.join(d, n)
-    try { if (fs.existsSync(p)) { console.log('Font found:', p); return p } } catch {}
+  for (const dir of dirs) {
+    for (const n of names) {
+      const p = path.join(dir, n)
+      try { if (fs.existsSync(p)) { console.log('✅ Font:', p); return p } } catch {}
+    }
   }
-  console.warn('No font found, will use system default')
+  // Last resort: list what IS in the fonts directory
+  for (const dir of dirs) {
+    try {
+      if (fs.existsSync(dir)) {
+        const files = fs.readdirSync(dir)
+        console.log('Fonts dir contents:', dir, files)
+        // Return first font found regardless of name
+        const f = files.find(f => f.toLowerCase().endsWith('.ttf') || f.toLowerCase().endsWith('.otf'))
+        if (f) { console.log('Using fallback font:', f); return path.join(dir, f) }
+      }
+    } catch {}
+  }
+  console.warn('❌ No font found anywhere')
   return ''
 }
 

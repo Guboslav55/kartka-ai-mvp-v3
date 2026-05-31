@@ -110,8 +110,8 @@ async function overlayCardText(sceneUrl: string, name: string, bullets: string[]
   const meta = await sharp(imgBuf).metadata()
   const W = meta.width || 768, H = meta.height || 1024
 
-  // Load font as base64 data URI — the ONLY way rsvg can use fonts on Vercel
-  function loadFontUri(bold: boolean): string {
+  // Find font file path
+  function getFontPath(bold: boolean): string {
     const boldNames = ['ARIALBD.TTF','ARIBLK.TTF','arialbd.ttf','DejaVuSans-Bold.ttf']
     const regNames  = ['ARIAL.TTF','arial.ttf','DejaVuSans.ttf']
     const names = bold ? boldNames : regNames
@@ -119,73 +119,123 @@ async function overlayCardText(sceneUrl: string, name: string, bullets: string[]
     for (const dir of dirs) {
       for (const n of names) {
         const p = path.join(dir, n)
-        try { if (fs.existsSync(p)) { const buf = fs.readFileSync(p); console.log('Font:',p,buf.length,'b'); return `data:font/truetype;base64,${buf.toString('base64')}` } } catch {}
+        try { if (fs.existsSync(p)) { console.log('Font:', p); return p } } catch {}
       }
-      // Fallback: first TTF in dir
-      try { if (fs.existsSync(dir)) { const files = fs.readdirSync(dir); const f = files.find(f => /\.(ttf|otf)$/i.test(f)); if(f){ const p=path.join(dir,f); const buf=fs.readFileSync(p); return `data:font/truetype;base64,${buf.toString('base64')}` } } } catch {}
     }
     return ''
   }
-
-  const boldUri = loadFontUri(true)
-  const regUri  = loadFontUri(false) || boldUri
-  const BF = boldUri ? 'B' : 'Arial Black,Arial,sans-serif'
-  const RF = regUri  ? 'R' : 'Arial,sans-serif'
-  const fontDecl = boldUri
-    ? `@font-face{font-family:'B';src:url("${boldUri}") format("truetype");}@font-face{font-family:'R';src:url("${regUri}") format("truetype");}`
-    : ''
+  const fontBold = getFontPath(true)
+  const fontReg  = getFontPath(false) || fontBold
 
   const preset = CARD_STYLES[cardPreset] || CARD_STYLES.urban
-  const {accent, titleColor, bulletBg, bottomColor, bottomText} = preset
-  const esc = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-  const bs = bullets.filter(Boolean).slice(0, 5)
+  const { accent, titleColor, bulletBg, bottomColor, bottomText } = preset
 
+  // Use sharp's native text rendering (Pango - supports custom fonts and Unicode/Cyrillic)
+  // This is more reliable than SVG @font-face on Vercel
+  async function makeTextImage(text: string, fontSize: number, color: string, fontfile: string, width: number): Promise<Buffer> {
+    const safeText = text.replace(/&/g,'and').replace(/</g,'(').replace(/>/g,')')
+    try {
+      return await (sharp as any)({
+        text: {
+          text: safeText,
+          fontfile,
+          font: 'Arial',
+          fontSize,
+          rgba: true,
+          width,
+          height: Math.round(fontSize * 1.4),
+          wrap: 'word',
+          align: 'left',
+        }
+      }).png().toBuffer()
+    } catch(e) {
+      // Fallback: minimal SVG with embedded font
+      console.warn('sharp text failed, using SVG:', e)
+      const b64font = fontfile ? fs.readFileSync(fontfile).toString('base64') : ''
+      const svgFont = b64font ? `<defs><style>@font-face{font-family:'F';src:url("data:font/truetype;base64,${b64font}");}</style></defs>` : ''
+      const ff = b64font ? 'F' : 'Arial,sans-serif'
+      const svg = `<svg width="${width}" height="${Math.round(fontSize*1.4)}" xmlns="http://www.w3.org/2000/svg">${svgFont}<text y="${fontSize}" font-family="${ff}" font-size="${fontSize}" fill="${color}">${safeText}</text></svg>`
+      return sharp(Buffer.from(svg)).png().toBuffer()
+    }
+  }
+
+  // Build composite layers
+  const layers: any[] = []
+
+  // Gradient overlay (left side dark)
+  const gradSvg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <linearGradient id="gl" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(0,0,0,0.92)"/><stop offset="55%" stop-color="rgba(0,0,0,0.60)"/><stop offset="100%" stop-color="rgba(0,0,0,0)"/></linearGradient>
+  <linearGradient id="gt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(0,0,0,0.70)"/><stop offset="100%" stop-color="rgba(0,0,0,0)"/></linearGradient>
+  <linearGradient id="gb" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(0,0,0,0)"/><stop offset="100%" stop-color="rgba(0,0,0,0.90)"/></linearGradient>
+</defs>
+<rect width="${W}" height="${H}" fill="url(#gl)"/>
+<rect width="${W}" height="${Math.round(H*0.20)}" fill="url(#gt)"/>
+<rect y="${Math.round(H*0.80)}" width="${W}" height="${Math.round(H*0.20)}" fill="url(#gb)"/>
+<rect x="0" y="0" width="8" height="${H}" fill="${accent}"/>
+<rect x="0" y="${H-68}" width="${W}" height="68" fill="${bottomColor}"/>
+</svg>`
+  layers.push({ input: Buffer.from(gradSvg), top: 0, left: 0 })
+
+  // Title text - split into lines
   const words = name.toUpperCase().split(' ')
   const lines: string[] = []
   let cur = ''
-  for (const w of words) { if ((cur+' '+w).trim().length>18 && cur) {lines.push(cur); cur=w} else cur=(cur+' '+w).trim() }
+  for (const w of words) {
+    if ((cur + ' ' + w).trim().length > 16 && cur) { lines.push(cur); cur = w } else cur = (cur + ' ' + w).trim()
+  }
   if (cur) lines.push(cur)
-  const tLines = lines.slice(0, 3)
-  const tFS = Math.max(44, Math.min(68, Math.round(H*0.065)))
-  const titleH = tLines.length * (tFS + 8)
 
-  const titleSvg = tLines.map((l, i) =>
-    `<text x="30" y="${80+i*(tFS+8)}" font-family="${BF}" font-size="${tFS}" fill="${titleColor}">${esc(l)}</text>`
-  ).join('')
+  const tFS = Math.max(46, Math.min(70, Math.round(H * 0.066)))
+  let titleY = Math.round(H * 0.068)
 
-  const bulletY0 = 80 + titleH + 30
-  const bSpacing = Math.round(H * 0.103)
-  const bulletSvg = bs.map((b, i) => {
-    const clean = esc(b.replace(/^[\u2022\u2713\-]\s*/u,'').slice(0,36))
+  for (const line of lines.slice(0, 3)) {
+    try {
+      const textBuf = await makeTextImage(line, tFS, titleColor, fontBold, Math.round(W * 0.52))
+      layers.push({ input: textBuf, top: titleY, left: 30 })
+      titleY += tFS + 6
+    } catch(e) { console.error('title render:', e); titleY += tFS + 6 }
+  }
+
+  // Accent line under title
+  const accentLineSvg = `<svg width="200" height="5" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="5" rx="3" fill="${accent}"/></svg>`
+  layers.push({ input: Buffer.from(accentLineSvg), top: titleY + 6, left: 30 })
+
+  // Bullet points
+  const bs = bullets.filter(Boolean).slice(0, 5)
+  const bulletY0 = titleY + 28
+  const bSpacing = Math.round((H * 0.78 - bulletY0) / Math.max(bs.length, 1))
+
+  for (let i = 0; i < bs.length; i++) {
+    const b = bs[i].replace(/^[•✓\-]\s*/, '').slice(0, 36)
     const y = bulletY0 + i * bSpacing
-    const long = clean.length > 22
-    const l1 = clean.slice(0, 22), l2 = long ? clean.slice(22) : ''
-    const bh = long ? 90 : 76, cy = y + Math.round(bh/2)
-    return `<rect x="16" y="${y}" width="${Math.min(clean.length*12+85,W*0.52)}" height="${bh}" rx="12" fill="${bulletBg}"/>
-<circle cx="52" cy="${cy}" r="23" fill="${accent}"/>
-<text x="52" y="${cy+7}" text-anchor="middle" font-family="${BF}" font-size="16" fill="${bottomText}">${i+1}</text>
-<text x="87" y="${y+(long?30:44)}" font-family="${BF}" font-size="17" fill="white">${l1}</text>
-${l2 ? `<text x="87" y="${y+54}" font-family="${RF}" font-size="13" fill="rgba(255,255,255,0.72)">${l2}</text>` : ''}`
-  }).join('')
 
-  const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
-<defs><style>${fontDecl}</style>
-<linearGradient id="gl" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(0,0,0,0.90)"/><stop offset="52%" stop-color="rgba(0,0,0,0.55)"/><stop offset="100%" stop-color="rgba(0,0,0,0)"/></linearGradient>
-<linearGradient id="gt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(0,0,0,0.65)"/><stop offset="100%" stop-color="rgba(0,0,0,0)"/></linearGradient>
-<linearGradient id="gb" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(0,0,0,0)"/><stop offset="100%" stop-color="rgba(0,0,0,0.88)"/></linearGradient>
-</defs>
-<rect width="${W}" height="${H}" fill="url(#gl)"/>
-<rect width="${W}" height="${Math.round(H*0.18)}" fill="url(#gt)"/>
-<rect y="${Math.round(H*0.82)}" width="${W}" height="${Math.round(H*0.18)}" fill="url(#gb)"/>
-<rect x="0" y="0" width="8" height="${H}" fill="${accent}"/>
-${titleSvg}
-<rect x="28" y="${80+titleH+8}" width="200" height="5" rx="3" fill="${accent}"/>
-${bulletSvg}
-<rect x="0" y="${H-66}" width="${W}" height="66" fill="${bottomColor}"/>
-<text x="${W/2}" y="${H-20}" text-anchor="middle" font-family="${BF}" font-size="20" fill="${bottomText}">XS \xB7 S \xB7 M \xB7 L \xB7 XL \xB7 2XL \xB7 3XL</text>
+    // Bullet background + circle
+    const bh = 82
+    const bw = Math.min(b.length * 13 + 85, Math.round(W * 0.52))
+    const bulletBgSvg = `<svg width="${bw}" height="${bh}" xmlns="http://www.w3.org/2000/svg">
+<rect width="${bw}" height="${bh}" rx="12" fill="${bulletBg}"/>
+<circle cx="40" cy="${Math.round(bh/2)}" r="22" fill="${accent}"/>
+<text x="40" y="${Math.round(bh/2)+7}" text-anchor="middle" font-family="Arial,sans-serif" font-size="16" fill="${bottomText}">${i+1}</text>
 </svg>`
+    layers.push({ input: Buffer.from(bulletBgSvg), top: y, left: 16 })
 
-  return sharp(imgBuf).composite([{input: Buffer.from(svg), top: 0, left: 0}]).jpeg({quality: 93}).toBuffer()
+    // Bullet text via sharp native
+    try {
+      const textBuf = await makeTextImage(b.slice(0, 28), 17, 'white', fontReg, Math.round(W * 0.40))
+      layers.push({ input: textBuf, top: y + 22, left: 80 })
+    } catch(e) { console.error('bullet text:', e) }
+  }
+
+  // Bottom bar text
+  try {
+    const sizeText = 'XS · S · M · L · XL · 2XL · 3XL'
+    const sizeBuf = await makeTextImage(sizeText, 20, bottomText, fontBold, W - 40)
+    const sizeMeta = await sharp(sizeBuf).metadata()
+    layers.push({ input: sizeBuf, top: H - 44, left: Math.round((W - (sizeMeta.width||300)) / 2) })
+  } catch(e) { console.error('size text:', e) }
+
+  return sharp(imgBuf).composite(layers).jpeg({ quality: 93 }).toBuffer()
 }
 
 

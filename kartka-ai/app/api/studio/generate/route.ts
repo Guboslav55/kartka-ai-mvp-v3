@@ -111,42 +111,53 @@ async function overlayCardText(sceneUrl: string, name: string, bullets: string[]
   const meta = await sharp(imgBuf).metadata()
   const W = meta.width || 768, H = meta.height || 1024
 
-  // Find font - log EXACT path found
-  function getFont(bold: boolean): string {
-    const names = bold ? ['ARIALBD.TTF','ARIBLK.TTF','arialbd.ttf'] : ['ARIAL.TTF','arial.ttf']
+  // Load font as base64 - embed directly in SVG as data URI
+  // librsvg (used by sharp) supports data: URIs in @font-face src
+  function loadFontB64(bold: boolean): string {
+    const names = bold ? ['ARIALBD.TTF','ARIBLK.TTF','arialbd.ttf','DejaVuSans-Bold.ttf'] : ['ARIAL.TTF','arial.ttf','DejaVuSans.ttf']
     const dirs = [
       '/var/task/kartka-ai/public/fonts',
       '/vercel/path0/kartka-ai/public/fonts',
       path.join(process.cwd(), 'public/fonts'),
     ]
-    for (const d of dirs) for (const n of names) {
-      const p = path.join(d, n)
-      try { if (fs.existsSync(p)) { console.log('FONT OK:', p); return `url('${p}')` } } catch {}
+    for (const d of dirs) {
+      for (const n of names) {
+        const p = path.join(d, n)
+        try {
+          if (fs.existsSync(p)) {
+            const buf = fs.readFileSync(p)
+            console.log('Loaded font:', p, buf.length, 'bytes')
+            return buf.toString('base64')
+          }
+        } catch {}
+      }
     }
-    // List dir contents for debugging
+    // Last resort: grab ANY ttf
     for (const d of dirs) {
       try {
-        if (fs.existsSync(d)) {
-          const files = fs.readdirSync(d)
-          console.log('DIR', d, ':', files.join(','))
-          const ttf = files.find(f => /\.ttf$/i.test(f))
-          if (ttf) { const p = path.join(d, ttf); console.log('FALLBACK:', p); return `url('${p}')` }
+        if (!fs.existsSync(d)) continue
+        const files = fs.readdirSync(d)
+        const ttf = files.find((f:string) => /\.ttf$/i.test(f))
+        if (ttf) {
+          const p = path.join(d, ttf)
+          const buf = fs.readFileSync(p)
+          console.log('Fallback font:', p)
+          return buf.toString('base64')
         }
       } catch {}
     }
-    console.warn('NO FONT FOUND - using generic')
+    console.warn('No font found')
     return ''
   }
 
-  const boldSrc = getFont(true)
-  const regSrc  = getFont(false) || boldSrc
+  const boldB64 = loadFontB64(true)
+  const regB64  = loadFontB64(false) || boldB64
 
   const preset = CARD_STYLES[cardPreset] || CARD_STYLES.urban
   const { accent, titleColor, bulletBg, bottomColor, bottomText } = preset
   const esc = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   const bs = bullets.filter(Boolean).slice(0, 5)
 
-  // Title lines
   const words = name.toUpperCase().split(' ')
   const lines: string[] = []; let cur = ''
   for (const w of words) {
@@ -157,11 +168,21 @@ async function overlayCardText(sceneUrl: string, name: string, bullets: string[]
   const tFS = Math.max(44, Math.min(66, Math.round(H * 0.063)))
   const titleH = tLines.length * (tFS + 8)
 
-  const fontFace = boldSrc ? `
-    @font-face { font-family: 'BF'; src: ${boldSrc}; }
-    @font-face { font-family: 'RF'; src: ${regSrc}; }` : ''
-  const BF = boldSrc ? 'BF' : 'Arial,Helvetica,sans-serif'
-  const RF = regSrc  ? 'RF' : 'Arial,Helvetica,sans-serif'
+  // Build @font-face with data URI - key: use "format('truetype')" explicitly
+  const fontFace = boldB64 ? `
+@font-face {
+  font-family: 'BF';
+  src: url('data:font/truetype;charset=utf-8;base64,${boldB64}') format('truetype');
+  font-weight: bold;
+}
+@font-face {
+  font-family: 'RF';
+  src: url('data:font/truetype;charset=utf-8;base64,${regB64}') format('truetype');
+  font-weight: normal;
+}` : ''
+
+  const BF = boldB64 ? 'BF' : 'Arial,Helvetica,sans-serif'
+  const RF = regB64  ? 'RF' : 'Arial,Helvetica,sans-serif'
 
   const titleSvg = tLines.map((l, i) =>
     `<text x="30" y="${80 + i*(tFS+8)}" font-family="${BF}" font-size="${tFS}" font-weight="bold" fill="${titleColor}">${esc(l)}</text>`
@@ -171,32 +192,32 @@ async function overlayCardText(sceneUrl: string, name: string, bullets: string[]
   const bSp = Math.round((H*0.79 - bY0) / Math.max(bs.length, 1))
 
   const bulletsSvg = bs.map((b, i) => {
-    const clean = esc(b.replace(/^[•✓\-]\s*/, '').slice(0, 36))
+    const clean = esc(b.replace(/^[\u2022\u2713-]\s*/u, '').slice(0, 36))
     const y = bY0 + i * bSp
-    const bh = 78
-    const cy = y + Math.round(bh/2)
-    return `<rect x="16" y="${y}" width="${Math.min(clean.length*12+85, W*0.52)}" height="${bh}" rx="12" fill="${bulletBg}"/>
+    const bh = 78, cy = y + Math.round(bh/2)
+    return `<rect x="16" y="${y}" width="${Math.min(clean.length*12+85,W*0.52)}" height="${bh}" rx="12" fill="${bulletBg}"/>
 <circle cx="52" cy="${cy}" r="23" fill="${accent}"/>
 <text x="52" y="${cy+7}" text-anchor="middle" font-family="${BF}" font-size="16" font-weight="bold" fill="${bottomText}">${i+1}</text>
 <text x="87" y="${y+44}" font-family="${RF}" font-size="17" fill="white">${clean}</text>`
   }).join('')
 
-  const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
 <defs>
-  <style>${fontFace}</style>
-  <linearGradient id="gl" x1="0" y1="0" x2="1" y2="0">
-    <stop offset="0%" stop-color="rgba(0,0,0,0.92)"/>
-    <stop offset="52%" stop-color="rgba(0,0,0,0.55)"/>
-    <stop offset="100%" stop-color="rgba(0,0,0,0)"/>
-  </linearGradient>
-  <linearGradient id="gt" x1="0" y1="0" x2="0" y2="1">
-    <stop offset="0%" stop-color="rgba(0,0,0,0.70)"/>
-    <stop offset="100%" stop-color="rgba(0,0,0,0)"/>
-  </linearGradient>
-  <linearGradient id="gb" x1="0" y1="0" x2="0" y2="1">
-    <stop offset="0%" stop-color="rgba(0,0,0,0)"/>
-    <stop offset="100%" stop-color="rgba(0,0,0,0.90)"/>
-  </linearGradient>
+<style><![CDATA[${fontFace}]]></style>
+<linearGradient id="gl" x1="0" y1="0" x2="1" y2="0">
+  <stop offset="0%" stop-color="rgba(0,0,0,0.92)"/>
+  <stop offset="52%" stop-color="rgba(0,0,0,0.55)"/>
+  <stop offset="100%" stop-color="rgba(0,0,0,0)"/>
+</linearGradient>
+<linearGradient id="gt" x1="0" y1="0" x2="0" y2="1">
+  <stop offset="0%" stop-color="rgba(0,0,0,0.70)"/>
+  <stop offset="100%" stop-color="rgba(0,0,0,0)"/>
+</linearGradient>
+<linearGradient id="gb" x1="0" y1="0" x2="0" y2="1">
+  <stop offset="0%" stop-color="rgba(0,0,0,0)"/>
+  <stop offset="100%" stop-color="rgba(0,0,0,0.90)"/>
+</linearGradient>
 </defs>
 <rect width="${W}" height="${H}" fill="url(#gl)"/>
 <rect width="${W}" height="${Math.round(H*0.2)}" fill="url(#gt)"/>
@@ -209,8 +230,7 @@ ${bulletsSvg}
 <text x="${W/2}" y="${H-22}" text-anchor="middle" font-family="${BF}" font-size="20" font-weight="bold" fill="${bottomText}">XS · S · M · L · XL · 2XL · 3XL</text>
 </svg>`
 
-  const svgBuf = Buffer.from(svg, 'utf8')
-  const overlay = await sharp(svgBuf).png().toBuffer()
+  const overlay = await sharp(Buffer.from(svg, 'utf8')).png().toBuffer()
   return sharp(imgBuf).composite([{ input: overlay, top: 0, left: 0 }]).jpeg({ quality: 93 }).toBuffer()
 }
 

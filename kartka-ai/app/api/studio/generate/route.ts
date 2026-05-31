@@ -106,89 +106,112 @@ async function runFlux(imageUrl: string, prompt: string, token: string): Promise
 
 async function overlayCardText(sceneUrl: string, name: string, bullets: string[], cardPreset: string): Promise<Buffer> {
   const sharp = (await import('sharp')).default
-  const satori = (await import('satori')).default
 
   const imgBuf = Buffer.from(await (await fetch(sceneUrl)).arrayBuffer())
   const meta = await sharp(imgBuf).metadata()
   const W = meta.width || 768, H = meta.height || 1024
 
+  // Find font - log EXACT path found
+  function getFont(bold: boolean): string {
+    const names = bold ? ['ARIALBD.TTF','ARIBLK.TTF','arialbd.ttf'] : ['ARIAL.TTF','arial.ttf']
+    const dirs = [
+      '/var/task/kartka-ai/public/fonts',
+      '/vercel/path0/kartka-ai/public/fonts',
+      path.join(process.cwd(), 'public/fonts'),
+    ]
+    for (const d of dirs) for (const n of names) {
+      const p = path.join(d, n)
+      try { if (fs.existsSync(p)) { console.log('FONT OK:', p); return `url('${p}')` } } catch {}
+    }
+    // List dir contents for debugging
+    for (const d of dirs) {
+      try {
+        if (fs.existsSync(d)) {
+          const files = fs.readdirSync(d)
+          console.log('DIR', d, ':', files.join(','))
+          const ttf = files.find(f => /\.ttf$/i.test(f))
+          if (ttf) { const p = path.join(d, ttf); console.log('FALLBACK:', p); return `url('${p}')` }
+        }
+      } catch {}
+    }
+    console.warn('NO FONT FOUND - using generic')
+    return ''
+  }
+
+  const boldSrc = getFont(true)
+  const regSrc  = getFont(false) || boldSrc
+
   const preset = CARD_STYLES[cardPreset] || CARD_STYLES.urban
   const { accent, titleColor, bulletBg, bottomColor, bottomText } = preset
-
-  function loadFont(bold: boolean): ArrayBuffer | null {
-    const names = bold ? ['ARIALBD.TTF','ARIBLK.TTF','arialbd.ttf','DejaVuSans-Bold.ttf'] : ['ARIAL.TTF','arial.ttf','DejaVuSans.ttf']
-    const dirs = ['/vercel/path0/kartka-ai/public/fonts', path.join(process.cwd(),'public/fonts')]
-    for (const dir of dirs) {
-      for (const n of names) {
-        const p = path.join(dir, n)
-        try { if (fs.existsSync(p)) { const buf = fs.readFileSync(p); console.log('Font:', p, buf.length); return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) } } catch {}
-      }
-    }
-    return null
-  }
-
-  const boldFont = loadFont(true)
-  const regFont  = loadFont(false)
-  const fonts: any[] = []
-  if (boldFont) fonts.push({ name: 'Card', data: boldFont, weight: 700, style: 'normal' })
-  if (regFont)  fonts.push({ name: 'Card', data: regFont,  weight: 400, style: 'normal' })
-  const FF = fonts.length ? 'Card' : 'sans-serif'
-
+  const esc = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   const bs = bullets.filter(Boolean).slice(0, 5)
-  const titleWords = name.toUpperCase().split(' ')
-  const titleLines: string[] = []
-  let cur = ''
-  for (const w of titleWords) {
-    if ((cur + ' ' + w).trim().length > 16 && cur) { titleLines.push(cur); cur = w } else cur = (cur + ' ' + w).trim()
+
+  // Title lines
+  const words = name.toUpperCase().split(' ')
+  const lines: string[] = []; let cur = ''
+  for (const w of words) {
+    if ((cur+' '+w).trim().length > 16 && cur) { lines.push(cur); cur = w } else cur = (cur+' '+w).trim()
   }
-  if (cur) titleLines.push(cur)
-  const tLines = titleLines.slice(0, 3)
+  if (cur) lines.push(cur)
+  const tLines = lines.slice(0, 3)
   const tFS = Math.max(44, Math.min(66, Math.round(H * 0.063)))
   const titleH = tLines.length * (tFS + 8)
-  const bulletStart = 80 + titleH + 30
-  const bulletSpacing = Math.round((H * 0.78 - bulletStart) / Math.max(bs.length, 1))
 
-  // satori renders to SVG string - no binary deps needed
-  const svgStr = await satori(
-    {
-      type: 'div',
-      props: {
-        style: { display: 'flex', flexDirection: 'column', width: W, height: H, fontFamily: `${FF}, Arial, sans-serif`, position: 'relative' },
-        children: [
-          // Gradients
-          { type: 'div', props: { style: { position: 'absolute', inset: 0, background: 'linear-gradient(to right, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.58) 52%, rgba(0,0,0,0) 100%)' }, children: [] } },
-          { type: 'div', props: { style: { position: 'absolute', top: 0, left: 0, right: 0, height: H * 0.2, background: 'linear-gradient(to bottom, rgba(0,0,0,0.70), transparent)' }, children: [] } },
-          { type: 'div', props: { style: { position: 'absolute', bottom: 68, left: 0, right: 0, height: H * 0.2, background: 'linear-gradient(to top, rgba(0,0,0,0.88), transparent)' }, children: [] } },
-          // Accent bar
-          { type: 'div', props: { style: { position: 'absolute', top: 0, left: 0, width: 8, height: H, background: accent }, children: [] } },
-          // Title
-          ...tLines.map((line, i) => ({
-            type: 'div', props: { style: { position: 'absolute', top: 80 + i * (tFS + 8), left: 28, fontSize: tFS, fontWeight: 700, color: titleColor, whiteSpace: 'nowrap' as const }, children: [line] }
-          })),
-          // Accent line
-          { type: 'div', props: { style: { position: 'absolute', top: 80 + titleH + 6, left: 28, width: 180, height: 5, background: accent, borderRadius: 3 }, children: [] } },
-          // Bullets
-          ...bs.map((b, i) => ({
-            type: 'div',
-            props: {
-              style: { position: 'absolute', top: bulletStart + i * bulletSpacing, left: 16, display: 'flex', alignItems: 'center', gap: 10 },
-              children: [
-                { type: 'div', props: { style: { width: 46, height: 46, borderRadius: 23, background: accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, color: bottomText, flexShrink: 0 }, children: [String(i + 1)] } },
-                { type: 'div', props: { style: { background: bulletBg, borderRadius: 10, padding: '8px 12px', fontSize: 17, fontWeight: 600, color: 'white', maxWidth: Math.round(W * 0.46) }, children: [b.replace(/^[•✓\-]\s*/, '').slice(0, 36)] } }
-              ]
-            }
-          })),
-          // Bottom bar
-          { type: 'div', props: { style: { position: 'absolute', bottom: 0, left: 0, width: W, height: 68, background: bottomColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700, color: bottomText }, children: ['XS · S · M · L · XL · 2XL · 3XL'] } },
-        ]
-      }
-    },
-    { width: W, height: H, fonts }
-  )
+  const fontFace = boldSrc ? `
+    @font-face { font-family: 'BF'; src: ${boldSrc}; }
+    @font-face { font-family: 'RF'; src: ${regSrc}; }` : ''
+  const BF = boldSrc ? 'BF' : 'Arial,Helvetica,sans-serif'
+  const RF = regSrc  ? 'RF' : 'Arial,Helvetica,sans-serif'
 
-  // sharp can render SVG directly via its built-in librsvg
-  const overlayBuf = await sharp(Buffer.from(svgStr)).png().toBuffer()
-  return sharp(imgBuf).composite([{ input: overlayBuf, top: 0, left: 0 }]).jpeg({ quality: 93 }).toBuffer()
+  const titleSvg = tLines.map((l, i) =>
+    `<text x="30" y="${80 + i*(tFS+8)}" font-family="${BF}" font-size="${tFS}" font-weight="bold" fill="${titleColor}">${esc(l)}</text>`
+  ).join('')
+
+  const bY0 = 80 + titleH + 28
+  const bSp = Math.round((H*0.79 - bY0) / Math.max(bs.length, 1))
+
+  const bulletsSvg = bs.map((b, i) => {
+    const clean = esc(b.replace(/^[•✓\-]\s*/, '').slice(0, 36))
+    const y = bY0 + i * bSp
+    const bh = 78
+    const cy = y + Math.round(bh/2)
+    return `<rect x="16" y="${y}" width="${Math.min(clean.length*12+85, W*0.52)}" height="${bh}" rx="12" fill="${bulletBg}"/>
+<circle cx="52" cy="${cy}" r="23" fill="${accent}"/>
+<text x="52" y="${cy+7}" text-anchor="middle" font-family="${BF}" font-size="16" font-weight="bold" fill="${bottomText}">${i+1}</text>
+<text x="87" y="${y+44}" font-family="${RF}" font-size="17" fill="white">${clean}</text>`
+  }).join('')
+
+  const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <style>${fontFace}</style>
+  <linearGradient id="gl" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0%" stop-color="rgba(0,0,0,0.92)"/>
+    <stop offset="52%" stop-color="rgba(0,0,0,0.55)"/>
+    <stop offset="100%" stop-color="rgba(0,0,0,0)"/>
+  </linearGradient>
+  <linearGradient id="gt" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="rgba(0,0,0,0.70)"/>
+    <stop offset="100%" stop-color="rgba(0,0,0,0)"/>
+  </linearGradient>
+  <linearGradient id="gb" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="rgba(0,0,0,0)"/>
+    <stop offset="100%" stop-color="rgba(0,0,0,0.90)"/>
+  </linearGradient>
+</defs>
+<rect width="${W}" height="${H}" fill="url(#gl)"/>
+<rect width="${W}" height="${Math.round(H*0.2)}" fill="url(#gt)"/>
+<rect y="${Math.round(H*0.8)}" width="${W}" height="${Math.round(H*0.2)}" fill="url(#gb)"/>
+<rect x="0" y="0" width="8" height="${H}" fill="${accent}"/>
+${titleSvg}
+<rect x="28" y="${80+titleH+6}" width="180" height="5" rx="3" fill="${accent}"/>
+${bulletsSvg}
+<rect x="0" y="${H-68}" width="${W}" height="68" fill="${bottomColor}"/>
+<text x="${W/2}" y="${H-22}" text-anchor="middle" font-family="${BF}" font-size="20" font-weight="bold" fill="${bottomText}">XS · S · M · L · XL · 2XL · 3XL</text>
+</svg>`
+
+  const svgBuf = Buffer.from(svg, 'utf8')
+  const overlay = await sharp(svgBuf).png().toBuffer()
+  return sharp(imgBuf).composite([{ input: overlay, top: 0, left: 0 }]).jpeg({ quality: 93 }).toBuffer()
 }
 
 

@@ -187,6 +187,7 @@ export default function StudioPage() {
   const [wishes, setWishes] = useState('')
   const [photoStyle, setPhotoStyle] = useState<PhotoStyle>('commercial')
   const [cardStyle, setCardStyle] = useState<CardStyle>('classic')
+  const [cardPreset, setCardPreset] = useState('urban')
   const [format, setFormat] = useState<Format>('1:1')
   const [count, setCount] = useState(1)
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -310,7 +311,7 @@ export default function StudioPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          mode, productPhoto: photos[0], productPhotos: photos, productName, category, displayStyle,
+          mode, productPhoto: photos[0], productPhotos: photos, productName, category, displayStyle, cardPreset,
           wishes, photoStyle, cardStyle, bullets: bullets.filter(Boolean),
           format, count,
         }),
@@ -491,6 +492,31 @@ export default function StudioPage() {
             {mode === 'card' && (
               <>
                 <div className="mb-4">
+                  {/* Card Preset Selector */}
+                  <div className="mb-3">
+                    <span className="text-white/50 text-xs font-bold uppercase block mb-2">Стиль карточки</span>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {([['military','🎖️ Мілітарі'],['urban','⚡ Урбан'],['premium','💎 Преміум'],['rozetka','🟠 Rozetka'],['prom','🔵 Prom'],['minimal','◻️ Мінімал']] as [string,string][]).map(([v,l]) => (
+                        <button key={v} onClick={() => setCardPreset(v)}
+                          className={['py-1.5 px-1 rounded-lg text-xs font-semibold transition-all', cardPreset===v ? 'bg-gold text-black' : 'bg-white/8 text-white/60 hover:bg-white/15'].join(' ')}>
+                          {l}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Text Preview */}
+                  {productName.trim() && bullets.some(b=>b.trim()) && (
+                    <div className="bg-white/[0.03] border border-white/8 rounded-xl p-3 mb-3">
+                      <span className="text-white/30 text-xs uppercase font-bold block mb-2">Превью тексту</span>
+                      <p className="text-white/80 text-xs font-bold mb-1.5 truncate">{productName.toUpperCase()}</p>
+                      {bullets.filter(Boolean).slice(0,5).map((b,i) => (
+                        <p key={i} className="text-white/50 text-xs mb-0.5 truncate">✓ {b.slice(0,36)}</p>
+                      ))}
+                      <p className="text-white/25 text-xs mt-1.5">XS · S · M · L · XL · 2XL</p>
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-white/60 text-xs">Про що розповісти</label>
                     <span className="text-white/25 text-xs">переваги товару</span>

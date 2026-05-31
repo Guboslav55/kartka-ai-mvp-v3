@@ -207,12 +207,25 @@ export async function POST(req: NextRequest) {
       const cardBullets=(bullets as string[]).filter(Boolean)
       if(!cardBullets.length) return NextResponse.json({error:'Додайте переваги товару'},{status:400})
       if(!REPLICATE) return NextResponse.json({error:'Карточка потребує REPLICATE_API_TOKEN'},{status:503})
+
+      // Upload product photo for Flux Kontext (preserves exact product)
+      const photoUrl=await uploadPhoto(supabase,allPhotos[0],user.id,'card-input')
+      if(!photoUrl) return NextResponse.json({error:'Помилка завантаження фото'},{status:500})
+
+      const preset=CARD_STYLES[cardPreset]||CARD_STYLES.urban
+      const cardScenePrompts=[
+        `Keep this exact product/person/clothing completely unchanged. Change only the background to ${preset.ideogramStyle}. Add dramatic gradient on the left side darker than right. Portrait composition, product on right side. Preserve ALL details: colors, prints, logo, textures.`,
+        `Keep this exact product/person/clothing completely unchanged. Transform background to ${preset.ideogramStyle}. Moody atmospheric lighting. Product prominently featured on right. Preserve ALL details exactly.`,
+        `Keep this exact product/person/clothing completely unchanged. Background: ${preset.ideogramStyle}. Dynamic composition, product center-right. Preserve ALL colors, prints, logos unchanged.`,
+        `Keep this exact product/person/clothing completely unchanged. Scene: ${preset.ideogramStyle}. Dark left area for text. Product on right side. Preserve every detail exactly as in original photo.`,
+      ]
+
       for(let i=0;i<qty;i++){
         try{
-          const scenePrompt=await buildScenePrompt(allPhotos[0],category,cardPreset,i)
-          console.log(`[card ${i+1}] prompt:`,scenePrompt.slice(0,80))
-          const sceneUrl=await runIdeogram(scenePrompt,REPLICATE)
-          if(!sceneUrl){console.warn(`Card ${i+1}: no scene`);continue}
+          const fluxPrompt=cardScenePrompts[i%cardScenePrompts.length]
+          console.log(`[card ${i+1}] Flux prompt:`,fluxPrompt.slice(0,80))
+          const sceneUrl=await runFlux(photoUrl,fluxPrompt,REPLICATE)
+          if(!sceneUrl){console.warn(`Card ${i+1}: Flux failed`);continue}
           const cardBuf=await overlayCardText(sceneUrl,productName,cardBullets,cardPreset)
           results.push(await saveBuf(supabase,cardBuf,user.id,'cards'))
           console.log(`[card ${i+1}] done`)

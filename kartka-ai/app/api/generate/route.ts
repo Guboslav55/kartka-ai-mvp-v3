@@ -3,6 +3,8 @@ import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+export const maxDuration = 60;
+
 const STARS_FOR_TEXT = 2;
 
 const PLATFORM_HINTS: Record<string, string> = {

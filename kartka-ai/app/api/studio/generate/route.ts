@@ -578,9 +578,7 @@ export async function POST(req: NextRequest) {
 
       for (let i = 0; i < qty; i++) {
         try {
-          const chosenLayout = cardLayout === 'auto'
-            ? layouts[i % layouts.length]
-            : cardLayout as 'split'|'diagonal'|'radial'
+          const chosenLayout = layouts[i % layouts.length]
 
           // Flux generates scene (portrait 2:3, product preserved)
           const fluxPrompt = `CRITICAL: Keep the main product/subject 100% IDENTICAL. ONLY change the background. New background scene: ${preset.sceneStyle}. Product stays on right side of frame. Left side darker for text overlay. Variation ${i+1}: ${creativity > 0.65 ? ['dramatic cinematic angle','extreme contrast lighting','abstract background','bold dynamic composition'][i] : ['standard composition','different angle','alternative lighting','dramatic perspective'][i]}. Professional marketing photography.`

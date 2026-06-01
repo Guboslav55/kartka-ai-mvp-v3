@@ -112,7 +112,7 @@ async function renderCard(
     // Dark gradient on left half
     const grad = ctx.createLinearGradient(0, 0, W, 0)
     grad.addColorStop(0, 'rgba(0,0,0,0.92)')
-    grad.addColorStop(0.50, 'rgba(0,0,0,0.60)')
+    grad.addColorStop(0.42, 'rgba(0,0,0,0.55)')
     grad.addColorStop(1, 'rgba(0,0,0,0)')
     ctx.fillStyle = grad
     ctx.fillRect(0, 0, W, H)
@@ -163,7 +163,7 @@ async function renderCard(
       const bh = 100
       ctx.fillStyle = 'rgba(0,0,0,0.82)'
       ctx.beginPath()
-      ctx.roundRect(18, by, Math.round(W * 0.50), bh, 14)
+      ctx.roundRect(18, by, Math.round(W * 0.54), bh, 14)
       ctx.fill()
 
       // Circle
@@ -182,7 +182,7 @@ async function renderCard(
       // Text with word wrap - 26px = readable on mobile
       ctx.font = `bold 26px ${fontFamily}`
       ctx.fillStyle = '#FFFFFF'
-      const maxW = Math.round(W * 0.44) - 110
+      const maxW = Math.round(W * 0.50) - 110
       const bWords = clean.split(' ')
       let bLine1 = '', bLine2 = ''
       for (const bw of bWords) {

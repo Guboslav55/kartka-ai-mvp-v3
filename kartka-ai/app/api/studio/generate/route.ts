@@ -529,7 +529,7 @@ export async function POST(req: NextRequest) {
 
     const {
       mode = 'photo', displayStyle = 'catalog',
-      cardPreset = 'urban', cardLayout = 'split', creativity = 0.5, creativity = 0.5,
+      cardPreset = 'urban', cardLayout = 'split', creativity = 0.5,
       productPhoto, productPhotos, productPhotoUrl,
       productName = '', category = '', wishes = '', count = 1, bullets = []
     } = await req.json()

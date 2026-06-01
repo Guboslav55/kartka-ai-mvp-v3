@@ -188,6 +188,7 @@ export default function StudioPage() {
   const [photoStyle, setPhotoStyle] = useState<PhotoStyle>('commercial')
   const [cardStyle, setCardStyle] = useState<CardStyle>('classic')
   const [cardPreset, setCardPreset] = useState('urban')
+  const [cardLayout, setCardLayout] = useState<'split'|'diagonal'|'radial'>('split')
   const [format, setFormat] = useState<Format>('1:1')
   const [count, setCount] = useState(1)
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -311,7 +312,7 @@ export default function StudioPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          mode, productPhoto: photos[0], productPhotos: photos, productName, category, displayStyle, cardPreset,
+          mode, productPhoto: photos[0], productPhotos: photos, productName, category, displayStyle, cardPreset, cardLayout,
           wishes, photoStyle, cardStyle, bullets: bullets.filter(Boolean),
           format, count,
         }),
@@ -500,6 +501,24 @@ export default function StudioPage() {
                         <button key={v} onClick={() => setCardPreset(v)}
                           className={['py-1.5 px-1 rounded-lg text-xs font-semibold transition-all', cardPreset===v ? 'bg-gold text-black' : 'bg-white/8 text-white/60 hover:bg-white/15'].join(' ')}>
                           {l}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Layout Selector */}
+                  <div className="mb-3">
+                    <span className="text-white/50 text-xs font-bold uppercase block mb-2">Розміщення</span>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {([
+                        ['split',    '⬛ Split',    'Текст | Товар'],
+                        ['diagonal', '◢ Diagonal', 'По діагоналі'],
+                        ['radial',   '◎ Radial',   'Навколо товару'],
+                      ] as [string,string,string][]).map(([v,l,desc]) => (
+                        <button key={v} onClick={() => setCardLayout(v as any)}
+                          className={['py-2 px-1 rounded-lg text-xs transition-all flex flex-col items-center gap-0.5', cardLayout===v ? 'bg-gold text-black font-bold' : 'bg-white/8 text-white/60 hover:bg-white/15'].join(' ')}>
+                          <span>{l}</span>
+                          <span className="text-[10px] opacity-60">{desc}</span>
                         </button>
                       ))}
                     </div>

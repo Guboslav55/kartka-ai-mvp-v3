@@ -111,127 +111,103 @@ async function overlayCardText(sceneUrl: string, name: string, bullets: string[]
   const meta = await sharp(imgBuf).metadata()
   const W = meta.width || 768, H = meta.height || 1024
 
-  // Load font as base64 - embed directly in SVG as data URI
-  // librsvg (used by sharp) supports data: URIs in @font-face src
-  function loadFontB64(bold: boolean): string {
-    const names = bold ? ['ARIALBD.TTF','ARIBLK.TTF','arialbd.ttf','DejaVuSans-Bold.ttf'] : ['ARIAL.TTF','arial.ttf','DejaVuSans.ttf']
-    const dirs = [
-      '/var/task/kartka-ai/public/fonts',
-      '/vercel/path0/kartka-ai/public/fonts',
-      path.join(process.cwd(), 'public/fonts'),
-    ]
-    for (const d of dirs) {
-      for (const n of names) {
-        const p = path.join(d, n)
-        try {
-          if (fs.existsSync(p)) {
-            const buf = fs.readFileSync(p)
-            console.log('Loaded font:', p, buf.length, 'bytes')
-            return buf.toString('base64')
-          }
-        } catch {}
-      }
-    }
-    // Last resort: grab ANY ttf
-    for (const d of dirs) {
-      try {
-        if (!fs.existsSync(d)) continue
-        const files = fs.readdirSync(d)
-        const ttf = files.find((f:string) => /\.ttf$/i.test(f))
-        if (ttf) {
-          const p = path.join(d, ttf)
-          const buf = fs.readFileSync(p)
-          console.log('Fallback font:', p)
-          return buf.toString('base64')
-        }
-      } catch {}
-    }
-    console.warn('No font found')
-    return ''
-  }
-
-  const boldB64 = loadFontB64(true)
-  const regB64  = loadFontB64(false) || boldB64
-
   const preset = CARD_STYLES[cardPreset] || CARD_STYLES.urban
   const { accent, titleColor, bulletBg, bottomColor, bottomText } = preset
   const esc = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   const bs = bullets.filter(Boolean).slice(0, 5)
 
+  // Title lines - max 16 chars per line
   const words = name.toUpperCase().split(' ')
   const lines: string[] = []; let cur = ''
   for (const w of words) {
-    if ((cur+' '+w).trim().length > 16 && cur) { lines.push(cur); cur = w } else cur = (cur+' '+w).trim()
+    if ((cur+' '+w).trim().length > 16 && cur) { lines.push(cur); cur = w }
+    else cur = (cur+' '+w).trim()
   }
   if (cur) lines.push(cur)
   const tLines = lines.slice(0, 3)
   const tFS = Math.max(44, Math.min(66, Math.round(H * 0.063)))
   const titleH = tLines.length * (tFS + 8)
-
-  // Build @font-face with data URI - key: use "format('truetype')" explicitly
-  const fontFace = boldB64 ? `
-@font-face {
-  font-family: 'BF';
-  src: url('data:font/truetype;charset=utf-8;base64,${boldB64}') format('truetype');
-  font-weight: bold;
-}
-@font-face {
-  font-family: 'RF';
-  src: url('data:font/truetype;charset=utf-8;base64,${regB64}') format('truetype');
-  font-weight: normal;
-}` : ''
-
-  const BF = boldB64 ? 'BF' : 'Arial,Helvetica,sans-serif'
-  const RF = regB64  ? 'RF' : 'Arial,Helvetica,sans-serif'
-
-  const titleSvg = tLines.map((l, i) =>
-    `<text x="30" y="${80 + i*(tFS+8)}" font-family="${BF}" font-size="${tFS}" font-weight="bold" fill="${titleColor}">${esc(l)}</text>`
-  ).join('')
-
   const bY0 = 80 + titleH + 28
-  const bSp = Math.round((H*0.79 - bY0) / Math.max(bs.length, 1))
+  const bSp = Math.round((H * 0.79 - bY0) / Math.max(bs.length, 1))
 
-  const bulletsSvg = bs.map((b, i) => {
-    const clean = esc(b.replace(/^[\u2022\u2713-]\s*/u, '').slice(0, 36))
-    const y = bY0 + i * bSp
-    const bh = 78, cy = y + Math.round(bh/2)
-    return `<rect x="16" y="${y}" width="${Math.min(clean.length*12+85,W*0.52)}" height="${bh}" rx="12" fill="${bulletBg}"/>
-<circle cx="52" cy="${cy}" r="23" fill="${accent}"/>
-<text x="52" y="${cy+7}" text-anchor="middle" font-family="${BF}" font-size="16" font-weight="bold" fill="${bottomText}">${i+1}</text>
-<text x="87" y="${y+44}" font-family="${RF}" font-size="17" fill="white">${clean}</text>`
-  }).join('')
+  // Find font path for sharp text API
+  const fontDirs = ['/var/task/kartka-ai/public/fonts', path.join(process.cwd(), 'public/fonts')]
+  let fontfile = ''
+  for (const dir of fontDirs) {
+    for (const n of ['ARIALBD.TTF','ARIBLK.TTF','arialbd.ttf','DejaVuSans-Bold.ttf']) {
+      const p = path.join(dir, n)
+      try { if (fs.existsSync(p)) { fontfile = p; break } } catch {}
+    }
+    if (fontfile) break
+  }
+  console.log('fontfile:', fontfile || 'NOT FOUND')
 
-  const svg = `<?xml version="1.0" encoding="UTF-8"?>
-<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+  // Build composites array
+  const composites: any[] = []
+
+  // Layer 1: gradient overlay (SVG, no fonts needed)
+  const gradSvg = Buffer.from(`<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
 <defs>
-<style><![CDATA[${fontFace}]]></style>
-<linearGradient id="gl" x1="0" y1="0" x2="1" y2="0">
-  <stop offset="0%" stop-color="rgba(0,0,0,0.92)"/>
-  <stop offset="52%" stop-color="rgba(0,0,0,0.55)"/>
-  <stop offset="100%" stop-color="rgba(0,0,0,0)"/>
-</linearGradient>
-<linearGradient id="gt" x1="0" y1="0" x2="0" y2="1">
-  <stop offset="0%" stop-color="rgba(0,0,0,0.70)"/>
-  <stop offset="100%" stop-color="rgba(0,0,0,0)"/>
-</linearGradient>
-<linearGradient id="gb" x1="0" y1="0" x2="0" y2="1">
-  <stop offset="0%" stop-color="rgba(0,0,0,0)"/>
-  <stop offset="100%" stop-color="rgba(0,0,0,0.90)"/>
-</linearGradient>
+<linearGradient id="gl" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(0,0,0,0.92)"/><stop offset="52%" stop-color="rgba(0,0,0,0.55)"/><stop offset="100%" stop-color="rgba(0,0,0,0)"/></linearGradient>
+<linearGradient id="gt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(0,0,0,0.70)"/><stop offset="100%" stop-color="rgba(0,0,0,0)"/></linearGradient>
+<linearGradient id="gb" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(0,0,0,0)"/><stop offset="100%" stop-color="rgba(0,0,0,0.90)"/></linearGradient>
 </defs>
 <rect width="${W}" height="${H}" fill="url(#gl)"/>
 <rect width="${W}" height="${Math.round(H*0.2)}" fill="url(#gt)"/>
 <rect y="${Math.round(H*0.8)}" width="${W}" height="${Math.round(H*0.2)}" fill="url(#gb)"/>
 <rect x="0" y="0" width="8" height="${H}" fill="${accent}"/>
-${titleSvg}
 <rect x="28" y="${80+titleH+6}" width="180" height="5" rx="3" fill="${accent}"/>
-${bulletsSvg}
 <rect x="0" y="${H-68}" width="${W}" height="68" fill="${bottomColor}"/>
-<text x="${W/2}" y="${H-22}" text-anchor="middle" font-family="${BF}" font-size="20" font-weight="bold" fill="${bottomText}">XS · S · M · L · XL · 2XL · 3XL</text>
-</svg>`
+</svg>`, 'utf8')
+  composites.push({ input: await sharp(gradSvg).png().toBuffer(), top: 0, left: 0 })
 
-  const overlay = await sharp(Buffer.from(svg, 'utf8')).png().toBuffer()
-  return sharp(imgBuf).composite([{ input: overlay, top: 0, left: 0 }]).jpeg({ quality: 93 }).toBuffer()
+  // Layer 2+: text via sharp native text API (supports Cyrillic with fontfile)
+  async function textPng(text: string, fontSize: number, color: string, bold: boolean, maxW: number): Promise<Buffer | null> {
+    try {
+      const opts: any = { text: { text: `<span foreground="${color}">${text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>`, font: bold ? 'Bold' : 'Regular', fontSize, rgba: true, width: maxW, height: Math.round(fontSize * 1.5), wrap: 'word' } }
+      if (fontfile) opts.text.fontfile = fontfile
+      return await (sharp as any)(opts).png().toBuffer()
+    } catch (e) {
+      console.error('text png error:', (e as any).message)
+      return null
+    }
+  }
+
+  // Title
+  let titleY = 80
+  for (const line of tLines) {
+    const buf = await textPng(line, tFS, titleColor, true, Math.round(W * 0.52))
+    if (buf) { composites.push({ input: buf, top: titleY, left: 28 }); titleY += tFS + 8 }
+    else titleY += tFS + 8
+  }
+
+  // Bullets
+  for (let i = 0; i < bs.length; i++) {
+    const clean = bs[i].replace(/^[\u2022\u2713-]\s*/u, '').slice(0, 36)
+    const y = bY0 + i * bSp
+    const bh = 78
+
+    // Bullet background circle (SVG, no text)
+    const bgSvg = Buffer.from(`<svg width="${Math.round(W*0.52)}" height="${bh}" xmlns="http://www.w3.org/2000/svg">
+<rect width="${Math.round(W*0.52)}" height="${bh}" rx="12" fill="${bulletBg}"/>
+<circle cx="36" cy="${Math.round(bh/2)}" r="22" fill="${accent}"/>
+<text x="36" y="${Math.round(bh/2)+7}" text-anchor="middle" font-family="Arial,sans-serif" font-size="16" font-weight="bold" fill="${bottomText}">${i+1}</text>
+</svg>`, 'utf8')
+    composites.push({ input: await sharp(bgSvg).png().toBuffer(), top: y, left: 16 })
+
+    // Bullet text
+    const tbuf = await textPng(clean, 17, 'white', false, Math.round(W * 0.38))
+    if (tbuf) composites.push({ input: tbuf, top: y + 22, left: 76 })
+  }
+
+  // Bottom bar size text
+  const sbuf = await textPng('XS · S · M · L · XL · 2XL · 3XL', 20, bottomText, true, W - 40)
+  if (sbuf) {
+    const sm = await sharp(sbuf).metadata()
+    composites.push({ input: sbuf, top: H - 44, left: Math.max(0, Math.round((W - (sm.width || 300)) / 2)) })
+  }
+
+  return sharp(imgBuf).composite(composites).jpeg({ quality: 93 }).toBuffer()
 }
 
 

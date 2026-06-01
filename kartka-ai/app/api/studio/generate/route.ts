@@ -62,7 +62,20 @@ Return JSON only:
   } catch { return {} }
 }
 
-// ─── Layout Engine using @napi-rs/canvas ─────────────────────────────────────
+// ─── Style presets ────────────────────────────────────────────────────────────
+const PRESETS: Record<string, { accent: string; bg: string; textColor: string; sceneStyle: string }> = {
+  auto:        { accent: '#FFD700', bg: '#111111', textColor: '#FFFFFF', sceneStyle: 'dramatic professional product marketing scene, dynamic lighting, dark atmospheric background' },
+  military:    { accent: '#8B9E4C', bg: '#1a1f0f', textColor: '#FFFFFF', sceneStyle: 'dark tactical military style, smoke and fog, olive khaki tones, dramatic moody lighting, metal textures' },
+  premium:     { accent: '#C9A84C', bg: '#0d0d0d', textColor: '#C9A84C', sceneStyle: 'luxury premium dark style, cinematic studio lighting, deep black background, elegant gold light tones' },
+  marketplace: { accent: '#FF6600', bg: '#FFFFFF', textColor: '#1a1a1a', sceneStyle: 'clean white studio background, soft even product photography lighting, professional ecommerce style' },
+  social:      { accent: '#E91E8C', bg: '#0d0d0d', textColor: '#FFFFFF', sceneStyle: 'trendy social media aesthetic, vibrant colors, lifestyle background, Instagram-style lighting' },
+  minimal:     { accent: '#FFFFFF', bg: '#111111', textColor: '#FFFFFF', sceneStyle: 'minimalist dark background, elegant single light source, luxury product photography' },
+  urban:       { accent: '#FFD700', bg: '#111111', textColor: '#FFFFFF', sceneStyle: 'urban streetwear style, dark gradient, energetic composition' },
+  rozetka:     { accent: '#FF6600', bg: '#FFFFFF', textColor: '#1a1a1a', sceneStyle: 'clean white studio, soft even lighting, professional ecommerce' },
+  prom:        { accent: '#0066CC', bg: '#F5F7FF', textColor: '#1a1a1a', sceneStyle: 'clean light studio, professional marketplace photography' },
+}
+
+// ─── Layout Engine using @napi-rs/canvas ─────────────────────────────────────────
 async function renderCard(
   sceneUrl: string,
   productUrl: string | null,

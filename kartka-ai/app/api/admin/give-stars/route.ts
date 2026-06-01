@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const ADMIN_EMAIL = 'guboslav55@gmail.com'
+const ADMIN_EMAILS = ['guboslav55@gmail.com', 'ef.crysis@gmail.com']
 
 export async function POST(req: NextRequest) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '')
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   )
 
   const { data: { user } } = await userSupabase.auth.getUser(token)
-  if (!user || user.email !== ADMIN_EMAIL) {
+  if (!user || !ADMIN_EMAILS.includes(user.email ?? '')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

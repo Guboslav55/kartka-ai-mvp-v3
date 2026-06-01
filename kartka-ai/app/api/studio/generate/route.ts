@@ -273,8 +273,8 @@ export async function POST(req: NextRequest) {
           console.log(`[card ${i+1}] Flux prompt:`,fluxPrompt.slice(0,80))
           const sceneUrl=await runFlux(photoUrl,fluxPrompt,REPLICATE)
           if(!sceneUrl){console.warn(`Card ${i+1}: Flux failed`);continue}
-          const cardBuf=await overlayCardText(sceneUrl,productName,cardBullets,cardPreset)
-          results.push(await saveBuf(supabase,cardBuf,user.id,'cards'))
+          // Text overlay temporarily disabled - save Flux scene directly
+          results.push(await saveUrl(supabase,sceneUrl,user.id,'cards'))
           console.log(`[card ${i+1}] done`)
         }catch(e){console.error(`card ${i}:`,e)}
       }

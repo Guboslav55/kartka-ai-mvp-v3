@@ -26,14 +26,39 @@ function findFont(bold: boolean): string {
   return ''
 }
 
+// ─── GPT: shorten title to fit card ──────────────────────────────────────────
+async function shortenTitle(name: string, style: string): Promise<string> {
+  try {
+    const r = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: `Product name: "${name}". Style: ${style}.
+Create a SHORT punchy product title for a marketplace infographic card.
+Rules:
+- Max 14 characters per line, max 2 lines
+- Ukrainian language preferred, but can use English brand words
+- Drop unnecessary words ("з", "для", "та")  
+- Keep key words: brand, material, type
+- Examples: "КУРТКА MILITARY" / "ТАКТИЧНА" / "MULTICAM PRO"
+Return ONLY the title, nothing else:` }],
+      max_tokens: 30, temperature: 0.5,
+    })
+    const t = r.choices[0]?.message?.content?.trim() || name
+    return t.toUpperCase().slice(0, 28)
+  } catch { return name.toUpperCase().slice(0, 28) }
+}
+
 // ─── Style presets ────────────────────────────────────────────────────────────
 const PRESETS: Record<string, { accent: string; bg: string; textColor: string; sceneStyle: string }> = {
-  military: { accent: '#8B9E4C', bg: '#1a1f0f', textColor: '#FFFFFF', sceneStyle: 'dark tactical military style, olive khaki tones, dramatic lighting' },
+  auto:        { accent: '#FFD700', bg: '#111111', textColor: '#FFFFFF', sceneStyle: 'dramatic professional product marketing scene, dynamic lighting, dark atmospheric background' },
+  military:    { accent: '#8B9E4C', bg: '#1a1f0f', textColor: '#FFFFFF', sceneStyle: 'dark tactical military style, smoke and fog, olive khaki tones, dramatic moody lighting, metal textures' },
+  premium:     { accent: '#C9A84C', bg: '#0d0d0d', textColor: '#C9A84C', sceneStyle: 'luxury premium dark style, cinematic studio lighting, deep black background, elegant gold light tones' },
+  marketplace: { accent: '#FF6600', bg: '#FFFFFF', textColor: '#1a1a1a', sceneStyle: 'clean white studio background, soft even product photography lighting, professional ecommerce style' },
+  social:      { accent: '#E91E8C', bg: '#0d0d0d', textColor: '#FFFFFF', sceneStyle: 'trendy social media aesthetic, vibrant colors, lifestyle background, Instagram-style lighting' },
+  minimal:     { accent: '#FFFFFF', bg: '#111111', textColor: '#FFFFFF', sceneStyle: 'minimalist dark background, elegant single light source, luxury product photography' },
+  // Legacy aliases
   urban:    { accent: '#FFD700', bg: '#111111', textColor: '#FFFFFF', sceneStyle: 'urban streetwear style, dark gradient, energetic composition' },
-  premium:  { accent: '#C9A84C', bg: '#0d0d0d', textColor: '#C9A84C', sceneStyle: 'luxury premium dark style, cinematic lighting, elegant gold tones' },
   rozetka:  { accent: '#FF6600', bg: '#FFFFFF', textColor: '#1a1a1a', sceneStyle: 'clean white studio, soft even lighting, professional ecommerce' },
   prom:     { accent: '#0066CC', bg: '#F5F7FF', textColor: '#1a1a1a', sceneStyle: 'clean light studio, professional marketplace photography' },
-  minimal:  { accent: '#FFFFFF', bg: '#111111', textColor: '#FFFFFF', sceneStyle: 'minimalist dark background, elegant soft lighting' },
 }
 
 // ─── GPT: analyse product photo ───────────────────────────────────────────────
@@ -498,8 +523,10 @@ export async function POST(req: NextRequest) {
           const sceneUrl = await runFlux(photoUrl, fluxPrompt, REPLICATE)
           if (!sceneUrl) { console.warn(`Card ${i+1}: Flux failed`); continue }
 
-          // Canvas layout engine renders text
-          const cardBuf = await renderCard(sceneUrl, null, productName, cardBullets, chosenLayout, cardPreset)
+          // GPT shortens title + max 4 bullets for bigger, readable text
+          const shortTitle = await shortenTitle(productName, preset.sceneStyle)
+          const topBullets = cardBullets.slice(0, 4)
+          const cardBuf = await renderCard(sceneUrl, null, shortTitle, topBullets, chosenLayout, cardPreset)
           results.push(await saveBuf(supabase, cardBuf, user.id, 'cards'))
           console.log(`[card ${i+1}] done ✅`)
         } catch (e) { console.error(`card ${i}:`, e) }

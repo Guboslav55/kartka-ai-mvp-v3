@@ -542,7 +542,7 @@ export async function POST(req: NextRequest) {
 
     const {
       mode = 'photo', displayStyle = 'catalog',
-      cardPreset = 'urban', cardLayout = 'split', creativity = 0.5, keepProduct = true,
+      cardPreset = 'urban', cardLayout = 'split', creativity = 0.5,
       productPhoto, productPhotos, productPhotoUrl,
       productName = '', category = '', wishes = '', count = 1, bullets = []
     } = await req.json()
@@ -583,10 +583,7 @@ export async function POST(req: NextRequest) {
             : cardLayout as 'split'|'diagonal'|'radial'
 
           // Flux generates scene (portrait 2:3, product preserved)
-          const productLock = keepProduct
-            ? 'CRITICAL: Keep the main product/subject 100% IDENTICAL - same appearance, colors, shape, details. DO NOT alter the product in any way. ONLY change the background environment.'
-            : 'Keep the main product recognizable but background can be creative.'
-          const fluxPrompt = `${productLock} New background scene: ${preset.sceneStyle}. Product stays on right side of frame. Left side darker for text overlay. Variation ${i+1}: ${['standard composition','different angle','alternative lighting','dramatic perspective'][i]}. Professional marketing photography.`
+          const fluxPrompt = `CRITICAL: Keep the main product/subject 100% IDENTICAL. ONLY change the background. New background scene: ${preset.sceneStyle}. Product stays on right side of frame. Left side darker for text overlay. Variation ${i+1}: ${creativity > 0.65 ? ['dramatic cinematic angle','extreme contrast lighting','abstract background','bold dynamic composition'][i] : ['standard composition','different angle','alternative lighting','dramatic perspective'][i]}. Professional marketing photography.`
           console.log(`[card ${i+1}] layout:${chosenLayout} flux...`)
 
           const sceneUrl = await runFlux(photoUrl, fluxPrompt, REPLICATE)

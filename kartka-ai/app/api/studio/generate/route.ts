@@ -303,6 +303,77 @@ async function renderCard(
     ctx.textAlign = 'left'
   }
 
+  // ── BOLD layout: massive centered title top + 2 big bullets bottom ─────────
+  else if (layout === 'bold') {
+    // Full dark overlay top half
+    const gbold = ctx.createLinearGradient(0, 0, 0, H * 0.45)
+    gbold.addColorStop(0, 'rgba(0,0,0,0.95)')
+    gbold.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = gbold
+    ctx.fillRect(0, 0, W, H * 0.45)
+    // Bottom overlay
+    const gbold2 = ctx.createLinearGradient(0, H * 0.65, 0, H)
+    gbold2.addColorStop(0, 'rgba(0,0,0,0)')
+    gbold2.addColorStop(1, 'rgba(0,0,0,0.95)')
+    ctx.fillStyle = gbold2
+    ctx.fillRect(0, H * 0.65, W, H * 0.35)
+    // Accent bars top and bottom
+    ctx.fillStyle = accent
+    ctx.fillRect(0, 0, W, 12)
+    // Big centered title
+    const boldWords = name.split(' ')
+    const boldLines: string[] = []; let bCur = ''
+    for (const w of boldWords) {
+      if ((bCur+' '+w).trim().length > 12 && bCur) { boldLines.push(bCur); bCur=w }
+      else bCur = (bCur+' '+w).trim()
+    }
+    if (bCur) boldLines.push(bCur)
+    const bFS = Math.min(120, Math.round(W * 0.10))
+    ctx.textAlign = 'center'
+    ctx.fillStyle = '#FFFFFF'
+    let bTy = Math.round(H * 0.10)
+    for (const line of boldLines.slice(0,2)) {
+      ctx.font = `bold ${bFS}px ${fontFamily}`
+      ctx.fillText(line, W/2, bTy)
+      bTy += bFS + 8
+    }
+    // Accent underline
+    ctx.fillStyle = accent
+    ctx.beginPath(); ctx.roundRect(W/2-120, bTy+4, 240, 8, 4); ctx.fill()
+    // 2 large bullet blocks at bottom
+    const bigBullets = bs.slice(0, 2)
+    const bbY = H * 0.72
+    bigBullets.forEach((b, i) => {
+      const clean = b.replace(/^[•✓\-]\s*/,'').slice(0,42)
+      const bx = i === 0 ? 20 : W/2 + 10
+      const bw = W/2 - 30
+      ctx.fillStyle = 'rgba(0,0,0,0.85)'
+      ctx.beginPath(); ctx.roundRect(bx, bbY, bw, 140, 16); ctx.fill()
+      ctx.fillStyle = accent
+      ctx.beginPath(); ctx.roundRect(bx, bbY, bw, 12, [6,6,0,0]); ctx.fill()
+      ctx.font = `bold 56px ${fontFamily}`
+      ctx.fillStyle = 'rgba(255,255,255,0.15)'
+      ctx.textAlign = 'center'
+      ctx.fillText(String(i+1), bx+bw/2, bbY+90)
+      ctx.font = `bold 22px ${fontFamily}`
+      ctx.fillStyle = '#FFFFFF'
+      const bWords2 = clean.split(' ')
+      let bL1='', bL2=''
+      for(const w of bWords2){ const t=bL1?bL1+' '+w:w; if(ctx.measureText(t).width<=bw-20){bL1=t}else{bL2=bL2?bL2+' '+w:w} }
+      ctx.fillText(bL1, bx+bw/2, bbY+(bL2?98:108))
+      if(bL2){ ctx.font=`18px ${fontFamily}`; ctx.fillStyle='rgba(255,255,255,0.75)'; ctx.fillText(bL2.slice(0,25), bx+bw/2, bbY+126) }
+    })
+    ctx.textAlign = 'left'
+    // Bottom bar
+    ctx.fillStyle = accent
+    ctx.fillRect(0, H-80, W, 80)
+    ctx.font = `bold 26px ${fontFamily}`
+    ctx.fillStyle = '#000000'
+    ctx.textAlign = 'center'
+    ctx.fillText('XS · S · M · L · XL · 2XL · 3XL', W/2, H-24)
+    ctx.textAlign = 'left'
+  }
+
   // ── RADIAL layout: title top-center, bullets around product ───────────────
   else if (layout === 'radial') {
     // Vignette
@@ -480,7 +551,7 @@ export async function POST(req: NextRequest) {
 
     const {
       mode = 'photo', displayStyle = 'catalog',
-      cardPreset = 'urban', cardLayout = 'split',
+      cardPreset = 'urban', cardLayout = 'split', creativity = 0.5,
       productPhoto, productPhotos, productPhotoUrl,
       productName = '', category = '', wishes = '', count = 1, bullets = []
     } = await req.json()
@@ -512,7 +583,7 @@ export async function POST(req: NextRequest) {
       if (!photoUrl) return NextResponse.json({ error: 'Помилка завантаження фото' }, { status: 500 })
 
       const preset = PRESETS[cardPreset] || PRESETS.urban
-      const layouts: ('split'|'diagonal'|'radial')[] = ['split','diagonal','radial','split']
+      const layouts: ('split'|'diagonal'|'radial'|'bold')[] = ['split','diagonal','radial','bold']
 
       for (let i = 0; i < qty; i++) {
         try {
@@ -528,7 +599,7 @@ export async function POST(req: NextRequest) {
           if (!sceneUrl) { console.warn(`Card ${i+1}: Flux failed`); continue }
 
           // GPT shortens title + max 4 bullets for bigger, readable text
-          const shortTitle = await shortenTitle(productName, preset.sceneStyle)
+          const shortTitle = await shortenTitle(productName, creativity)
           const topBullets = cardBullets.slice(0, 4)
           const cardBuf = await renderCard(sceneUrl, null, shortTitle, topBullets, chosenLayout, cardPreset)
           results.push(await saveBuf(supabase, cardBuf, user.id, 'cards'))

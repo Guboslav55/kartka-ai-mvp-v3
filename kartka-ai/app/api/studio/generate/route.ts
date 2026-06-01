@@ -168,7 +168,7 @@ async function renderCard(
   const bs = bullets.filter(Boolean).slice(0, 4)
 
   // ── SPLIT layout ─────────────────────────────────────────────────────────────
-  // Solid LEFT column (38%) with title + compact bullets. RIGHT 62% = clean photo.
+  // Solid LEFT column (38%) — title top, bullets fill remaining space evenly
   if (layout === 'split') {
     const COL = Math.round(W * 0.385)
     const PAD = 40
@@ -195,28 +195,26 @@ async function renderCard(
     const titleFS = Math.min(96, Math.round(maxTW * 0.26))
     const titleLines = wrapText(name.toUpperCase(), maxTW, `bold ${titleFS}px ${FF}`)
     ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${titleFS}px ${FF}`
-    let ty = 72 + titleFS
+    let ty = 60 + titleFS
     for (const line of titleLines.slice(0, 3)) {
       ctx.fillText(line, PAD, ty); ty += titleFS + 6
     }
     // Accent underline
-    ctx.fillStyle = accent; ctx.fillRect(PAD, ty + 8, Math.round(maxTW * 0.6), 5)
-    ty += 30
+    ctx.fillStyle = accent; ctx.fillRect(PAD, ty + 10, Math.round(maxTW * 0.6), 5)
+    ty += 36
 
-    // ── Bullets — compact, stacked, fixed height ──
-    const bH = 90          // fixed height per bullet
-    const bGap = 14        // gap between bullets
-    const totalBH = bs.length * bH + (bs.length - 1) * bGap
-    // Start bullets so they end at bottom bar
-    const bStartY = H - BARH - 24 - totalBH
+    // ── Bullets — evenly distributed from ty to bottom bar ──
+    const availH = H - BARH - 24 - ty
+    const bH = Math.min(110, Math.round(availH / bs.length) - 12)
+    const bGap = Math.round((availH - bH * bs.length) / Math.max(bs.length - 1, 1))
     const bFS = 26
     const iconR = 24
+    const bw = COL - PAD
 
     for (let i = 0; i < bs.length; i++) {
       const clean = bs[i].replace(/^[•✓\-]\s*/, '')
       const bx = PAD - 8
-      const by = bStartY + i * (bH + bGap)
-      const bw = COL - PAD
+      const by = ty + i * (bH + bGap)
 
       // Pill bg
       ctx.fillStyle = 'rgba(255,255,255,0.08)'

@@ -168,41 +168,45 @@ async function renderCard(
       const clean = bs[i].replace(/^[•✓\-]\s*/, '').slice(0, 32)
       const by = bStart + i * bSpacing
 
-      // Bullet background
-      ctx.fillStyle = 'rgba(0,0,0,0.80)'
+      // Bullet background - bigger
+      const bh = 100
+      ctx.fillStyle = 'rgba(0,0,0,0.82)'
       ctx.beginPath()
-      ctx.roundRect(18, by, Math.min(clean.length * 18 + 90, W * 0.50), 85, 12)
+      ctx.roundRect(18, by, Math.round(W * 0.50), bh, 14)
       ctx.fill()
 
       // Circle
       ctx.fillStyle = accent
       ctx.beginPath()
-      ctx.arc(62, by + 42, 28, 0, Math.PI * 2)
+      ctx.arc(62, by + 50, 30, 0, Math.PI * 2)
       ctx.fill()
 
       // Number
-      ctx.font = `bold 20px ${fontFamily}`
-      ctx.fillStyle = preset.bg === '#FFFFFF' || preset.bg === '#F5F7FF' ? '#000000' : '#000000'
+      ctx.font = `bold 24px ${fontFamily}`
+      ctx.fillStyle = '#000000'
       ctx.textAlign = 'center'
-      ctx.fillText(String(i + 1), 62, by + 50)
+      ctx.fillText(String(i + 1), 62, by + 58)
       ctx.textAlign = 'left'
 
-      // Text - wrap long text to 2 lines
-      ctx.font = `bold 21px ${fontFamily}`
+      // Text with word wrap - 26px = readable on mobile
+      ctx.font = `bold 26px ${fontFamily}`
       ctx.fillStyle = '#FFFFFF'
-      const maxW = Math.round(W * 0.47) - 104
-      const words = clean.split(' ')
-      let line1 = '', line2 = ''
-      for (const word of words) {
-        const test = line1 ? line1 + ' ' + word : word
-        if (ctx.measureText(test).width <= maxW) { line1 = test }
-        else { line2 = line2 ? line2 + ' ' + word : word }
+      const maxW = Math.round(W * 0.44) - 110
+      const bWords = clean.split(' ')
+      let bLine1 = '', bLine2 = ''
+      for (const bw of bWords) {
+        const test = bLine1 ? bLine1 + ' ' + bw : bw
+        if (ctx.measureText(test).width <= maxW) { bLine1 = test }
+        else if (!bLine2) { bLine2 = bw }
+        else { bLine2 += ' ' + bw }
       }
-      ctx.fillText(line1, 104, line2 ? by + 36 : by + 48)
-      if (line2) {
-        ctx.font = `18px ${fontFamily}`
-        ctx.fillStyle = 'rgba(255,255,255,0.80)'
-        ctx.fillText(line2.slice(0, 32), 104, by + 62)
+      if (bLine2) {
+        ctx.fillText(bLine1, 108, by + 36)
+        ctx.font = `22px ${fontFamily}`
+        ctx.fillStyle = 'rgba(255,255,255,0.82)'
+        ctx.fillText(bLine2.slice(0, 28), 108, by + 68)
+      } else {
+        ctx.fillText(bLine1, 108, by + 58)
       }
     }
 

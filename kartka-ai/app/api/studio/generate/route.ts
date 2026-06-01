@@ -162,10 +162,23 @@ async function renderCard(
       ctx.fillText(String(i + 1), 62, by + 50)
       ctx.textAlign = 'left'
 
-      // Text
-      ctx.font = `bold 22px ${fontFamily}`
+      // Text - wrap long text to 2 lines
+      ctx.font = `bold 21px ${fontFamily}`
       ctx.fillStyle = '#FFFFFF'
-      ctx.fillText(clean.slice(0, 26), 104, by + 48)
+      const maxW = Math.round(W * 0.47) - 104
+      const words = clean.split(' ')
+      let line1 = '', line2 = ''
+      for (const word of words) {
+        const test = line1 ? line1 + ' ' + word : word
+        if (ctx.measureText(test).width <= maxW) { line1 = test }
+        else { line2 = line2 ? line2 + ' ' + word : word }
+      }
+      ctx.fillText(line1, 104, line2 ? by + 36 : by + 48)
+      if (line2) {
+        ctx.font = `18px ${fontFamily}`
+        ctx.fillStyle = 'rgba(255,255,255,0.80)'
+        ctx.fillText(line2.slice(0, 32), 104, by + 62)
+      }
     }
 
     // Bottom bar
@@ -479,7 +492,7 @@ export async function POST(req: NextRequest) {
             : cardLayout as 'split'|'diagonal'|'radial'
 
           // Flux generates scene (portrait 2:3, product preserved)
-          const fluxPrompt = `Keep this exact product/person/clothing completely unchanged. Transform background to ${preset.sceneStyle}. Portrait composition, product on the right side, darker area on the left. Preserve ALL details: colors, prints, logos, textures. Professional marketing photography.`
+          const fluxPrompt = `IMPORTANT: Keep this exact product/person/clothing 100% identical - do NOT change any clothing, colors, patterns, logos, or person appearance. ONLY change the background environment. New background: ${preset.sceneStyle}. Keep product on right side of frame. Left side should be darker. Absolutely preserve: jacket color, camouflage pattern, hood shape, all clothing details. Professional marketing photo.`
           console.log(`[card ${i+1}] layout:${chosenLayout} flux...`)
 
           const sceneUrl = await runFlux(photoUrl, fluxPrompt, REPLICATE)

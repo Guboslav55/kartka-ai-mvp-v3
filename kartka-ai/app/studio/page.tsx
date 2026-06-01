@@ -536,6 +536,17 @@ export default function StudioPage() {
                     </button>
                   </div>
 
+                  {/* Layout */}
+                  <div className="mb-3">
+                    <span className="text-white/50 text-xs font-bold uppercase block mb-2">Розміщення</span>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {([['split','◧ Split','Текст+Товар'],['diagonal','◢ Diagonal','Діагональ'],['radial','◎ Radial','Навколо'],['bold','⬛ Bold','Великий']] as [string,string,string][]).map(([v,l,d])=>(
+                        <button key={v} onClick={()=>setCardLayout(v as any)} className={['py-1.5 px-2 rounded-lg text-xs transition-all',cardLayout===v?'bg-gold text-black font-bold':'bg-white/8 text-white/60 hover:bg-white/15'].join(' ')}>
+                          <span className="block font-bold">{l}</span><span className="text-[10px] opacity-60">{d}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   {/* Text Preview */}
                   {productName.trim() && bullets.some(b=>b.trim()) && (
                     <div className="bg-white/[0.03] border border-white/8 rounded-xl p-3 mb-3">

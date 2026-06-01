@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 
-const ADMIN_EMAIL = 'guboslav55@gmail.com'
+const ADMIN_EMAILS = ['guboslav55@gmail.com', 'ef.crysis@gmail.com']
 
 type Stats = {
   totalUsers: number
@@ -96,7 +96,7 @@ export default function AdminPage() {
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user || user.email !== ADMIN_EMAIL) { router.push('/dashboard'); return }
+      if (!user || !ADMIN_EMAILS.includes(user.email || '')) { router.push('/dashboard'); return }
 
       const today = new Date(); today.setHours(0,0,0,0)
       const todayIso = today.toISOString()

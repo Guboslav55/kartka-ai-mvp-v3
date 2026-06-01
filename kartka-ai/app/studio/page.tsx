@@ -528,7 +528,7 @@ export default function StudioPage() {
                   <div className="flex items-center justify-between mb-3 bg-white/[0.03] border border-white/8 rounded-xl px-3 py-2.5">
                     <div>
                       <p className="text-white/70 text-xs font-bold">Зберігати товар 100%</p>
-                      <p className="text-white/30 text-[10px]">AI не змінюватиме одяг/куртку</p>
+                      <p className="text-white/30 text-[10px]">AI не змінюватиме сам товар</p>
                     </div>
                     <button onClick={() => setKeepProduct(p => !p)}
                       className={['w-10 h-5 rounded-full transition-all relative', keepProduct ? 'bg-gold' : 'bg-white/15'].join(' ')}>

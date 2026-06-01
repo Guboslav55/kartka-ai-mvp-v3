@@ -169,30 +169,32 @@ async function renderCard(
 
   // ── SPLIT layout ────────────────────────────────────────────────────────────
   if (layout === 'split') {
-    // Gradient only on LEFT 45% - product gets 55%+ of frame
-    const g = ctx.createLinearGradient(0,0,W*0.55,0)
-    g.addColorStop(0,   'rgba(0,0,0,0.90)')
-    g.addColorStop(0.45,'rgba(0,0,0,0.70)')
-    g.addColorStop(0.72,'rgba(0,0,0,0.25)')
-    g.addColorStop(1,   'rgba(0,0,0,0.0)')
+    // Text zone: LEFT 38% — product gets full right 62%
+    const TEXT_ZONE = 0.38
+    const g = ctx.createLinearGradient(0,0,W*0.62,0)
+    g.addColorStop(0,            'rgba(0,0,0,0.95)')
+    g.addColorStop(TEXT_ZONE,    'rgba(0,0,0,0.90)')
+    g.addColorStop(TEXT_ZONE+0.08,'rgba(0,0,0,0.55)')
+    g.addColorStop(TEXT_ZONE+0.18,'rgba(0,0,0,0.10)')
+    g.addColorStop(1,            'rgba(0,0,0,0.0)')
     ctx.fillStyle = g; ctx.fillRect(0,0,W,H)
 
     // Top & bottom vignette
-    const gt = ctx.createLinearGradient(0,0,0,H*0.15)
-    gt.addColorStop(0,'rgba(0,0,0,0.6)'); gt.addColorStop(1,'rgba(0,0,0,0)')
-    ctx.fillStyle = gt; ctx.fillRect(0,0,W,H*0.15)
-    const gb = ctx.createLinearGradient(0,H*0.85,0,H)
-    gb.addColorStop(0,'rgba(0,0,0,0)'); gb.addColorStop(1,'rgba(0,0,0,0.7)')
-    ctx.fillStyle = gb; ctx.fillRect(0,H*0.85,W,H*0.15)
+    const gt = ctx.createLinearGradient(0,0,0,H*0.12)
+    gt.addColorStop(0,'rgba(0,0,0,0.55)'); gt.addColorStop(1,'rgba(0,0,0,0)')
+    ctx.fillStyle = gt; ctx.fillRect(0,0,W,H*0.12)
+    const gb = ctx.createLinearGradient(0,H*0.88,0,H)
+    gb.addColorStop(0,'rgba(0,0,0,0)'); gb.addColorStop(1,'rgba(0,0,0,0.65)')
+    ctx.fillStyle = gb; ctx.fillRect(0,H*0.88,W,H*0.12)
 
     // Accent left bar
     ctx.fillStyle = accent
     ctx.beginPath(); ctx.roundRect(0,0,10,H,0); ctx.fill()
 
-    // Title block
+    // Title block — max width 36% of canvas
     const titleX = 40, titleY = 90
-    const maxTW = Math.round(W * 0.42)
-    const titleFS = Math.min(96, Math.round(W * 0.082))
+    const maxTW = Math.round(W * 0.36)
+    const titleFS = Math.min(88, Math.round(W * 0.076))
     const titleLines = wrapText(name, maxTW, `bold ${titleFS}px ${FF}`)
 
     ctx.fillStyle = '#FFFFFF'
@@ -202,40 +204,40 @@ async function renderCard(
       ctx.fillText(line, titleX, ty)
       ty += titleFS + 8
     }
-    accentLine(titleX, ty + 8, 200)
+    accentLine(titleX, ty + 8, 180)
     ty += 36
 
-    // Bullets
+    // Bullets — pill width strictly 40% of canvas
+    const bw = Math.round(W * 0.40)
     const bSpacing = Math.round((H * 0.82 - ty) / Math.max(bs.length, 1))
     for (let i = 0; i < bs.length; i++) {
       const clean = bs[i].replace(/^[•✓\-]\s*/,'')
       const by = ty + i * bSpacing
-      const bFS = 26
-      const bLines = wrapText(clean, maxTW - 90, `bold ${bFS}px ${FF}`)
-      const bh = bLines.length > 1 ? 106 : 88
-      const bw = Math.round(W * 0.44)
+      const bFS = 24
+      const bLines = wrapText(clean, bw - 88, `bold ${bFS}px ${FF}`)
+      const bh = bLines.length > 1 ? 100 : 84
 
       // Pill background
-      ctx.fillStyle = 'rgba(0,0,0,0.78)'
+      ctx.fillStyle = 'rgba(0,0,0,0.80)'
       roundRect(titleX - 4, by - 4, bw, bh, 16)
 
       // Accent numbered circle
       ctx.fillStyle = accent
-      ctx.beginPath(); ctx.arc(titleX + 34, by + Math.round(bh/2), 30, 0, Math.PI*2); ctx.fill()
+      ctx.beginPath(); ctx.arc(titleX + 32, by + Math.round(bh/2), 28, 0, Math.PI*2); ctx.fill()
       ctx.fillStyle = '#000000'
-      ctx.font = `bold 22px ${FF}`
+      ctx.font = `bold 20px ${FF}`
       ctx.textAlign = 'center'
-      ctx.fillText(String(i+1), titleX + 34, by + Math.round(bh/2) + 8)
+      ctx.fillText(String(i+1), titleX + 32, by + Math.round(bh/2) + 7)
       ctx.textAlign = 'left'
 
       // Bullet text
       ctx.fillStyle = '#FFFFFF'
       ctx.font = `bold ${bFS}px ${FF}`
-      ctx.fillText(bLines[0] || '', titleX + 78, by + (bLines.length > 1 ? 36 : Math.round(bh/2) + 10))
+      ctx.fillText(bLines[0] || '', titleX + 74, by + (bLines.length > 1 ? 34 : Math.round(bh/2) + 9))
       if (bLines[1]) {
         ctx.fillStyle = 'rgba(255,255,255,0.70)'
         ctx.font = `${bFS - 4}px ${FF}`
-        ctx.fillText(bLines[1], titleX + 78, by + 68)
+        ctx.fillText(bLines[1], titleX + 74, by + 64)
       }
     }
 

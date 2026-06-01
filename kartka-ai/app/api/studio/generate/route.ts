@@ -75,390 +75,329 @@ const PRESETS: Record<string, { accent: string; bg: string; textColor: string; s
   prom:        { accent: '#0066CC', bg: '#F5F7FF', textColor: '#1a1a1a', sceneStyle: 'clean light studio, professional marketplace photography' },
 }
 
-// ─── Layout Engine using @napi-rs/canvas ─────────────────────────────────────────
+// ─── Layout Engine using @napi-rs/canvas ─────────────────────────────────────
 async function renderCard(
   sceneUrl: string,
-  productUrl: string | null,
+  _productUrl: string | null,
   name: string,
   bullets: string[],
-  layout: 'split' | 'diagonal' | 'radial',
+  layout: 'split' | 'diagonal' | 'radial' | 'bold',
   cardPreset: string
 ): Promise<Buffer> {
   const { createCanvas, loadImage, GlobalFonts } = await import('@napi-rs/canvas')
 
-  // Register font
   const fontBold = findFont(true)
   const fontReg  = findFont(false)
-  if (fontBold) { try { GlobalFonts.registerFromPath(fontBold, 'CardFont'); console.log('Font registered:', fontBold) } catch(e) { console.error('Font reg:', e) } }
+  if (fontBold) try { GlobalFonts.registerFromPath(fontBold, 'CF') } catch {}
+  const FF = fontBold ? 'CF' : 'Arial'
 
-  const BF = fontBold ? 'bold 1px CardFont' : 'bold 1px Arial'
-  const RF = fontReg  ? '1px CardFont'      : '1px Arial'
-  const fontFamily = fontBold ? 'CardFont' : 'Arial, sans-serif'
-
-  const W = 1080, H = 1440  // Portrait 3:4
+  const W = 1080, H = 1440
   const canvas = createCanvas(W, H)
   const ctx = canvas.getContext('2d')
 
   const preset = PRESETS[cardPreset] || PRESETS.urban
-  const { accent, textColor } = preset
-  const bs = bullets.filter(Boolean).slice(0, 5)
+  const { accent } = preset
 
-  // Load background scene
+  // ── helpers ────────────────────────────────────────────────────────────────
+  function hexAlpha(hex: string, a: number) {
+    const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16)
+    return `rgba(${r},${g},${b},${a})`
+  }
+  function roundRect(x: number, y: number, w: number, h: number, r: number) {
+    ctx.beginPath(); ctx.roundRect(x,y,w,h,r); ctx.fill()
+  }
+  function wrapText(text: string, maxW: number, font: string): string[] {
+    ctx.font = font
+    const words = text.split(' ')
+    const lines: string[] = []
+    let cur = ''
+    for (const w of words) {
+      const t = cur ? cur + ' ' + w : w
+      if (ctx.measureText(t).width <= maxW) { cur = t }
+      else { if (cur) lines.push(cur); cur = w }
+    }
+    if (cur) lines.push(cur)
+    return lines
+  }
+  function accentLine(x: number, y: number, w: number) {
+    ctx.fillStyle = accent; ctx.beginPath(); ctx.roundRect(x, y, w, 6, 3); ctx.fill()
+  }
+
+  // Load scene
   const scene = await loadImage(sceneUrl)
   ctx.drawImage(scene, 0, 0, W, H)
 
-  // ── SPLIT layout: text left, product right ─────────────────────────────────
+  const bs = bullets.filter(Boolean).slice(0, 4)
+
+  // ── SPLIT layout ────────────────────────────────────────────────────────────
   if (layout === 'split') {
-    // Dark gradient on left half
-    const grad = ctx.createLinearGradient(0, 0, W, 0)
-    grad.addColorStop(0, 'rgba(0,0,0,0.92)')
-    grad.addColorStop(0.42, 'rgba(0,0,0,0.55)')
-    grad.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = grad
-    ctx.fillRect(0, 0, W, H)
+    // Deep gradient left side - text lives here
+    const g = ctx.createLinearGradient(0,0,W*0.62,0)
+    g.addColorStop(0,   'rgba(0,0,0,0.96)')
+    g.addColorStop(0.55,'rgba(0,0,0,0.82)')
+    g.addColorStop(1,   'rgba(0,0,0,0.0)')
+    ctx.fillStyle = g; ctx.fillRect(0,0,W,H)
 
-    // Top gradient
-    const gt = ctx.createLinearGradient(0, 0, 0, H * 0.2)
-    gt.addColorStop(0, 'rgba(0,0,0,0.70)')
-    gt.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = gt
-    ctx.fillRect(0, 0, W, H * 0.2)
+    // Top & bottom vignette
+    const gt = ctx.createLinearGradient(0,0,0,H*0.15)
+    gt.addColorStop(0,'rgba(0,0,0,0.6)'); gt.addColorStop(1,'rgba(0,0,0,0)')
+    ctx.fillStyle = gt; ctx.fillRect(0,0,W,H*0.15)
+    const gb = ctx.createLinearGradient(0,H*0.85,0,H)
+    gb.addColorStop(0,'rgba(0,0,0,0)'); gb.addColorStop(1,'rgba(0,0,0,0.7)')
+    ctx.fillStyle = gb; ctx.fillRect(0,H*0.85,W,H*0.15)
 
-    // Accent bar left
+    // Accent left bar
     ctx.fillStyle = accent
-    ctx.fillRect(0, 0, 10, H)
+    ctx.beginPath(); ctx.roundRect(0,0,10,H,0); ctx.fill()
 
-    // Title
-    const words = name.toUpperCase().split(' ')
-    const lines: string[] = []; let cur = ''
-    for (const w of words) {
-      if ((cur + ' ' + w).trim().length > 14 && cur) { lines.push(cur); cur = w }
-      else cur = (cur + ' ' + w).trim()
+    // Title block
+    const titleX = 40, titleY = 90
+    const maxTW = Math.round(W * 0.50)
+    const titleFS = Math.min(96, Math.round(W * 0.082))
+    const titleLines = wrapText(name, maxTW, `bold ${titleFS}px ${FF}`)
+
+    ctx.fillStyle = '#FFFFFF'
+    ctx.font = `bold ${titleFS}px ${FF}`
+    let ty = titleY + titleFS
+    for (const line of titleLines.slice(0,3)) {
+      ctx.fillText(line, titleX, ty)
+      ty += titleFS + 8
     }
-    if (cur) lines.push(cur)
-
-    const tFS = Math.min(100, Math.round(W * 0.085))
-    ctx.font = `bold ${tFS}px ${fontFamily}`
-    ctx.fillStyle = textColor
-    let titleY = Math.round(H * 0.09)
-    for (const line of lines.slice(0, 3)) {
-      ctx.fillText(line, 30, titleY)
-      titleY += tFS + 10
-    }
-
-    // Accent line
-    ctx.fillStyle = accent
-    ctx.beginPath()
-    ctx.roundRect(30, titleY + 6, 220, 6, 3)
-    ctx.fill()
+    accentLine(titleX, ty + 8, 200)
+    ty += 36
 
     // Bullets
-    const bStart = titleY + 36
-    const bSpacing = Math.round((H * 0.78 - bStart) / Math.max(bs.length, 1))
+    const bSpacing = Math.round((H * 0.82 - ty) / Math.max(bs.length, 1))
     for (let i = 0; i < bs.length; i++) {
-      const clean = bs[i].replace(/^[•✓\-]\s*/, '').slice(0, 32)
-      const by = bStart + i * bSpacing
+      const clean = bs[i].replace(/^[•✓\-]\s*/,'')
+      const by = ty + i * bSpacing
+      const bFS = 26
+      const bLines = wrapText(clean, maxTW - 90, `bold ${bFS}px ${FF}`)
+      const bh = bLines.length > 1 ? 106 : 88
+      const bw = Math.round(W * 0.52)
 
-      // Bullet background - bigger
-      const bh = 100
-      ctx.fillStyle = 'rgba(0,0,0,0.82)'
-      ctx.beginPath()
-      ctx.roundRect(18, by, Math.round(W * 0.54), bh, 14)
-      ctx.fill()
+      // Pill background
+      ctx.fillStyle = 'rgba(0,0,0,0.78)'
+      roundRect(titleX - 4, by - 4, bw, bh, 16)
 
-      // Circle
+      // Accent numbered circle
       ctx.fillStyle = accent
-      ctx.beginPath()
-      ctx.arc(62, by + 50, 30, 0, Math.PI * 2)
-      ctx.fill()
-
-      // Number
-      ctx.font = `bold 24px ${fontFamily}`
+      ctx.beginPath(); ctx.arc(titleX + 34, by + Math.round(bh/2), 30, 0, Math.PI*2); ctx.fill()
       ctx.fillStyle = '#000000'
+      ctx.font = `bold 22px ${FF}`
       ctx.textAlign = 'center'
-      ctx.fillText(String(i + 1), 62, by + 58)
+      ctx.fillText(String(i+1), titleX + 34, by + Math.round(bh/2) + 8)
       ctx.textAlign = 'left'
 
-      // Text with word wrap - 26px = readable on mobile
-      ctx.font = `bold 26px ${fontFamily}`
+      // Bullet text
       ctx.fillStyle = '#FFFFFF'
-      const maxW = Math.round(W * 0.50) - 110
-      const bWords = clean.split(' ')
-      let bLine1 = '', bLine2 = ''
-      for (const bw of bWords) {
-        const test = bLine1 ? bLine1 + ' ' + bw : bw
-        if (ctx.measureText(test).width <= maxW) { bLine1 = test }
-        else if (!bLine2) { bLine2 = bw }
-        else { bLine2 += ' ' + bw }
-      }
-      if (bLine2) {
-        ctx.fillText(bLine1, 108, by + 36)
-        ctx.font = `22px ${fontFamily}`
-        ctx.fillStyle = 'rgba(255,255,255,0.82)'
-        ctx.fillText(bLine2.slice(0, 28), 108, by + 68)
-      } else {
-        ctx.fillText(bLine1, 108, by + 58)
+      ctx.font = `bold ${bFS}px ${FF}`
+      ctx.fillText(bLines[0] || '', titleX + 78, by + (bLines.length > 1 ? 36 : Math.round(bh/2) + 10))
+      if (bLines[1]) {
+        ctx.fillStyle = 'rgba(255,255,255,0.70)'
+        ctx.font = `${bFS - 4}px ${FF}`
+        ctx.fillText(bLines[1], titleX + 78, by + 68)
       }
     }
 
     // Bottom bar
     ctx.fillStyle = accent
-    ctx.fillRect(0, H - 88, W, 88)
-    ctx.font = `bold 26px ${fontFamily}`
-    ctx.fillStyle = preset.bg === '#FFFFFF' || preset.bg === '#F5F7FF' ? '#FFFFFF' : '#000000'
+    ctx.fillRect(0, H - 90, W, 90)
+    ctx.fillStyle = '#000000'
+    ctx.font = `bold 28px ${FF}`
     ctx.textAlign = 'center'
-    ctx.fillText('XS · S · M · L · XL · 2XL · 3XL', W / 2, H - 30)
+    ctx.fillText('XS · S · M · L · XL · 2XL · 3XL', W/2, H - 30)
     ctx.textAlign = 'left'
   }
 
-  // ── DIAGONAL layout: title top-left, bullets bottom-right ─────────────────
+  // ── DIAGONAL layout ─────────────────────────────────────────────────────────
   else if (layout === 'diagonal') {
-    // Dark top-left triangle gradient
-    const g1 = ctx.createLinearGradient(0, 0, W * 0.6, H * 0.5)
-    g1.addColorStop(0, 'rgba(0,0,0,0.90)')
-    g1.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = g1
-    ctx.fillRect(0, 0, W, H)
+    // Dark upper-left for title
+    const g1 = ctx.createLinearGradient(0,0,W*0.7,H*0.5)
+    g1.addColorStop(0,'rgba(0,0,0,0.94)'); g1.addColorStop(1,'rgba(0,0,0,0)')
+    ctx.fillStyle = g1; ctx.fillRect(0,0,W,H)
+    // Dark lower-right for bullets
+    const g2 = ctx.createLinearGradient(W,H,W*0.25,H*0.45)
+    g2.addColorStop(0,'rgba(0,0,0,0.94)'); g2.addColorStop(1,'rgba(0,0,0,0)')
+    ctx.fillStyle = g2; ctx.fillRect(0,0,W,H)
 
-    // Dark bottom-right
-    const g2 = ctx.createLinearGradient(W, H, W * 0.3, H * 0.5)
-    g2.addColorStop(0, 'rgba(0,0,0,0.90)')
-    g2.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = g2
-    ctx.fillRect(0, 0, W, H)
-
-    // Diagonal accent line
-    ctx.strokeStyle = accent
-    ctx.lineWidth = 8
-    ctx.beginPath()
-    ctx.moveTo(0, H * 0.42)
-    ctx.lineTo(W, H * 0.58)
-    ctx.stroke()
+    // Diagonal accent stripe
+    ctx.save()
+    ctx.strokeStyle = accent; ctx.lineWidth = 10
+    ctx.shadowColor = accent; ctx.shadowBlur = 20
+    ctx.beginPath(); ctx.moveTo(-10, H*0.46); ctx.lineTo(W+10, H*0.56); ctx.stroke()
+    ctx.restore()
 
     // Title top-left
-    const words = name.toUpperCase().split(' ')
-    const lines: string[] = []; let cur = ''
-    for (const w of words) {
-      if ((cur + ' ' + w).trim().length > 12 && cur) { lines.push(cur); cur = w }
-      else cur = (cur + ' ' + w).trim()
-    }
-    if (cur) lines.push(cur)
-
-    const tFS = Math.min(110, Math.round(W * 0.095))
-    ctx.font = `bold ${tFS}px ${fontFamily}`
-    ctx.fillStyle = textColor
-    let ty = Math.round(H * 0.08)
-    for (const line of lines.slice(0, 3)) {
-      ctx.fillText(line, 40, ty)
-      ty += tFS + 8
-    }
+    const titleFS = Math.min(104, Math.round(W * 0.09))
+    const titleLines = wrapText(name, Math.round(W*0.55), `bold ${titleFS}px ${FF}`)
+    ctx.fillStyle = '#FFFFFF'
+    ctx.font = `bold ${titleFS}px ${FF}`
+    let ty = 90 + titleFS
+    for (const line of titleLines.slice(0,3)) { ctx.fillText(line, 40, ty); ty += titleFS + 6 }
+    accentLine(40, ty + 8, 180)
 
     // Bullets bottom-right
-    const bFS = 24
-    ctx.font = `bold ${bFS}px ${fontFamily}`
-    const bStart = H * 0.62
-    const bSpacing = Math.round((H * 0.88 - bStart) / Math.max(bs.length, 1))
+    const bFS = 25
+    const bStartY = H * 0.60
+    const bSpacing = Math.round((H * 0.86 - bStartY) / Math.max(bs.length, 1))
     for (let i = 0; i < bs.length; i++) {
-      const clean = bs[i].replace(/^[•✓\-]\s*/, '').slice(0, 30)
-      const by = bStart + i * bSpacing
-      const bx = W * 0.38
+      const clean = bs[i].replace(/^[•✓\-]\s*/,'')
+      const bx = Math.round(W * 0.34)
+      const bw = W - bx - 20
+      const by = bStartY + i * bSpacing
+      const bLines = wrapText(clean, bw - 85, `bold ${bFS}px ${FF}`)
+      const bh = bLines.length > 1 ? 100 : 84
 
-      ctx.fillStyle = 'rgba(0,0,0,0.82)'
-      ctx.beginPath()
-      ctx.roundRect(bx, by, W - bx - 20, 80, 12)
-      ctx.fill()
+      ctx.fillStyle = 'rgba(0,0,0,0.80)'
+      roundRect(bx, by, bw, bh, 16)
 
       ctx.fillStyle = accent
-      ctx.beginPath()
-      ctx.arc(bx + 36, by + 40, 24, 0, Math.PI * 2)
-      ctx.fill()
-
-      ctx.font = `bold 18px ${fontFamily}`
-      ctx.fillStyle = '#000000'
-      ctx.textAlign = 'center'
-      ctx.fillText(String(i + 1), bx + 36, by + 47)
+      ctx.beginPath(); ctx.arc(bx+38, by+Math.round(bh/2), 28, 0, Math.PI*2); ctx.fill()
+      ctx.fillStyle = '#000000'; ctx.font = `bold 20px ${FF}`; ctx.textAlign = 'center'
+      ctx.fillText(String(i+1), bx+38, by+Math.round(bh/2)+7)
       ctx.textAlign = 'left'
 
-      ctx.font = `bold 22px ${fontFamily}`
-      ctx.fillStyle = '#FFFFFF'
-      ctx.fillText(clean, bx + 72, by + 47)
+      ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${bFS}px ${FF}`
+      ctx.fillText(bLines[0]||'', bx+78, by+(bLines.length>1?32:Math.round(bh/2)+9))
+      if (bLines[1]) { ctx.fillStyle='rgba(255,255,255,0.70)'; ctx.font=`${bFS-4}px ${FF}`; ctx.fillText(bLines[1], bx+78, by+62) }
     }
 
-    // Bottom accent
-    ctx.fillStyle = accent
-    ctx.fillRect(0, H - 80, W, 80)
-    ctx.font = `bold 24px ${fontFamily}`
-    ctx.fillStyle = '#000000'
-    ctx.textAlign = 'center'
-    ctx.fillText('XS · S · M · L · XL · 2XL · 3XL', W / 2, H - 24)
+    ctx.fillStyle = accent; ctx.fillRect(0, H-90, W, 90)
+    ctx.fillStyle = '#000000'; ctx.font = `bold 28px ${FF}`; ctx.textAlign = 'center'
+    ctx.fillText('XS · S · M · L · XL · 2XL · 3XL', W/2, H-30)
     ctx.textAlign = 'left'
   }
 
-  // ── BOLD layout: massive centered title top + 2 big bullets bottom ─────────
-  else if (layout === 'bold') {
-    // Full dark overlay top half
-    const gbold = ctx.createLinearGradient(0, 0, 0, H * 0.45)
-    gbold.addColorStop(0, 'rgba(0,0,0,0.95)')
-    gbold.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = gbold
-    ctx.fillRect(0, 0, W, H * 0.45)
-    // Bottom overlay
-    const gbold2 = ctx.createLinearGradient(0, H * 0.65, 0, H)
-    gbold2.addColorStop(0, 'rgba(0,0,0,0)')
-    gbold2.addColorStop(1, 'rgba(0,0,0,0.95)')
-    ctx.fillStyle = gbold2
-    ctx.fillRect(0, H * 0.65, W, H * 0.35)
-    // Accent bars top and bottom
-    ctx.fillStyle = accent
-    ctx.fillRect(0, 0, W, 12)
-    // Big centered title
-    const boldWords = name.split(' ')
-    const boldLines: string[] = []; let bCur = ''
-    for (const w of boldWords) {
-      if ((bCur+' '+w).trim().length > 12 && bCur) { boldLines.push(bCur); bCur=w }
-      else bCur = (bCur+' '+w).trim()
-    }
-    if (bCur) boldLines.push(bCur)
-    const bFS = Math.min(120, Math.round(W * 0.10))
-    ctx.textAlign = 'center'
-    ctx.fillStyle = '#FFFFFF'
-    let bTy = Math.round(H * 0.10)
-    for (const line of boldLines.slice(0,2)) {
-      ctx.font = `bold ${bFS}px ${fontFamily}`
-      ctx.fillText(line, W/2, bTy)
-      bTy += bFS + 8
-    }
-    // Accent underline
-    ctx.fillStyle = accent
-    ctx.beginPath(); ctx.roundRect(W/2-120, bTy+4, 240, 8, 4); ctx.fill()
-    // 2 large bullet blocks at bottom
-    const bigBullets = bs.slice(0, 2)
-    const bbY = H * 0.72
-    bigBullets.forEach((b, i) => {
-      const clean = b.replace(/^[•✓\-]\s*/,'').slice(0,42)
-      const bx = i === 0 ? 20 : W/2 + 10
-      const bw = W/2 - 30
-      ctx.fillStyle = 'rgba(0,0,0,0.85)'
-      ctx.beginPath(); ctx.roundRect(bx, bbY, bw, 140, 16); ctx.fill()
-      ctx.fillStyle = accent
-      ctx.beginPath(); ctx.roundRect(bx, bbY, bw, 12, [6,6,0,0]); ctx.fill()
-      ctx.font = `bold 56px ${fontFamily}`
-      ctx.fillStyle = 'rgba(255,255,255,0.15)'
-      ctx.textAlign = 'center'
-      ctx.fillText(String(i+1), bx+bw/2, bbY+90)
-      ctx.font = `bold 22px ${fontFamily}`
-      ctx.fillStyle = '#FFFFFF'
-      const bWords2 = clean.split(' ')
-      let bL1='', bL2=''
-      for(const w of bWords2){ const t=bL1?bL1+' '+w:w; if(ctx.measureText(t).width<=bw-20){bL1=t}else{bL2=bL2?bL2+' '+w:w} }
-      ctx.fillText(bL1, bx+bw/2, bbY+(bL2?98:108))
-      if(bL2){ ctx.font=`18px ${fontFamily}`; ctx.fillStyle='rgba(255,255,255,0.75)'; ctx.fillText(bL2.slice(0,25), bx+bw/2, bbY+126) }
-    })
-    ctx.textAlign = 'left'
-    // Bottom bar
-    ctx.fillStyle = accent
-    ctx.fillRect(0, H-80, W, 80)
-    ctx.font = `bold 26px ${fontFamily}`
-    ctx.fillStyle = '#000000'
-    ctx.textAlign = 'center'
-    ctx.fillText('XS · S · M · L · XL · 2XL · 3XL', W/2, H-24)
-    ctx.textAlign = 'left'
-  }
-
-  // ── RADIAL layout: title top-center, bullets around product ───────────────
+  // ── RADIAL layout ───────────────────────────────────────────────────────────
   else if (layout === 'radial') {
-    // Vignette
-    const vg = ctx.createRadialGradient(W/2, H/2, H*0.15, W/2, H/2, H*0.75)
-    vg.addColorStop(0, 'rgba(0,0,0,0)')
-    vg.addColorStop(1, 'rgba(0,0,0,0.85)')
-    ctx.fillStyle = vg
-    ctx.fillRect(0, 0, W, H)
+    // Soft vignette around edges
+    const vg = ctx.createRadialGradient(W/2, H/2, H*0.18, W/2, H/2, H*0.72)
+    vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,0.88)')
+    ctx.fillStyle = vg; ctx.fillRect(0,0,W,H)
 
-    // Top gradient for title
-    const gt = ctx.createLinearGradient(0, 0, 0, H * 0.22)
-    gt.addColorStop(0, 'rgba(0,0,0,0.85)')
-    gt.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = gt
-    ctx.fillRect(0, 0, W, H * 0.22)
+    // Top header gradient
+    const gh = ctx.createLinearGradient(0,0,0,H*0.28)
+    gh.addColorStop(0,'rgba(0,0,0,0.92)'); gh.addColorStop(1,'rgba(0,0,0,0)')
+    ctx.fillStyle = gh; ctx.fillRect(0,0,W,H*0.28)
 
-    // Title centered top
-    const words = name.toUpperCase().split(' ')
-    const lines: string[] = []; let cur = ''
-    for (const w of words) {
-      if ((cur + ' ' + w).trim().length > 16 && cur) { lines.push(cur); cur = w }
-      else cur = (cur + ' ' + w).trim()
-    }
-    if (cur) lines.push(cur)
-
-    const tFS = Math.min(96, Math.round(W * 0.082))
-    ctx.font = `bold ${tFS}px ${fontFamily}`
-    ctx.fillStyle = textColor
+    // Title centered
+    const titleFS = Math.min(100, Math.round(W * 0.086))
+    const titleLines = wrapText(name, W*0.80, `bold ${titleFS}px ${FF}`)
+    ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${titleFS}px ${FF}`
     ctx.textAlign = 'center'
-    let ty = Math.round(H * 0.08)
-    for (const line of lines.slice(0, 2)) {
-      ctx.fillText(line, W / 2, ty)
-      ty += tFS + 8
-    }
+    let ty = 70 + titleFS
+    for (const line of titleLines.slice(0,2)) { ctx.fillText(line, W/2, ty); ty += titleFS + 8 }
+    // Centered accent line
+    ctx.fillStyle = accent; ctx.beginPath(); ctx.roundRect(W/2-120, ty+10, 240, 6, 3); ctx.fill()
+    ctx.textAlign = 'left'
 
-    // Accent line under title
-    ctx.fillStyle = accent
-    ctx.beginPath()
-    ctx.roundRect(W/2 - 100, ty + 8, 200, 6, 3)
-    ctx.fill()
-
-    // Bullets in positions around center
+    // 4 bullets in corners (2 left, 2 right)
     const positions = [
-      { x: 40,       y: H * 0.38, align: 'left'  },
-      { x: 40,       y: H * 0.55, align: 'left'  },
-      { x: 40,       y: H * 0.72, align: 'left'  },
-      { x: W - 40,   y: H * 0.38, align: 'right' },
-      { x: W - 40,   y: H * 0.55, align: 'right' },
+      { x: 20,       y: H*0.36, align: 'left'  as const },
+      { x: 20,       y: H*0.56, align: 'left'  as const },
+      { x: W - 20,   y: H*0.36, align: 'right' as const },
+      { x: W - 20,   y: H*0.56, align: 'right' as const },
     ]
-
-    for (let i = 0; i < Math.min(bs.length, 5); i++) {
-      const clean = bs[i].replace(/^[•✓\-]\s*/, '').slice(0, 22)
+    const bFS = 24; const maxBW = Math.round(W * 0.40)
+    for (let i = 0; i < Math.min(bs.length, 4); i++) {
+      const clean = bs[i].replace(/^[•✓\-]\s*/,'')
       const pos = positions[i]
-      const bw = Math.min(clean.length * 16 + 70, W * 0.40)
+      const bLines = wrapText(clean, maxBW - 60, `bold ${bFS}px ${FF}`)
+      const bh = bLines.length > 1 ? 96 : 80
+      const bw = Math.min(ctx.measureText(bLines[0]||'').width + 70, maxBW)
       const bx = pos.align === 'right' ? pos.x - bw : pos.x
-      const by = pos.y - 35
+      const by = pos.y - Math.round(bh/2)
 
-      ctx.fillStyle = 'rgba(0,0,0,0.82)'
-      ctx.beginPath()
-      ctx.roundRect(bx, by, bw, 70, 10)
-      ctx.fill()
-
-      // Dot accent
+      ctx.fillStyle = 'rgba(0,0,0,0.82)'; roundRect(bx, by, bw, bh, 14)
+      // Accent dot
       ctx.fillStyle = accent
-      ctx.beginPath()
-      ctx.arc(pos.align === 'right' ? bx + bw - 30 : bx + 30, pos.y, 20, 0, Math.PI * 2)
-      ctx.fill()
-
-      ctx.font = `bold 20px ${fontFamily}`
-      ctx.fillStyle = '#000000'
-      ctx.textAlign = 'center'
-      ctx.fillText(String(i + 1), pos.align === 'right' ? bx + bw - 30 : bx + 30, pos.y + 7)
-
+      const dotX = pos.align === 'right' ? bx + bw - 28 : bx + 28
+      ctx.beginPath(); ctx.arc(dotX, by+Math.round(bh/2), 22, 0, Math.PI*2); ctx.fill()
+      ctx.fillStyle = '#000000'; ctx.font = `bold 16px ${FF}`; ctx.textAlign = 'center'
+      ctx.fillText(String(i+1), dotX, by+Math.round(bh/2)+6)
       ctx.textAlign = pos.align === 'right' ? 'right' : 'left'
-      ctx.font = `bold 19px ${fontFamily}`
-      ctx.fillStyle = '#FFFFFF'
-      const tx = pos.align === 'right' ? bx + bw - 58 : bx + 58
-      ctx.fillText(clean, tx, pos.y + 7)
+      ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${bFS}px ${FF}`
+      const tx = pos.align === 'right' ? bx + bw - 56 : bx + 56
+      ctx.fillText(bLines[0]||'', tx, by+(bLines.length>1?28:Math.round(bh/2)+9))
+      if (bLines[1]) { ctx.fillStyle='rgba(255,255,255,0.70)'; ctx.font=`${bFS-4}px ${FF}`; ctx.fillText(bLines[1], tx, by+56) }
+      ctx.textAlign = 'left'
     }
 
-    ctx.textAlign = 'left'
-
-    // Bottom bar
-    ctx.fillStyle = accent
-    ctx.fillRect(0, H - 80, W, 80)
-    ctx.font = `bold 26px ${fontFamily}`
-    ctx.fillStyle = '#000000'
-    ctx.textAlign = 'center'
-    ctx.fillText('XS · S · M · L · XL · 2XL · 3XL', W / 2, H - 22)
-    ctx.textAlign = 'left'
+    ctx.fillStyle = accent; ctx.fillRect(0,H-90,W,90)
+    ctx.fillStyle='#000000'; ctx.font=`bold 28px ${FF}`; ctx.textAlign='center'
+    ctx.fillText('XS · S · M · L · XL · 2XL · 3XL', W/2, H-30)
+    ctx.textAlign='left'
   }
 
-  return canvas.toBuffer('image/jpeg', { quality: 93 })
+  // ── BOLD layout ─────────────────────────────────────────────────────────────
+  else if (layout === 'bold') {
+    // Dark top zone
+    const gt = ctx.createLinearGradient(0,0,0,H*0.42)
+    gt.addColorStop(0,'rgba(0,0,0,0.97)'); gt.addColorStop(1,'rgba(0,0,0,0)')
+    ctx.fillStyle = gt; ctx.fillRect(0,0,W,H*0.42)
+    // Dark bottom zone
+    const gb2 = ctx.createLinearGradient(0,H*0.60,0,H)
+    gb2.addColorStop(0,'rgba(0,0,0,0)'); gb2.addColorStop(1,'rgba(0,0,0,0.97)')
+    ctx.fillStyle = gb2; ctx.fillRect(0,H*0.60,W,H*0.40)
+
+    // Top accent bar
+    ctx.fillStyle = accent; ctx.fillRect(0,0,W,12)
+
+    // HUGE title
+    const titleFS = Math.min(118, Math.round(W * 0.102))
+    const titleLines = wrapText(name, W*0.88, `bold ${titleFS}px ${FF}`)
+    ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${titleFS}px ${FF}`; ctx.textAlign = 'center'
+    let ty = 26 + titleFS
+    for (const line of titleLines.slice(0,2)) { ctx.fillText(line, W/2, ty); ty += titleFS + 8 }
+    // Accent underline
+    ctx.fillStyle = hexAlpha(accent, 0.9)
+    ctx.beginPath(); ctx.roundRect(W/2-160, ty+10, 320, 8, 4); ctx.fill()
+    ty += 36; ctx.textAlign = 'left'
+
+    // 2 large bullet blocks side by side
+    const topBullets = bs.slice(0, 2)
+    const pad = 20, gap = 16
+    const bw = (W - pad*2 - gap) / 2
+    const bStartY = H * 0.70
+    for (let i = 0; i < Math.min(topBullets.length, 2); i++) {
+      const clean = topBullets[i].replace(/^[•✓\-]\s*/,'')
+      const bx = pad + i * (bw + gap)
+      const bh = 150
+      ctx.fillStyle = 'rgba(0,0,0,0.85)'
+      roundRect(bx, bStartY, bw, bh, 18)
+      // Accent top border
+      ctx.fillStyle = accent; roundRect(bx, bStartY, bw, 10, [9,9,0,0])
+      // Big number watermark
+      ctx.fillStyle = hexAlpha(accent, 0.12)
+      ctx.font = `bold 90px ${FF}`; ctx.textAlign = 'center'
+      ctx.fillText(String(i+1), bx+bw/2, bStartY+100)
+      // Text
+      const bLines = wrapText(clean, bw-30, `bold 26px ${FF}`)
+      ctx.fillStyle = '#FFFFFF'; ctx.font = `bold 26px ${FF}`
+      ctx.fillText(bLines[0]||'', bx+bw/2, bStartY+(bLines.length>1 ? 95 : 105))
+      if (bLines[1]) { ctx.fillStyle='rgba(255,255,255,0.70)'; ctx.font=`22px ${FF}`; ctx.fillText(bLines[1], bx+bw/2, bStartY+128) }
+      ctx.textAlign = 'left'
+    }
+    // Remaining bullets as slim pills
+    for (let i = 2; i < bs.length; i++) {
+      const clean = bs[i].replace(/^[•✓\-]\s*/,'')
+      const by = bStartY + 168 + (i-2) * 60
+      ctx.fillStyle = 'rgba(0,0,0,0.75)'; roundRect(pad, by, W - pad*2, 50, 12)
+      ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(pad+26, by+25, 18, 0, Math.PI*2); ctx.fill()
+      ctx.fillStyle = '#000'; ctx.font = `bold 15px ${FF}`; ctx.textAlign='center'; ctx.fillText(String(i+1), pad+26, by+30); ctx.textAlign='left'
+      ctx.fillStyle = '#FFFFFF'; ctx.font = `bold 24px ${FF}`; ctx.fillText(clean.slice(0,42), pad+56, by+32)
+    }
+
+    ctx.fillStyle = accent; ctx.fillRect(0,H-90,W,90)
+    ctx.fillStyle='#000'; ctx.font=`bold 28px ${FF}`; ctx.textAlign='center'
+    ctx.fillText('XS · S · M · L · XL · 2XL · 3XL', W/2, H-30)
+    ctx.textAlign='left'
+  }
+
+  return canvas.toBuffer('image/jpeg', { quality: 94 })
 }
+
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 async function uploadPhoto(supabase: any, b64: string, uid: string, folder: string): Promise<string | null> {

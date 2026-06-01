@@ -252,56 +252,55 @@ async function renderCard(
   }
 
   // ── DIAGONAL layout ─────────────────────────────────────────────────────────
+  // Title top (full width dark), product center, bullets bottom strip
   else if (layout === 'diagonal') {
-    // Dark upper-left for title
-    const g1 = ctx.createLinearGradient(0,0,W*0.7,H*0.5)
-    g1.addColorStop(0,'rgba(0,0,0,0.94)'); g1.addColorStop(1,'rgba(0,0,0,0)')
-    ctx.fillStyle = g1; ctx.fillRect(0,0,W,H)
-    // Dark lower-right for bullets
-    const g2 = ctx.createLinearGradient(W,H,W*0.25,H*0.45)
-    g2.addColorStop(0,'rgba(0,0,0,0.94)'); g2.addColorStop(1,'rgba(0,0,0,0)')
-    ctx.fillStyle = g2; ctx.fillRect(0,0,W,H)
+    // Dark top band for title
+    const gt = ctx.createLinearGradient(0,0,0,H*0.32)
+    gt.addColorStop(0,'rgba(0,0,0,0.96)'); gt.addColorStop(1,'rgba(0,0,0,0)')
+    ctx.fillStyle = gt; ctx.fillRect(0,0,W,H*0.32)
 
-    // Diagonal accent stripe
+    // Dark bottom band for bullets
+    const gb = ctx.createLinearGradient(0,H*0.68,0,H)
+    gb.addColorStop(0,'rgba(0,0,0,0)'); gb.addColorStop(1,'rgba(0,0,0,0.96)')
+    ctx.fillStyle = gb; ctx.fillRect(0,H*0.68,W,H*0.32)
+
+    // Thin accent divider between top and product
     ctx.save()
-    ctx.strokeStyle = accent; ctx.lineWidth = 10
-    ctx.shadowColor = accent; ctx.shadowBlur = 20
-    ctx.beginPath(); ctx.moveTo(-10, H*0.46); ctx.lineTo(W+10, H*0.56); ctx.stroke()
+    ctx.strokeStyle = accent; ctx.lineWidth = 8
+    ctx.beginPath(); ctx.moveTo(40, H*0.28); ctx.lineTo(W*0.55, H*0.28); ctx.stroke()
     ctx.restore()
 
     // Title top-left
-    const titleFS = Math.min(104, Math.round(W * 0.09))
-    const titleLines = wrapText(name, Math.round(W*0.55), `bold ${titleFS}px ${FF}`)
+    const titleFS = Math.min(96, Math.round(W * 0.083))
+    const titleLines = wrapText(name, Math.round(W*0.58), `bold ${titleFS}px ${FF}`)
     ctx.fillStyle = '#FFFFFF'
     ctx.font = `bold ${titleFS}px ${FF}`
-    let ty = 90 + titleFS
-    for (const line of titleLines.slice(0,3)) { ctx.fillText(line, 40, ty); ty += titleFS + 6 }
-    accentLine(40, ty + 8, 180)
+    let ty = 72 + titleFS
+    for (const line of titleLines.slice(0,2)) { ctx.fillText(line, 40, ty); ty += titleFS + 6 }
 
-    // Bullets bottom-right
-    const bFS = 25
-    const bStartY = H * 0.60
-    const bSpacing = Math.round((H * 0.86 - bStartY) / Math.max(bs.length, 1))
+    // Bullets bottom — full width, stacked
+    const bFS = 24
+    const bStartY = H * 0.70
+    const bSpacing = Math.round((H * 0.88 - bStartY) / Math.max(bs.length, 1))
     for (let i = 0; i < bs.length; i++) {
       const clean = bs[i].replace(/^[•✓\-]\s*/,'')
-      const bx = Math.round(W * 0.34)
-      const bw = W - bx - 20
+      const bx = 20
+      const bw = W - 40
       const by = bStartY + i * bSpacing
-      const bLines = wrapText(clean, bw - 85, `bold ${bFS}px ${FF}`)
-      const bh = bLines.length > 1 ? 100 : 84
+      const bLines = wrapText(clean, bw - 80, `bold ${bFS}px ${FF}`)
+      const bh = 58
 
-      ctx.fillStyle = 'rgba(0,0,0,0.80)'
-      roundRect(bx, by, bw, bh, 16)
+      ctx.fillStyle = 'rgba(0,0,0,0.78)'
+      roundRect(bx, by, bw, bh, 14)
 
       ctx.fillStyle = accent
-      ctx.beginPath(); ctx.arc(bx+38, by+Math.round(bh/2), 28, 0, Math.PI*2); ctx.fill()
-      ctx.fillStyle = '#000000'; ctx.font = `bold 20px ${FF}`; ctx.textAlign = 'center'
-      ctx.fillText(String(i+1), bx+38, by+Math.round(bh/2)+7)
+      ctx.beginPath(); ctx.arc(bx+34, by+Math.round(bh/2), 22, 0, Math.PI*2); ctx.fill()
+      ctx.fillStyle = '#000000'; ctx.font = `bold 18px ${FF}`; ctx.textAlign = 'center'
+      ctx.fillText(String(i+1), bx+34, by+Math.round(bh/2)+6)
       ctx.textAlign = 'left'
 
       ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${bFS}px ${FF}`
-      ctx.fillText(bLines[0]||'', bx+78, by+(bLines.length>1?32:Math.round(bh/2)+9))
-      if (bLines[1]) { ctx.fillStyle='rgba(255,255,255,0.70)'; ctx.font=`${bFS-4}px ${FF}`; ctx.fillText(bLines[1], bx+78, by+62) }
+      ctx.fillText(bLines[0]||'', bx+68, by+Math.round(bh/2)+9)
     }
 
     ctx.fillStyle = accent; ctx.fillRect(0, H-90, W, 90)
@@ -311,58 +310,49 @@ async function renderCard(
   }
 
   // ── RADIAL layout ───────────────────────────────────────────────────────────
+  // Title top, product center FREE, bullets below product as 2-col grid
   else if (layout === 'radial') {
-    // Soft vignette around edges
-    const vg = ctx.createRadialGradient(W/2, H/2, H*0.18, W/2, H/2, H*0.72)
-    vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,0.88)')
-    ctx.fillStyle = vg; ctx.fillRect(0,0,W,H)
+    // Top gradient for title
+    const gh = ctx.createLinearGradient(0,0,0,H*0.30)
+    gh.addColorStop(0,'rgba(0,0,0,0.95)'); gh.addColorStop(1,'rgba(0,0,0,0)')
+    ctx.fillStyle = gh; ctx.fillRect(0,0,W,H*0.30)
 
-    // Top header gradient
-    const gh = ctx.createLinearGradient(0,0,0,H*0.28)
-    gh.addColorStop(0,'rgba(0,0,0,0.92)'); gh.addColorStop(1,'rgba(0,0,0,0)')
-    ctx.fillStyle = gh; ctx.fillRect(0,0,W,H*0.28)
+    // Bottom gradient for bullets
+    const gbl = ctx.createLinearGradient(0,H*0.64,0,H)
+    gbl.addColorStop(0,'rgba(0,0,0,0)'); gbl.addColorStop(1,'rgba(0,0,0,0.96)')
+    ctx.fillStyle = gbl; ctx.fillRect(0,H*0.64,W,H*0.36)
 
-    // Title centered
-    const titleFS = Math.min(100, Math.round(W * 0.086))
-    const titleLines = wrapText(name, W*0.80, `bold ${titleFS}px ${FF}`)
+    // Title centered top
+    const titleFS = Math.min(96, Math.round(W * 0.083))
+    const titleLines = wrapText(name, W*0.82, `bold ${titleFS}px ${FF}`)
     ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${titleFS}px ${FF}`
     ctx.textAlign = 'center'
-    let ty = 70 + titleFS
-    for (const line of titleLines.slice(0,2)) { ctx.fillText(line, W/2, ty); ty += titleFS + 8 }
-    // Centered accent line
-    ctx.fillStyle = accent; ctx.beginPath(); ctx.roundRect(W/2-120, ty+10, 240, 6, 3); ctx.fill()
+    let ty = 60 + titleFS
+    for (const line of titleLines.slice(0,2)) { ctx.fillText(line, W/2, ty); ty += titleFS + 6 }
+    ctx.fillStyle = accent; ctx.beginPath(); ctx.roundRect(W/2-100, ty+8, 200, 6, 3); ctx.fill()
     ctx.textAlign = 'left'
 
-    // 4 bullets in corners (2 left, 2 right)
-    const positions = [
-      { x: 20,       y: H*0.36, align: 'left'  as const },
-      { x: 20,       y: H*0.56, align: 'left'  as const },
-      { x: W - 20,   y: H*0.36, align: 'right' as const },
-      { x: W - 20,   y: H*0.56, align: 'right' as const },
-    ]
-    const bFS = 24; const maxBW = Math.round(W * 0.40)
+    // Bullets as 2-column grid in bottom zone
+    const bFS = 22
+    const gridStartY = H * 0.66
+    const colW = (W - 48) / 2
+    const rowH = 68
     for (let i = 0; i < Math.min(bs.length, 4); i++) {
       const clean = bs[i].replace(/^[•✓\-]\s*/,'')
-      const pos = positions[i]
-      const bLines = wrapText(clean, maxBW - 60, `bold ${bFS}px ${FF}`)
-      const bh = bLines.length > 1 ? 96 : 80
-      const bw = Math.min(ctx.measureText(bLines[0]||'').width + 70, maxBW)
-      const bx = pos.align === 'right' ? pos.x - bw : pos.x
-      const by = pos.y - Math.round(bh/2)
+      const col = i % 2
+      const row = Math.floor(i / 2)
+      const bx = 16 + col * (colW + 16)
+      const by = gridStartY + row * (rowH + 10)
 
-      ctx.fillStyle = 'rgba(0,0,0,0.82)'; roundRect(bx, by, bw, bh, 14)
-      // Accent dot
+      ctx.fillStyle = 'rgba(0,0,0,0.80)'; roundRect(bx, by, colW, rowH, 14)
       ctx.fillStyle = accent
-      const dotX = pos.align === 'right' ? bx + bw - 28 : bx + 28
-      ctx.beginPath(); ctx.arc(dotX, by+Math.round(bh/2), 22, 0, Math.PI*2); ctx.fill()
-      ctx.fillStyle = '#000000'; ctx.font = `bold 16px ${FF}`; ctx.textAlign = 'center'
-      ctx.fillText(String(i+1), dotX, by+Math.round(bh/2)+6)
-      ctx.textAlign = pos.align === 'right' ? 'right' : 'left'
-      ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${bFS}px ${FF}`
-      const tx = pos.align === 'right' ? bx + bw - 56 : bx + 56
-      ctx.fillText(bLines[0]||'', tx, by+(bLines.length>1?28:Math.round(bh/2)+9))
-      if (bLines[1]) { ctx.fillStyle='rgba(255,255,255,0.70)'; ctx.font=`${bFS-4}px ${FF}`; ctx.fillText(bLines[1], tx, by+56) }
+      ctx.beginPath(); ctx.arc(bx+28, by+rowH/2, 20, 0, Math.PI*2); ctx.fill()
+      ctx.fillStyle = '#000'; ctx.font = `bold 15px ${FF}`; ctx.textAlign='center'
+      ctx.fillText(String(i+1), bx+28, by+rowH/2+5)
       ctx.textAlign = 'left'
+      const bLines = wrapText(clean, colW-60, `bold ${bFS}px ${FF}`)
+      ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${bFS}px ${FF}`
+      ctx.fillText(bLines[0]||'', bx+56, by+rowH/2+8)
     }
 
     ctx.fillStyle = accent; ctx.fillRect(0,H-90,W,90)
@@ -372,62 +362,60 @@ async function renderCard(
   }
 
   // ── BOLD layout ─────────────────────────────────────────────────────────────
+  // Compact title top, product center FREE, 2-col bullet grid bottom
   else if (layout === 'bold') {
-    // Dark top zone
-    const gt = ctx.createLinearGradient(0,0,0,H*0.42)
+    // Dark top band
+    const gt = ctx.createLinearGradient(0,0,0,H*0.26)
     gt.addColorStop(0,'rgba(0,0,0,0.97)'); gt.addColorStop(1,'rgba(0,0,0,0)')
-    ctx.fillStyle = gt; ctx.fillRect(0,0,W,H*0.42)
-    // Dark bottom zone
-    const gb2 = ctx.createLinearGradient(0,H*0.60,0,H)
+    ctx.fillStyle = gt; ctx.fillRect(0,0,W,H*0.26)
+    // Dark bottom band
+    const gb2 = ctx.createLinearGradient(0,H*0.65,0,H)
     gb2.addColorStop(0,'rgba(0,0,0,0)'); gb2.addColorStop(1,'rgba(0,0,0,0.97)')
-    ctx.fillStyle = gb2; ctx.fillRect(0,H*0.60,W,H*0.40)
+    ctx.fillStyle = gb2; ctx.fillRect(0,H*0.65,W,H*0.35)
 
     // Top accent bar
-    ctx.fillStyle = accent; ctx.fillRect(0,0,W,12)
+    ctx.fillStyle = accent; ctx.fillRect(0,0,W,10)
 
-    // HUGE title
-    const titleFS = Math.min(118, Math.round(W * 0.102))
-    const titleLines = wrapText(name, W*0.88, `bold ${titleFS}px ${FF}`)
+    // Title — fits 90% width, max 2 lines
+    const titleFS = Math.min(90, Math.round(W * 0.078))
+    const titleLines = wrapText(name, W*0.86, `bold ${titleFS}px ${FF}`)
     ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${titleFS}px ${FF}`; ctx.textAlign = 'center'
-    let ty = 26 + titleFS
-    for (const line of titleLines.slice(0,2)) { ctx.fillText(line, W/2, ty); ty += titleFS + 8 }
-    // Accent underline
+    let ty = 18 + titleFS
+    for (const line of titleLines.slice(0,2)) { ctx.fillText(line, W/2, ty); ty += titleFS + 6 }
     ctx.fillStyle = hexAlpha(accent, 0.9)
-    ctx.beginPath(); ctx.roundRect(W/2-160, ty+10, 320, 8, 4); ctx.fill()
-    ty += 36; ctx.textAlign = 'left'
+    ctx.beginPath(); ctx.roundRect(W/2-120, ty+6, 240, 7, 4); ctx.fill()
+    ctx.textAlign = 'left'
 
-    // 2 large bullet blocks side by side
-    const topBullets = bs.slice(0, 2)
-    const pad = 20, gap = 16
-    const bw = (W - pad*2 - gap) / 2
-    const bStartY = H * 0.70
-    for (let i = 0; i < Math.min(topBullets.length, 2); i++) {
-      const clean = topBullets[i].replace(/^[•✓\-]\s*/,'')
-      const bx = pad + i * (bw + gap)
-      const bh = 150
-      ctx.fillStyle = 'rgba(0,0,0,0.85)'
-      roundRect(bx, bStartY, bw, bh, 18)
-      // Accent top border
-      ctx.fillStyle = accent; roundRect(bx, bStartY, bw, 10, [9,9,0,0])
-      // Big number watermark
-      ctx.fillStyle = hexAlpha(accent, 0.12)
-      ctx.font = `bold 90px ${FF}`; ctx.textAlign = 'center'
-      ctx.fillText(String(i+1), bx+bw/2, bStartY+100)
-      // Text
-      const bLines = wrapText(clean, bw-30, `bold 26px ${FF}`)
-      ctx.fillStyle = '#FFFFFF'; ctx.font = `bold 26px ${FF}`
-      ctx.fillText(bLines[0]||'', bx+bw/2, bStartY+(bLines.length>1 ? 95 : 105))
-      if (bLines[1]) { ctx.fillStyle='rgba(255,255,255,0.70)'; ctx.font=`22px ${FF}`; ctx.fillText(bLines[1], bx+bw/2, bStartY+128) }
-      ctx.textAlign = 'left'
-    }
-    // Remaining bullets as slim pills
-    for (let i = 2; i < bs.length; i++) {
+    // Bullets: 2-col grid in bottom zone, each row 72px tall
+    const pad = 16, gap = 12
+    const colW = (W - pad*2 - gap) / 2
+    const bStartY = H * 0.68
+    const rowH = 72
+    const bFS = 23
+    for (let i = 0; i < Math.min(bs.length, 4); i++) {
       const clean = bs[i].replace(/^[•✓\-]\s*/,'')
-      const by = bStartY + 168 + (i-2) * 60
-      ctx.fillStyle = 'rgba(0,0,0,0.75)'; roundRect(pad, by, W - pad*2, 50, 12)
-      ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(pad+26, by+25, 18, 0, Math.PI*2); ctx.fill()
-      ctx.fillStyle = '#000'; ctx.font = `bold 15px ${FF}`; ctx.textAlign='center'; ctx.fillText(String(i+1), pad+26, by+30); ctx.textAlign='left'
-      ctx.fillStyle = '#FFFFFF'; ctx.font = `bold 24px ${FF}`; ctx.fillText(clean.slice(0,42), pad+56, by+32)
+      const col = i % 2
+      const row = Math.floor(i / 2)
+      const bx = pad + col * (colW + gap)
+      const by = bStartY + row * (rowH + 10)
+
+      ctx.fillStyle = 'rgba(0,0,0,0.82)'; roundRect(bx, by, colW, rowH, 14)
+      // Accent top border
+      ctx.fillStyle = accent; roundRect(bx, by, colW, 8, [7,7,0,0])
+      // Number
+      ctx.fillStyle = accent
+      ctx.beginPath(); ctx.arc(bx+28, by+rowH/2+4, 20, 0, Math.PI*2); ctx.fill()
+      ctx.fillStyle = '#000'; ctx.font = `bold 15px ${FF}`; ctx.textAlign='center'
+      ctx.fillText(String(i+1), bx+28, by+rowH/2+9)
+      ctx.textAlign='left'
+      // Text
+      const bLines = wrapText(clean, colW-60, `bold ${bFS}px ${FF}`)
+      ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${bFS}px ${FF}`
+      ctx.fillText(bLines[0]||'', bx+56, by+rowH/2+9)
+      if (bLines[1]) {
+        ctx.fillStyle='rgba(255,255,255,0.65)'; ctx.font=`${bFS-3}px ${FF}`
+        ctx.fillText(bLines[1], bx+56, by+rowH/2+30)
+      }
     }
 
     ctx.fillStyle = accent; ctx.fillRect(0,H-90,W,90)

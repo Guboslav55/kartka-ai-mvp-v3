@@ -190,7 +190,6 @@ export default function StudioPage() {
   const [cardPreset, setCardPreset] = useState('urban')
   const [cardLayout, setCardLayout] = useState<'split'|'diagonal'|'radial'|'bold'>('split')
   const [creativity, setCreativity] = useState(0.5)
-  const [keepProduct, setKeepProduct] = useState(true)
   const [format, setFormat] = useState<Format>('1:1')
   const [count, setCount] = useState(4)
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -314,7 +313,7 @@ export default function StudioPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          mode, productPhoto: photos[0], productPhotos: photos, productName, category, displayStyle, cardPreset, cardLayout, creativity, keepProduct,
+          mode, productPhoto: photos[0], productPhotos: photos, productName, category, displayStyle, cardPreset, cardLayout, creativity,
           wishes, photoStyle, cardStyle, bullets: bullets.filter(Boolean),
           format, count,
         }),
@@ -512,7 +511,7 @@ export default function StudioPage() {
                   <div className="mb-3">
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="text-white/50 text-xs font-bold uppercase">Креативність AI</span>
-                      <span className="text-gold text-xs font-bold">{creativity < 0.35 ? '🎯 Точно' : creativity < 0.7 ? '⚡ Авто' : '🎨 Творчо'}</span>
+                      <span className="text-gold text-xs font-bold">{creativity < 0.35 ? '🎯 Класичний' : creativity < 0.7 ? '⚡ Змішаний' : '🎨 Авторський'}</span>
                     </div>
                     <input type="range" min="0" max="1" step="0.1" value={creativity}
                       onChange={e => setCreativity(Number(e.target.value))}
@@ -522,18 +521,6 @@ export default function StudioPage() {
                     <div className="flex justify-between text-white/20 text-[10px] mt-0.5">
                       <span>Низька</span><span>Середня</span><span>Висока</span>
                     </div>
-                  </div>
-
-                  {/* Keep Product Toggle */}
-                  <div className="flex items-center justify-between mb-3 bg-white/[0.03] border border-white/8 rounded-xl px-3 py-2.5">
-                    <div>
-                      <p className="text-white/70 text-xs font-bold">Зберігати товар 100%</p>
-                      <p className="text-white/30 text-[10px]">AI не змінюватиме сам товар</p>
-                    </div>
-                    <button onClick={() => setKeepProduct(p => !p)}
-                      className={['w-10 h-5 rounded-full transition-all relative', keepProduct ? 'bg-gold' : 'bg-white/15'].join(' ')}>
-                      <span className={['absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all', keepProduct ? 'right-0.5' : 'left-0.5'].join(' ')}/>
-                    </button>
                   </div>
 
                   {/* Layout */}

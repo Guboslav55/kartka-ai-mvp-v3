@@ -10,10 +10,21 @@ const nextConfig = {
     ],
   },
   experimental: {
-    serverComponentsExternalPackages: ['@napi-rs/canvas', 'sharp'],
-    serverActions: {
-      bodySizeLimit: '20mb',
-    },
+    serverComponentsExternalPackages: ['@napi-rs/canvas'],
+    serverActions: { bodySizeLimit: '20mb' },
+  },
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      // Exclude native binary packages from webpack bundling
+      const externals = Array.isArray(config.externals) ? config.externals : [config.externals].filter(Boolean)
+      config.externals = [...externals, '@napi-rs/canvas']
+    }
+    // Tell webpack to ignore .node binary files
+    config.module.rules.push({
+      test: /\.node$/,
+      loader: 'ignore-loader',
+    })
+    return config
   },
 };
 

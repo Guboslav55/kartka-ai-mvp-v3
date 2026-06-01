@@ -62,6 +62,44 @@ Return JSON only:
   } catch { return {} }
 }
 
+// ─── Build background prompt matching the product ────────────────────────────
+async function buildMatchingBackground(
+  photo: string, name: string, category: string,
+  preset: { sceneStyle: string; accent: string },
+  varIdx: number,
+  creativity: number
+): Promise<string> {
+  const varStyles = [
+    'clean studio background, soft even lighting, light gradient',
+    'lifestyle environment matching product mood, soft bokeh',
+    'minimal abstract background, complementary colors',
+    'dynamic scene matching product style, professional lighting',
+  ]
+  try {
+    const r = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: [
+        { type: 'image_url', image_url: { url: photo, detail: 'low' } },
+        { type: 'text', text: `Product: "${name}", Category: "${category}". Variation ${varIdx+1}.
+
+Analyze the product colors and style. Create a background scene description for a product card.
+
+Rules:
+- Background should COMPLEMENT the product, not compete with it
+- Use LIGHTER tones on the left side (where text will be placed)
+- The right side can have depth/texture
+- Match the product's style: sportswear→dynamic gym, military→tactical outdoor, luxury→dark studio, casual→lifestyle
+- Variation ${varIdx+1} style hint: ${varStyles[varIdx % varStyles.length]}
+- Creativity level ${creativity > 0.65 ? 'high: be creative with the scene' : 'medium: keep it professional'}
+
+Return ONLY a short background description (max 40 words, English):` }
+      ]}],
+      max_tokens: 80, temperature: 0.6,
+    })
+    return r.choices[0]?.message?.content?.trim() || preset.sceneStyle
+  } catch { return preset.sceneStyle }
+}
+
 // ─── Style presets ────────────────────────────────────────────────────────────
 const PRESETS: Record<string, { accent: string; bg: string; textColor: string; sceneStyle: string }> = {
   auto:        { accent: '#FFD700', bg: '#111111', textColor: '#FFFFFF', sceneStyle: 'dramatic professional product marketing scene, dynamic lighting, dark atmospheric background' },
@@ -131,10 +169,11 @@ async function renderCard(
 
   // ── SPLIT layout ────────────────────────────────────────────────────────────
   if (layout === 'split') {
-    // Deep gradient left side - text lives here
-    const g = ctx.createLinearGradient(0,0,W*0.62,0)
-    g.addColorStop(0,   'rgba(0,0,0,0.96)')
-    g.addColorStop(0.55,'rgba(0,0,0,0.82)')
+    // Gradient only on LEFT 45% - product gets 55%+ of frame
+    const g = ctx.createLinearGradient(0,0,W*0.55,0)
+    g.addColorStop(0,   'rgba(0,0,0,0.90)')
+    g.addColorStop(0.45,'rgba(0,0,0,0.70)')
+    g.addColorStop(0.72,'rgba(0,0,0,0.25)')
     g.addColorStop(1,   'rgba(0,0,0,0.0)')
     ctx.fillStyle = g; ctx.fillRect(0,0,W,H)
 
@@ -152,7 +191,7 @@ async function renderCard(
 
     // Title block
     const titleX = 40, titleY = 90
-    const maxTW = Math.round(W * 0.50)
+    const maxTW = Math.round(W * 0.42)
     const titleFS = Math.min(96, Math.round(W * 0.082))
     const titleLines = wrapText(name, maxTW, `bold ${titleFS}px ${FF}`)
 
@@ -174,7 +213,7 @@ async function renderCard(
       const bFS = 26
       const bLines = wrapText(clean, maxTW - 90, `bold ${bFS}px ${FF}`)
       const bh = bLines.length > 1 ? 106 : 88
-      const bw = Math.round(W * 0.52)
+      const bw = Math.round(W * 0.44)
 
       // Pill background
       ctx.fillStyle = 'rgba(0,0,0,0.78)'
@@ -520,7 +559,9 @@ export async function POST(req: NextRequest) {
           const chosenLayout = layouts[i % layouts.length]
 
           // Flux generates scene (portrait 2:3, product preserved)
-          const fluxPrompt = `CRITICAL: Keep the main product/subject 100% IDENTICAL. ONLY change the background. New background scene: ${preset.sceneStyle}. Product stays on right side of frame. Left side darker for text overlay. Variation ${i+1}: ${creativity > 0.65 ? ['dramatic cinematic angle','extreme contrast lighting','abstract background','bold dynamic composition'][i] : ['standard composition','different angle','alternative lighting','dramatic perspective'][i]}. Professional marketing photography.`
+          // Analyse product to build a matching background prompt
+          const bgPrompt = await buildMatchingBackground(allPhotos[0], productName, category, preset, i, creativity)
+          const fluxPrompt = `CRITICAL: Keep the main product/subject/clothing/person COMPLETELY UNCHANGED - same appearance, colors, shape, textures, logos. ONLY change the background. ${bgPrompt} Product is on the RIGHT side (60% of frame). LEFT side is slightly lighter/cleaner for text overlay. Professional ecommerce product photography.`
           console.log(`[card ${i+1}] layout:${chosenLayout} flux...`)
 
           const sceneUrl = await runFlux(photoUrl, fluxPrompt, REPLICATE)

@@ -168,87 +168,101 @@ async function renderCard(
   const bs = bullets.filter(Boolean).slice(0, 4)
 
   // ── SPLIT layout ────────────────────────────────────────────────────────────
+  // LEFT solid dark column (38%) — RIGHT clean photo (62%) — no text on photo
   if (layout === 'split') {
-    // Text zone: LEFT 38% — product gets full right 62%
-    const TEXT_ZONE = 0.38
-    const g = ctx.createLinearGradient(0,0,W*0.62,0)
-    g.addColorStop(0,            'rgba(0,0,0,0.95)')
-    g.addColorStop(TEXT_ZONE,    'rgba(0,0,0,0.90)')
-    g.addColorStop(TEXT_ZONE+0.08,'rgba(0,0,0,0.55)')
-    g.addColorStop(TEXT_ZONE+0.18,'rgba(0,0,0,0.10)')
-    g.addColorStop(1,            'rgba(0,0,0,0.0)')
-    ctx.fillStyle = g; ctx.fillRect(0,0,W,H)
+    const COL = Math.round(W * 0.38)   // left column width
+    const PAD = 36                      // inner padding
 
-    // Top & bottom vignette
-    const gt = ctx.createLinearGradient(0,0,0,H*0.12)
-    gt.addColorStop(0,'rgba(0,0,0,0.55)'); gt.addColorStop(1,'rgba(0,0,0,0)')
-    ctx.fillStyle = gt; ctx.fillRect(0,0,W,H*0.12)
-    const gb = ctx.createLinearGradient(0,H*0.88,0,H)
-    gb.addColorStop(0,'rgba(0,0,0,0)'); gb.addColorStop(1,'rgba(0,0,0,0.65)')
-    ctx.fillStyle = gb; ctx.fillRect(0,H*0.88,W,H*0.12)
+    // Solid dark background for left column
+    ctx.fillStyle = preset.bg || '#0f0f0f'
+    ctx.fillRect(0, 0, COL, H)
 
-    // Accent left bar
+    // Subtle texture overlay on left column
+    const colGrad = ctx.createLinearGradient(0, 0, COL, 0)
+    colGrad.addColorStop(0, 'rgba(0,0,0,0.30)')
+    colGrad.addColorStop(1, 'rgba(0,0,0,0.0)')
+    ctx.fillStyle = colGrad; ctx.fillRect(0, 0, COL, H)
+
+    // Accent left edge bar (4px)
     ctx.fillStyle = accent
-    ctx.beginPath(); ctx.roundRect(0,0,10,H,0); ctx.fill()
+    ctx.fillRect(0, 0, 6, H)
 
-    // Title block — max width 36% of canvas
-    const titleX = 40, titleY = 90
-    const maxTW = Math.round(W * 0.36)
-    const titleFS = Math.min(88, Math.round(W * 0.076))
-    const titleLines = wrapText(name, maxTW, `bold ${titleFS}px ${FF}`)
+    // Accent top bar across full width
+    ctx.fillStyle = accent
+    ctx.fillRect(0, 0, W, 10)
 
+    // ── TITLE ──
+    const titleFS = Math.min(100, Math.round(COL * 0.22))
+    const maxTW = COL - PAD * 2
+    const titleLines = wrapText(name.toUpperCase(), maxTW, `bold ${titleFS}px ${FF}`)
     ctx.fillStyle = '#FFFFFF'
     ctx.font = `bold ${titleFS}px ${FF}`
-    let ty = titleY + titleFS
-    for (const line of titleLines.slice(0,3)) {
-      ctx.fillText(line, titleX, ty)
-      ty += titleFS + 8
+    let ty = 80 + titleFS
+    for (const line of titleLines.slice(0, 3)) {
+      ctx.fillText(line, PAD, ty)
+      ty += titleFS + 4
     }
-    accentLine(titleX, ty + 8, 180)
+
+    // Accent underline after title
+    ctx.fillStyle = accent
+    ctx.fillRect(PAD, ty + 10, Math.round(COL * 0.55), 5)
     ty += 36
 
-    // Bullets — pill width strictly 40% of canvas
-    const bw = Math.round(W * 0.40)
-    const bSpacing = Math.round((H * 0.82 - ty) / Math.max(bs.length, 1))
-    for (let i = 0; i < bs.length; i++) {
-      const clean = bs[i].replace(/^[•✓\-]\s*/,'')
-      const by = ty + i * bSpacing
-      const bFS = 24
-      const bLines = wrapText(clean, bw - 88, `bold ${bFS}px ${FF}`)
-      const bh = bLines.length > 1 ? 100 : 84
+    // ── BULLETS ──
+    const bCount = bs.length
+    const bulletAreaH = H - ty - 110  // leave room for bottom bar
+    const bGap = Math.round(bulletAreaH / Math.max(bCount, 1))
+    const bFS = Math.min(32, Math.round(COL * 0.074))
+    const subFS = bFS - 6
+    const iconR = 26  // circle radius
 
-      // Pill background
-      ctx.fillStyle = 'rgba(0,0,0,0.80)'
-      roundRect(titleX - 4, by - 4, bw, bh, 16)
+    for (let i = 0; i < bCount; i++) {
+      const clean = bs[i].replace(/^[•✓\-]\s*/, '')
+      const by = ty + i * bGap
+      const bLines = wrapText(clean, maxTW - iconR * 2 - 16, `bold ${bFS}px ${FF}`)
 
-      // Accent numbered circle
+      // Pill behind bullet row
+      const pillH = bLines.length > 1 ? iconR * 4 : iconR * 3
+      ctx.fillStyle = 'rgba(255,255,255,0.07)'
+      ctx.beginPath(); ctx.roundRect(PAD - 8, by - 8, COL - PAD, pillH, 12); ctx.fill()
+
+      // Numbered circle
       ctx.fillStyle = accent
-      ctx.beginPath(); ctx.arc(titleX + 32, by + Math.round(bh/2), 28, 0, Math.PI*2); ctx.fill()
-      ctx.fillStyle = '#000000'
-      ctx.font = `bold 20px ${FF}`
+      ctx.beginPath(); ctx.arc(PAD + iconR, by + pillH / 2, iconR, 0, Math.PI * 2); ctx.fill()
+      ctx.fillStyle = preset.bg || '#0f0f0f'
+      ctx.font = `bold ${Math.round(iconR * 0.8)}px ${FF}`
       ctx.textAlign = 'center'
-      ctx.fillText(String(i+1), titleX + 32, by + Math.round(bh/2) + 7)
+      ctx.fillText(String(i + 1), PAD + iconR, by + pillH / 2 + Math.round(iconR * 0.3))
       ctx.textAlign = 'left'
 
-      // Bullet text
+      // Bullet text — line 1
       ctx.fillStyle = '#FFFFFF'
       ctx.font = `bold ${bFS}px ${FF}`
-      ctx.fillText(bLines[0] || '', titleX + 74, by + (bLines.length > 1 ? 34 : Math.round(bh/2) + 9))
+      const textX = PAD + iconR * 2 + 12
+      const textY = bLines.length > 1 ? by + pillH / 2 - 4 : by + pillH / 2 + bFS * 0.35
+      ctx.fillText(bLines[0] || '', textX, textY)
+
+      // Bullet text — line 2 (smaller, muted)
       if (bLines[1]) {
-        ctx.fillStyle = 'rgba(255,255,255,0.70)'
-        ctx.font = `${bFS - 4}px ${FF}`
-        ctx.fillText(bLines[1], titleX + 74, by + 64)
+        ctx.fillStyle = 'rgba(255,255,255,0.60)'
+        ctx.font = `${subFS}px ${FF}`
+        ctx.fillText(bLines[1], textX, textY + bFS + 2)
       }
     }
 
-    // Bottom bar
+    // ── BOTTOM BAR (full width, accent color) ──
+    const barH = 90
     ctx.fillStyle = accent
-    ctx.fillRect(0, H - 90, W, 90)
+    ctx.fillRect(0, H - barH, W, barH)
     ctx.fillStyle = '#000000'
-    ctx.font = `bold 28px ${FF}`
+    ctx.font = `bold 30px ${FF}`
     ctx.textAlign = 'center'
-    ctx.fillText('XS · S · M · L · XL · 2XL · 3XL', W/2, H - 30)
+    ctx.fillText('XS · S · M · L · XL · 2XL · 3XL', W / 2, H - barH / 2 + 11)
     ctx.textAlign = 'left'
+
+    // ── THIN SEPARATOR line between column and photo ──
+    ctx.fillStyle = hexAlpha(accent, 0.5)
+    ctx.fillRect(COL, 0, 3, H - barH)
   }
 
   // ── DIAGONAL layout ─────────────────────────────────────────────────────────

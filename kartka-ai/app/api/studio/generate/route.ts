@@ -570,7 +570,10 @@ export async function POST(req: NextRequest) {
             : cardLayout as 'split'|'diagonal'|'radial'
 
           // Flux generates scene (portrait 2:3, product preserved)
-          const fluxPrompt = `IMPORTANT: Keep this exact product/person/clothing 100% identical - do NOT change any clothing, colors, patterns, logos, or person appearance. ONLY change the background environment. New background: ${preset.sceneStyle}. Keep product on right side of frame. Left side should be darker. Absolutely preserve: jacket color, camouflage pattern, hood shape, all clothing details. Professional marketing photo.`
+          const productLock = keepProduct
+            ? 'CRITICAL: Keep this exact product/person/clothing 100% IDENTICAL. DO NOT alter clothing color, pattern, camouflage, logos, jacket shape, hood. ONLY change background.'
+            : 'Keep the main product recognizable but background can be creative.'
+          const fluxPrompt = `${productLock} New background scene: ${preset.sceneStyle}. Product stays on right side of frame. Left side darker for text overlay. Variation ${i+1}: ${['standard composition','different angle','alternative lighting','dramatic perspective'][i]}. Professional marketing photography.`
           console.log(`[card ${i+1}] layout:${chosenLayout} flux...`)
 
           const sceneUrl = await runFlux(photoUrl, fluxPrompt, REPLICATE)

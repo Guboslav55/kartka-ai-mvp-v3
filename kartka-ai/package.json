@@ -29,6 +29,7 @@
     "autoprefixer": "^10.0.1",
     "postcss": "^8",
     "eslint": "^8",
-    "eslint-config-next": "14.2.30"
+    "eslint-config-next": "14.2.30",
+    "ignore-loader": "^0.1.2"
   }
 }

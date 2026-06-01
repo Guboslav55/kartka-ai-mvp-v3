@@ -4,9 +4,9 @@ import OpenAI from 'openai'
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
 const CATEGORIES = [
-  'Одяг та взуття', 'Електроніка', 'Спорт та відпочинок', 'Дім та сад',
-  'Краса та здоров\'я', 'Дитячі товари', 'Авто', 'Їжа та напої',
-  'Книги та канцелярія', 'Меблі', 'Іграшки', 'Інше'
+  "Одяг та взуття", "Електроніка", "Спорт та відпочинок", "Дім та сад",
+  "Краса та здоров'я", "Дитячі товари", "Авто", "Їжа та напої",
+  "Книги та канцелярія", "Меблі", "Іграшки", "Інше"
 ]
 
 export async function POST(req: NextRequest) {
@@ -17,7 +17,6 @@ export async function POST(req: NextRequest) {
   if (!imageBase64) return NextResponse.json({ error: 'No image' }, { status: 400 })
 
   try {
-    const langHint = lang === 'uk' ? 'Ukrainian' : lang === 'ru' ? 'Russian' : 'English'
     const res = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [{
@@ -26,32 +25,39 @@ export async function POST(req: NextRequest) {
           { type: 'image_url', image_url: { url: imageBase64, detail: 'low' } },
           {
             type: 'text',
-            text: `Analyze this product photo carefully. Respond in ${langHint}.
+            text: `Ти маркетолог для українських маркетплейсів (Rozetka, Prom, OLX).
+Проаналізуй фото товару. Відповідай ТІЛЬКИ українською мовою.
 
-Return JSON:
+Поверни JSON:
 {
-  "productName": "specific product name with brand if visible (e.g. 'Куртка тактична POMSTA мультикам')",
-  "category": "one of: ${CATEGORIES.join(', ')}",
+  "productName": "коротка назва 2-4 слова (тип + ключова характеристика, наприклад: Куртка Multicam, Кросівки ON Cloud, Рюкзак 45л)",
+  "category": "одна з: ${CATEGORIES.join(', ')}",
   "bullets": [
-    "specific benefit 1 (e.g. 'Водовідштовхувальна тканина')",
-    "specific benefit 2",
-    "specific benefit 3",
-    "specific benefit 4",
-    "specific benefit 5"
+    "коротка перевага 1 (3-5 слів, ПРОДАЮЧА, конкретна)",
+    "коротка перевага 2",
+    "коротка перевага 3",
+    "коротка перевага 4",
+    "коротка перевага 5"
   ]
 }
 
-Rules:
-- productName: be specific, mention visible brand/logo/text, material, style
-- bullets: real product features you can SEE in the photo (not generic marketing phrases)
-- If you see a logo or text, include it in the name
-- Return exactly 5 bullets`
+Правила для bullets:
+- Максимум 5 слів на перевагу
+- Конкретні факти з фото (матеріал, функція, особливість)
+- Продаючий стиль: "Водостійка тканина", "М'яка підошва", "Зручні кишені"
+- НЕ починати з "Має", "Є", "Дає"
+- Тільки те що ВИДНО на фото
+
+Правила для productName:
+- 2-4 слова максимум
+- Тип товару + бренд АБО ключова характеристика
+- Якщо видно бренд/логотип — вказати`
           }
         ]
       }],
-      max_tokens: 400,
+      max_tokens: 300,
       response_format: { type: 'json_object' },
-      temperature: 0.3,
+      temperature: 0.2,
     })
 
     const data = JSON.parse(res.choices[0]?.message?.content || '{}')
@@ -61,7 +67,7 @@ Rules:
       bullets: Array.isArray(data.bullets) ? data.bullets.slice(0, 5) : [],
     })
   } catch (e: any) {
-    console.error('analyze-product error:', e.message)
+    console.error('analyze-product:', e.message)
     return NextResponse.json({ productName: '', category: '', bullets: [] })
   }
 }

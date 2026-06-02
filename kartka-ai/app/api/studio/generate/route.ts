@@ -249,8 +249,8 @@ async function renderAllLayouts(
     const COL = Math.round(W * 0.385)
     const PAD = 40
 
-    // Dark overlay on left column
-    ctx.fillStyle = 'rgba(0,0,0,0.62)'
+    // Semi-transparent dark overlay on left column (shows Flux bg through)
+    ctx.fillStyle = 'rgba(0,0,0,0.72)'
     ctx.fillRect(0, 0, COL, H - BARH)
 
     // Accent stripe
@@ -300,7 +300,7 @@ async function renderAllLayouts(
     ctx.fillStyle = accent; ctx.fillRect(40, ty + 8, 180, 5)
 
     // Bullets bottom
-    const bStartY = H * 0.68
+    const bStartY = H * 0.76
     const availH = H - BARH - 20 - bStartY
     drawBullets(20, bStartY, W - 40, availH, bs.length)
     drawBottomBar()

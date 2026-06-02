@@ -542,13 +542,23 @@ export async function POST(req: NextRequest) {
         try {
           const chosenLayout = layouts[i % layouts.length]
 
-          // Flux generates scene (portrait 2:3, product preserved)
-          // Analyse product to build a matching background prompt
-          console.log(`[card ${i+1}] layout:${chosenLayout} dalle...`)
-          // GPT shortens title + max 4 bullets for bigger, readable text
+          console.log(`[card ${i+1}] layout:${chosenLayout} flux...`)
+          // Upload photo to get public URL for Flux
+          const photoUrl = await uploadPhoto(supabase, allPhotos[0], user.id, 'card-input')
+          let sceneUrl: string | null = null
+          if (photoUrl) {
+            const bgPrompt = await buildMatchingBackground(allPhotos[0], productName, category, preset, i, creativity)
+            const fluxPrompt = `CRITICAL: Keep the main product COMPLETELY UNCHANGED - same appearance, colors, shape, textures. ONLY change the background. ${bgPrompt} Professional ecommerce product photography. Portrait orientation.`
+            sceneUrl = await runFlux(photoUrl, fluxPrompt, REPLICATE)
+            if (!sceneUrl) console.warn(`Card ${i+1}: Flux failed, using DALL-E fallback`)
+          } else {
+            console.warn(`Card ${i+1}: uploadPhoto failed, using DALL-E fallback`)
+          }
+          // GPT shortens title + max 4 bullets
           const shortTitle = await shortenTitle(productName, creativity)
           const topBullets = cardBullets.slice(0, 4)
-          const cardBuf = await renderAllLayouts(allPhotos[0], shortTitle, topBullets, chosenLayout, cardPreset, RMBG)
+          // Flux scene as bg, product composited separately, text never overlaps product
+          const cardBuf = await renderAllLayouts(allPhotos[0], shortTitle, topBullets, chosenLayout, cardPreset, RMBG, sceneUrl || undefined)
           results.push(await saveBuf(supabase, cardBuf, user.id, 'cards'))
           console.log(`[card ${i+1}] done ✅`)
         } catch (e) { console.error(`card ${i}:`, e) }

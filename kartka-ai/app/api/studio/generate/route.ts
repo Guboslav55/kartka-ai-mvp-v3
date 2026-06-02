@@ -425,6 +425,32 @@ async function renderAllLayouts(
 }
 
 
+
+async function uploadPhoto(_supabase: any, b64: string, uid: string, folder: string): Promise<string | null> {
+  try {
+    const { createClient } = await import('@supabase/supabase-js')
+    const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+    const m = b64.match(/^data:(image\/[\w+]+);base64,(.+)$/s)
+    if (!m) return null
+    const buf = Buffer.from(m[2], 'base64')
+    const fn = `${folder}/${uid}/${Date.now()}.jpg`
+    const { error } = await admin.storage.from('card-images').upload(fn, buf, { contentType: 'image/jpeg' })
+    if (error) { console.error('uploadPhoto error:', error); return null }
+    return admin.storage.from('card-images').getPublicUrl(fn).data.publicUrl
+  } catch (e) { console.error('uploadPhoto ex:', e); return null }
+}
+
+async function saveBuf(_supabase: any, buf: Buffer, uid: string, folder: string): Promise<string> {
+  try {
+    const { createClient } = await import('@supabase/supabase-js')
+    const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+    const fn = `${folder}/${uid}/${Date.now()}.jpg`
+    const { error } = await admin.storage.from('card-images').upload(fn, buf, { contentType: 'image/jpeg' })
+    if (error) { console.error('saveBuf error:', error); return `data:image/jpeg;base64,${buf.toString('base64')}` }
+    return admin.storage.from('card-images').getPublicUrl(fn).data.publicUrl
+  } catch (e) { console.error('saveBuf ex:', e); return `data:image/jpeg;base64,${buf.toString('base64')}` }
+}
+
 // ─── Main Handler ─────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
@@ -465,8 +491,6 @@ export async function POST(req: NextRequest) {
     if (mode === 'card') {
       const cardBullets = (bullets as string[]).filter(Boolean)
       if (!cardBullets.length) return NextResponse.json({ error: 'Додайте переваги товару' }, { status: 400 })
-      if (!REPLICATE) return NextResponse.json({ error: 'Потрібен REPLICATE_API_TOKEN' }, { status: 503 })
-
       const preset = PRESETS[cardPreset] || PRESETS.urban
       const layouts: ('split'|'diagonal'|'radial'|'bold')[] = ['split','diagonal','radial','bold']
 

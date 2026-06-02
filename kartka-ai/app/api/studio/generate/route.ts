@@ -588,15 +588,19 @@ export async function POST(req: NextRequest) {
 
           console.log(`[card ${i+1}] layout:${chosenLayout} flux...`)
           // Upload photo to get public URL for Flux
+          console.log(`[card ${i+1}] uploading photo...`)
           const photoUrl = await uploadPhoto(supabase, allPhotos[0], user.id, 'card-input')
+          console.log(`[card ${i+1}] photoUrl: ${photoUrl ? 'OK' : 'FAILED'}`)
           let sceneUrl: string | null = null
           if (photoUrl) {
+            console.log(`[card ${i+1}] building bg prompt...`)
             const bgPrompt = await buildMatchingBackground(allPhotos[0], productName, category, preset, i, creativity)
             const fluxPrompt = `CRITICAL: Keep the main product COMPLETELY UNCHANGED - same appearance, colors, shape, textures. ONLY change the background. ${bgPrompt} Professional ecommerce product photography. Portrait orientation.`
+            console.log(`[card ${i+1}] calling Flux...`)
             sceneUrl = await runFlux(photoUrl, fluxPrompt, REPLICATE)
-            if (!sceneUrl) console.warn(`Card ${i+1}: Flux failed, using DALL-E fallback`)
+            console.log(`[card ${i+1}] sceneUrl: ${sceneUrl ? 'OK ✅' : 'FAILED ❌'}`)
           } else {
-            console.warn(`Card ${i+1}: uploadPhoto failed, using DALL-E fallback`)
+            console.warn(`[card ${i+1}] uploadPhoto failed → blur fallback`)
           }
           // GPT shortens title + max 4 bullets
           const shortTitle = await shortenTitle(productName, creativity)

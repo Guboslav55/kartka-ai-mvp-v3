@@ -121,8 +121,7 @@ async function renderAllLayouts(
   bullets: string[],
   layout: 'split' | 'diagonal' | 'radial' | 'bold',
   cardPreset: string,
-  rmbgKey?: string,
-  fluxBgUrl?: string
+  rmbgKey?: string
 ): Promise<Buffer> {
   const sharp = (await import('sharp')).default
   const { createCanvas, GlobalFonts } = await import('@napi-rs/canvas')
@@ -154,19 +153,22 @@ async function renderAllLayouts(
     } catch {}
   }
 
-  // ── 2. Background: Flux scene if provided, else DALL-E fallback ───────────
+  // ── 2. Generate DALL-E background ─────────────────────────────────────────
+  const dallePrompt = `Abstract dark atmospheric background for a product card. Style: ${preset.sceneStyle}. NO text, NO letters, NO products, NO people, NO faces. Pure background texture only. Dark moody tones with subtle depth.`
   let bgBuf: Buffer | null = null
-  if (fluxBgUrl) {
-    try { const r = await fetch(fluxBgUrl); bgBuf = Buffer.from(await r.arrayBuffer()) }
-    catch (e) { console.error('Flux bg fetch failed:', e) }
-  } else {
-    const dallePrompt = `Abstract dark atmospheric background for a product card. Style: ${preset.sceneStyle}. NO text, NO letters, NO products, NO people, NO faces. Pure background texture only. Dark moody tones with subtle depth.`
-    try {
-      const imgResp = await openai.images.generate({ model: 'dall-e-3', prompt: dallePrompt, n: 1, size: '1024x1792', quality: 'standard' })
-      const url = imgResp.data[0]?.url
-      if (url) { const r = await fetch(url); bgBuf = Buffer.from(await r.arrayBuffer()) }
-    } catch (e) { console.error('DALL-E bg failed:', e) }
-  }
+  try {
+    const imgResp = await openai.images.generate({
+      model: 'dall-e-3', prompt: dallePrompt, n: 1,
+      size: '1024x1792', quality: 'standard',
+    })
+    const url = imgResp.data[0]?.url
+    if (url) {
+      const r = await fetch(url)
+      bgBuf = Buffer.from(await r.arrayBuffer())
+    }
+  } catch (e) { console.error('DALL-E bg failed:', e) }
+
+  // Resize bg to full card size
   const bgFull = bgBuf
     ? await sharp(bgBuf).resize(W, H, { fit: 'cover', position: 'centre' }).jpeg({ quality: 90 }).toBuffer()
     : await sharp({ create: { width: W, height: H, channels: 3, background: { r: 15, g: 15, b: 15 } } }).jpeg().toBuffer()
@@ -423,6 +425,74 @@ async function renderAllLayouts(
 }
 
 
+async function uploadPhoto(supabase: any, b64: string, uid: string, folder: string): Promise<string | null> {
+  try {
+    const m = b64.match(/^data:(image\/[\w+]+);base64,(.+)$/s)
+    if (!m) return null
+    const buf = Buffer.from(m[2], 'base64')
+    const fn = `${folder}/${uid}/${Date.now()}.jpg`
+    const { error } = await supabase.storage.from('card-images').upload(fn, buf, { contentType: 'image/jpeg' })
+    if (error) return null
+    return supabase.storage.from('card-images').getPublicUrl(fn).data.publicUrl
+  } catch { return null }
+}
+
+async function saveBuf(supabase: any, buf: Buffer, uid: string, folder: string): Promise<string> {
+  try {
+    const fn = `${folder}/${uid}/${Date.now()}.jpg`
+    await supabase.storage.from('card-images').upload(fn, buf, { contentType: 'image/jpeg' })
+    return supabase.storage.from('card-images').getPublicUrl(fn).data.publicUrl
+  } catch { return `data:image/jpeg;base64,${buf.toString('base64')}` }
+}
+
+async function saveUrl(supabase: any, url: string, uid: string, folder: string): Promise<string> {
+  try {
+    const sharp = (await import('sharp')).default
+    const buf = Buffer.from(await (await fetch(url)).arrayBuffer())
+    const fn = `${folder}/${uid}/${Date.now()}.jpg`
+    await supabase.storage.from('card-images').upload(fn, await sharp(buf).jpeg({ quality: 93 }).toBuffer(), { contentType: 'image/jpeg' })
+    return supabase.storage.from('card-images').getPublicUrl(fn).data.publicUrl
+  } catch { return url }
+}
+
+async function runFlux(imageUrl: string, prompt: string, token: string): Promise<string | null> {
+  try {
+    const pred = await fetch('https://api.replicate.com/v1/models/black-forest-labs/flux-kontext-pro/predictions', {
+      method: 'POST',
+      headers: { Authorization: `Token ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: { input_image: imageUrl, prompt, aspect_ratio: '2:3', output_format: 'jpg', output_quality: 90, safety_tolerance: 2 } })
+    })
+    if (!pred.ok) return null
+    const { id } = await pred.json()
+    for (let i = 0; i < 40; i++) {
+      await new Promise(r => setTimeout(r, 3000))
+      const r = await fetch(`https://api.replicate.com/v1/predictions/${id}`, { headers: { Authorization: `Token ${token}` } })
+      const d = await r.json()
+      if (d.status === 'succeeded') return Array.isArray(d.output) ? d.output[0] : d.output
+      if (d.status === 'failed') return null
+    }
+    return null
+  } catch { return null }
+}
+
+async function makeCatalog(b64: string, rmbgKey?: string): Promise<Buffer> {
+  const sharp = (await import('sharp')).default
+  const m = b64.match(/^data:(image\/[\w+]+);base64,(.+)$/s)
+  let p = m ? Buffer.from(m[2], 'base64') : Buffer.from(b64, 'base64')
+  if (rmbgKey) {
+    try {
+      const fd = new FormData(); fd.append('image_file', new Blob([p], { type: m?.[1] || 'image/jpeg' }), 'p.jpg'); fd.append('size', 'auto')
+      const r = await fetch('https://api.remove.bg/v1.0/removebg', { method: 'POST', headers: { 'X-Api-Key': rmbgKey }, body: fd })
+      if (r.ok) p = Buffer.from(await r.arrayBuffer())
+    } catch {}
+  }
+  const S = 1200, PAD = 100
+  const rs = await sharp(p).resize(S-PAD*2, S-PAD*2, { fit: 'contain', background: { r:0,g:0,b:0,alpha:0 } }).png().toBuffer()
+  return sharp({ create: { width:S, height:S, channels:4, background:{r:248,g:248,b:248,alpha:255} } })
+    .composite([{input:rs,top:PAD,left:PAD}]).jpeg({quality:95}).toBuffer()
+}
+
+
 // ─── Main Handler ─────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
@@ -465,9 +535,6 @@ export async function POST(req: NextRequest) {
       if (!cardBullets.length) return NextResponse.json({ error: 'Додайте переваги товару' }, { status: 400 })
       if (!REPLICATE) return NextResponse.json({ error: 'Потрібен REPLICATE_API_TOKEN' }, { status: 503 })
 
-      const photoUrl = await uploadPhoto(supabase, allPhotos[0], user.id, 'card-input')
-      if (!photoUrl) return NextResponse.json({ error: 'Помилка завантаження фото' }, { status: 500 })
-
       const preset = PRESETS[cardPreset] || PRESETS.urban
       const layouts: ('split'|'diagonal'|'radial'|'bold')[] = ['split','diagonal','radial','bold']
 
@@ -475,17 +542,13 @@ export async function POST(req: NextRequest) {
         try {
           const chosenLayout = layouts[i % layouts.length]
 
-          // Flux generates beautiful scene as background
-          const bgPrompt = await buildMatchingBackground(allPhotos[0], productName, category, preset, i, creativity)
-          const fluxPrompt = `CRITICAL: Keep the main product COMPLETELY UNCHANGED. ONLY change the background. ${bgPrompt} Professional ecommerce photography. Portrait orientation.`
-          console.log(`[card ${i+1}] layout:${chosenLayout} flux...`)
-          const sceneUrl = await runFlux(photoUrl, fluxPrompt, REPLICATE)
-          if (!sceneUrl) { console.warn(`Card ${i+1}: Flux failed`) }
-          // GPT shortens title + max 4 bullets
+          // Flux generates scene (portrait 2:3, product preserved)
+          // Analyse product to build a matching background prompt
+          console.log(`[card ${i+1}] layout:${chosenLayout} dalle...`)
+          // GPT shortens title + max 4 bullets for bigger, readable text
           const shortTitle = await shortenTitle(productName, creativity)
           const topBullets = cardBullets.slice(0, 4)
-          // Flux scene = bg, product cutout composited separately, text never overlaps product
-          const cardBuf = await renderAllLayouts(allPhotos[0], shortTitle, topBullets, chosenLayout, cardPreset, RMBG, sceneUrl || undefined)
+          const cardBuf = await renderAllLayouts(allPhotos[0], shortTitle, topBullets, chosenLayout, cardPreset, RMBG)
           results.push(await saveBuf(supabase, cardBuf, user.id, 'cards'))
           console.log(`[card ${i+1}] done ✅`)
         } catch (e) { console.error(`card ${i}:`, e) }

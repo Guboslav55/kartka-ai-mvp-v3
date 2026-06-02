@@ -639,8 +639,9 @@ export async function POST(req: NextRequest) {
       if (!cardBullets.length) return NextResponse.json({ error: 'Додайте переваги товару' }, { status: 400 })
       if (!REPLICATE) return NextResponse.json({ error: 'Потрібен REPLICATE_API_TOKEN' }, { status: 503 })
 
-      const preset = PRESETS[cardPreset] || PRESETS.urban
-      const layouts: ('split'|'diagonal'|'radial'|'bold')[] = ['split','diagonal','radial','bold']
+      const preset = { ...(PRESETS[cardPreset] || PRESETS.urban), _category: category || '' }
+      // Use layout chosen by user for ALL cards (each gets unique Flux background)
+      const userLayout = (cardLayout || 'split') as 'split'|'diagonal'|'radial'|'bold'
 
       console.log(`Starting ${qty} cards in parallel...`)
       // Upload photo once (shared across all cards)
@@ -654,7 +655,7 @@ export async function POST(req: NextRequest) {
 
       // Generate all cards IN PARALLEL — each gets different layout + unique Flux bg
       const cardPromises = Array.from({ length: qty }, async (_, i) => {
-        const chosenLayout = layouts[i % layouts.length]
+        const chosenLayout = userLayout
         console.log(`[card ${i+1}] layout:${chosenLayout} starting...`)
         try {
           let sceneUrl: string | null = null
@@ -664,7 +665,7 @@ export async function POST(req: NextRequest) {
             sceneUrl = await runFlux(photoUrl, fluxPrompt, REPLICATE)
             console.log(`[card ${i+1}] flux: ${sceneUrl ? 'OK ✅' : 'FAILED ❌'}`)
           }
-          const cardBuf = await renderAllLayouts(allPhotos[0], shortTitle, topBullets, chosenLayout, cardPreset, RMBG, sceneUrl || undefined, bulletEmojis)
+          const cardBuf = await renderAllLayouts(allPhotos[0], shortTitle, topBullets, chosenLayout, cardPreset, RMBG, sceneUrl || undefined, bulletEmojis, category)
           const url = await saveBuf(supabase, cardBuf, user.id, 'cards')
           console.log(`[card ${i+1}] done ✅`)
           return url

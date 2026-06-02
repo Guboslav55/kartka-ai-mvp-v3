@@ -40,6 +40,22 @@ async function shortenTitle(name: string, creativity: number): Promise<string> {
 }
 
 
+
+async function generateBulletEmojis(bullets: string[]): Promise<string[]> {
+  try {
+    const list = bullets.map((b, i) => `${i+1}. ${b}`).join('\n')
+    const r = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: `For each product feature, choose ONE relevant emoji.\nRules: one emoji per feature, no text, use specific emojis (not generic checkmarks).\nExamples: lightweight->🪶 waterproof->💧 fast->⚡ design->✨ comfort->😌 durable->🛡️ eco->🌿 size->📐 color->🎨\nFeatures:\n${list}\nReturn ONLY a JSON array: ["emoji1","emoji2",...]` }],
+      max_tokens: 60, temperature: 0.3,
+    })
+    const raw = r.choices[0]?.message?.content?.trim() || '[]'
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed) && parsed.length === bullets.length) return parsed
+    return bullets.map(() => '⚡')
+  } catch { return bullets.map(() => '⚡') }
+}
+
 async function analyseProduct(photo: string, name: string, category: string) {
   try {
     const r = await openai.chat.completions.create({
@@ -122,7 +138,8 @@ async function renderAllLayouts(
   layout: 'split' | 'diagonal' | 'radial' | 'bold',
   cardPreset: string,
   rmbgKey?: string,
-  fluxBgUrl?: string
+  fluxBgUrl?: string,
+  bulletEmojis?: string[]
 ): Promise<Buffer> {
   const sharp = (await import('sharp')).default
   const { createCanvas, GlobalFonts } = await import('@napi-rs/canvas')
@@ -222,10 +239,11 @@ async function renderAllLayouts(
       const bx = startX
       const by = startY + i * (bH + bGap)
       ctx.fillStyle = 'rgba(0,0,0,0.78)'; pill(bx, by, availW, bH)
+      const emoji = bulletEmojis?.[i] || String(i + 1)
       ctx.fillStyle = accent
       ctx.beginPath(); ctx.arc(bx + iconR + 8, by + bH / 2, iconR, 0, Math.PI * 2); ctx.fill()
-      ctx.fillStyle = '#000'; ctx.font = `bold ${Math.round(iconR * 0.85)}px ${FF}`; ctx.textAlign = 'center'
-      ctx.fillText(String(i + 1), bx + iconR + 8, by + bH / 2 + Math.round(iconR * 0.32))
+      ctx.font = `${Math.round(iconR * 1.1)}px sans-serif`; ctx.textAlign = 'center'
+      ctx.fillText(emoji, bx + iconR + 8, by + bH / 2 + Math.round(iconR * 0.38))
       ctx.textAlign = 'left'
       const bLines = wrapText(clean, availW - iconR * 2 - 28, `bold ${bFS}px ${FF}`)
       ctx.fillStyle = '#FFF'; ctx.font = `bold ${bFS}px ${FF}`
@@ -249,8 +267,8 @@ async function renderAllLayouts(
     const COL = Math.round(W * 0.385)
     const PAD = 40
 
-    // Semi-transparent dark overlay on left column (shows Flux bg through)
-    ctx.fillStyle = 'rgba(0,0,0,0.72)'
+    // Dark overlay on left column
+    ctx.fillStyle = 'rgba(0,0,0,0.62)'
     ctx.fillRect(0, 0, COL, H - BARH)
 
     // Accent stripe
@@ -300,7 +318,7 @@ async function renderAllLayouts(
     ctx.fillStyle = accent; ctx.fillRect(40, ty + 8, 180, 5)
 
     // Bullets bottom
-    const bStartY = H * 0.76
+    const bStartY = H * 0.68
     const availH = H - BARH - 20 - bStartY
     drawBullets(20, bStartY, W - 40, availH, bs.length)
     drawBottomBar()
@@ -594,8 +612,9 @@ export async function POST(req: NextRequest) {
           // GPT shortens title + max 4 bullets
           const shortTitle = await shortenTitle(productName, creativity)
           const topBullets = cardBullets.slice(0, 4)
+          const bulletEmojis = await generateBulletEmojis(topBullets)
           // Flux scene as bg, product composited separately, text never overlaps product
-          const cardBuf = await renderAllLayouts(allPhotos[0], shortTitle, topBullets, chosenLayout, cardPreset, RMBG, sceneUrl || undefined)
+          const cardBuf = await renderAllLayouts(allPhotos[0], shortTitle, topBullets, chosenLayout, cardPreset, RMBG, sceneUrl || undefined, bulletEmojis)
           results.push(await saveBuf(supabase, cardBuf, user.id, 'cards'))
           console.log(`[card ${i+1}] done ✅`)
         } catch (e) { console.error(`card ${i}:`, e) }

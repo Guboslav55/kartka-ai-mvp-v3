@@ -10,10 +10,9 @@ const COST = 4
 
 // ─── Font loader ──────────────────────────────────────────────────────────────
 function findFont(bold: boolean): string {
-  // Inter first (modern, professional), then fallbacks
   const names = bold
-    ? ['Inter.ttf', 'ARIALBD.TTF', 'ARIBLK.TTF', 'arialbd.ttf', 'DejaVuSans-Bold.ttf']
-    : ['Inter.ttf', 'ARIAL.TTF', 'arial.ttf', 'DejaVuSans.ttf']
+    ? ['Inter.ttf','ARIALBD.TTF','ARIBLK.TTF','arialbd.ttf','DejaVuSans-Bold.ttf']
+    : ['Inter.ttf','ARIAL.TTF','arial.ttf','DejaVuSans.ttf']
   const dirs = [
     '/var/task/kartka-ai/public/fonts',
     path.join(process.cwd(), 'public/fonts'),
@@ -340,34 +339,76 @@ async function renderAllLayouts(
     drawBottomBar()
 
   } else if (layout === 'diagonal') {
-    // Dark bands top-left and bottom
-    const g1 = ctx.createLinearGradient(0, 0, W * 0.6, H * 0.45)
-    g1.addColorStop(0, 'rgba(0,0,0,0.88)'); g1.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = g1; ctx.fillRect(0, 0, W, H)
+    // ── TOP zone: strong dark gradient for title (top 32%) ──
+    const g1 = ctx.createLinearGradient(0, 0, 0, H * 0.38)
+    g1.addColorStop(0, 'rgba(0,0,0,0.96)')
+    g1.addColorStop(0.7, 'rgba(0,0,0,0.60)')
+    g1.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = g1; ctx.fillRect(0, 0, W, H * 0.38)
 
-    const g2 = ctx.createLinearGradient(0, H * 0.65, 0, H)
-    g2.addColorStop(0, 'rgba(0,0,0,0)'); g2.addColorStop(1, 'rgba(0,0,0,0.92)')
-    ctx.fillStyle = g2; ctx.fillRect(0, H * 0.65, W, H * 0.35)
+    // ── BOTTOM zone: strong dark gradient for bullets ──
+    const bCount_d = bs.length
+    const bH_d = 72, bGap_d = 10
+    const gridH_d = bCount_d * bH_d + (bCount_d - 1) * bGap_d
+    const gridStart_d = H - BARH - 16 - gridH_d
+    const g2 = ctx.createLinearGradient(0, gridStart_d - 80, 0, H)
+    g2.addColorStop(0, 'rgba(0,0,0,0)')
+    g2.addColorStop(0.35, 'rgba(0,0,0,0.75)')
+    g2.addColorStop(1, 'rgba(0,0,0,0.97)')
+    ctx.fillStyle = g2; ctx.fillRect(0, gridStart_d - 80, W, H - gridStart_d + 80)
 
-    // Diagonal accent line
+    // ── DIAGONAL accent stripe (thick, glowing) ──
     ctx.save()
-    ctx.strokeStyle = accent; ctx.lineWidth = 12
-    ctx.shadowColor = accent; ctx.shadowBlur = 16
-    ctx.beginPath(); ctx.moveTo(0, H * 0.44); ctx.lineTo(W, H * 0.56); ctx.stroke()
+    // Shadow glow
+    ctx.strokeStyle = accent; ctx.lineWidth = 18
+    ctx.shadowColor = accent; ctx.shadowBlur = 30
+    ctx.beginPath(); ctx.moveTo(-20, H * 0.43); ctx.lineTo(W + 20, H * 0.53); ctx.stroke()
+    // Bright core line
+    ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 4
+    ctx.shadowBlur = 0
+    ctx.beginPath(); ctx.moveTo(-20, H * 0.43); ctx.lineTo(W + 20, H * 0.53); ctx.stroke()
     ctx.restore()
 
-    // Title top-left
-    const titleFS = Math.min(100, Math.round(W * 0.087))
-    const titleLines = wrapText(name.toUpperCase(), Math.round(W * 0.52), `bold ${titleFS}px ${FF}`)
-    ctx.fillStyle = '#FFF'; ctx.font = `bold ${titleFS}px ${FF}`
-    let ty = 60 + titleFS
-    for (const line of titleLines.slice(0, 2)) { ctx.fillText(line, 40, ty); ty += titleFS + 6 }
-    ctx.fillStyle = accent; ctx.fillRect(40, ty + 8, 180, 5)
+    // ── TITLE top-left ── large, bold, uppercase
+    const titleFS_d = Math.min(108, Math.round(W * 0.094))
+    const maxTW_d = Math.round(W * 0.62)
+    const titleLines_d = wrapText(name.toUpperCase(), maxTW_d, `bold ${titleFS_d}px ${FF}`)
+    ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${titleFS_d}px ${FF}`
+    let ty_d = 52 + titleFS_d
+    for (const line of titleLines_d.slice(0, 2)) {
+      ctx.fillText(line, 36, ty_d); ty_d += titleFS_d + 8
+    }
+    // Accent underline
+    ctx.fillStyle = accent
+    ctx.beginPath(); ctx.roundRect(36, ty_d + 6, Math.round(maxTW_d * 0.55), 6, 3); ctx.fill()
 
-    // Bullets bottom
-    const bStartY = H * 0.68
-    const availH = H - BARH - 20 - bStartY
-    drawBullets(20, bStartY, W - 40, availH, bs.length)
+    // ── BULLETS bottom — compact 2-col grid ──
+    const colW_d = (W - 48) / 2
+    const bFS_d = 24, iconR_d = 22
+    for (let i = 0; i < Math.min(bs.length, 4); i++) {
+      const clean = bs[i].replace(/^[•✓\-]\s*/, '')
+      const col = i % 2, row = Math.floor(i / 2)
+      const bx = 16 + col * (colW_d + 16)
+      const by = gridStart_d + row * (bH_d + bGap_d)
+      // Pill
+      ctx.fillStyle = 'rgba(0,0,0,0.82)'
+      ctx.beginPath(); ctx.roundRect(bx, by, colW_d, bH_d, 14); ctx.fill()
+      // Emoji circle
+      const emoji_d = bulletEmojis?.[i] || String(i + 1)
+      ctx.fillStyle = accent
+      ctx.beginPath(); ctx.arc(bx + iconR_d + 8, by + bH_d / 2, iconR_d, 0, Math.PI * 2); ctx.fill()
+      ctx.font = `${Math.round(iconR_d * 1.1)}px sans-serif`; ctx.textAlign = 'center'
+      ctx.fillText(emoji_d, bx + iconR_d + 8, by + bH_d / 2 + Math.round(iconR_d * 0.38))
+      ctx.textAlign = 'left'
+      // Text
+      const bLines_d = wrapText(clean, colW_d - iconR_d * 2 - 22, `bold ${bFS_d}px ${FF}`)
+      ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${bFS_d}px ${FF}`
+      ctx.fillText(bLines_d[0] || '', bx + iconR_d * 2 + 16, by + bH_d / 2 + bFS_d * 0.36)
+      if (bLines_d[1]) {
+        ctx.fillStyle = 'rgba(255,255,255,0.60)'; ctx.font = `${bFS_d - 4}px ${FF}`
+        ctx.fillText(bLines_d[1], bx + iconR_d * 2 + 16, by + bH_d / 2 + bFS_d * 0.9)
+      }
+    }
     drawBottomBar()
 
   } else if (layout === 'radial') {

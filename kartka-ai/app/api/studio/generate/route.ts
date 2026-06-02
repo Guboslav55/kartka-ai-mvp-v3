@@ -34,12 +34,8 @@ async function shortenTitle(name: string, creativity: number): Promise<string> {
       messages: [{ role: 'user', content: 'Shorten this product name for a marketplace card.\nProduct: "' + name + '"\nRules:\n- Max 12 chars per line, 2 lines max\n- Keep product type + brand/material\n- Remove: prepositions, repeated adjectives\n- Do NOT add new words not in original name\n- Match input language (Ukrainian/Russian)\nReturn ONLY uppercase shortened title:' }],
       max_tokens: 20, temperature: Math.max(0.1, creativity * 0.4),
     })
-    const t = (r.choices[0]?.message?.content?.trim() || name)
-      .toUpperCase()
-      .replace(/\n/g, ' ')      // remove newlines GPT sometimes adds
-      .replace(/\s{2,}/g, ' ')  // collapse multiple spaces
-      .trim()
-    return t.slice(0, 32)
+    const t = (r.choices[0]?.message?.content?.trim() || name).toUpperCase()
+    return t.slice(0, 28)
   } catch { return name.toUpperCase().slice(0, 28) }
 }
 
@@ -646,36 +642,39 @@ export async function POST(req: NextRequest) {
       const preset = PRESETS[cardPreset] || PRESETS.urban
       const layouts: ('split'|'diagonal'|'radial'|'bold')[] = ['split','diagonal','radial','bold']
 
-      for (let i = 0; i < qty; i++) {
-        try {
-          const chosenLayout = layouts[i % layouts.length]
+      // Upload photo once (shared across all cards)
+      const photoUrl = await uploadPhoto(supabase, allPhotos[0], user.id, 'card-input')
+      console.log(`photoUrl: ${photoUrl ? 'OK' : 'FAILED'}`)
 
-          console.log(`[card ${i+1}] layout:${chosenLayout} flux...`)
-          // Upload photo to get public URL for Flux
-          console.log(`[card ${i+1}] uploading photo...`)
-          const photoUrl = await uploadPhoto(supabase, allPhotos[0], user.id, 'card-input')
-          console.log(`[card ${i+1}] photoUrl: ${photoUrl ? 'OK' : 'FAILED'}`)
+      // Shared title + bullets (same for all cards)
+      const shortTitle = await shortenTitle(productName, creativity)
+      const topBullets = cardBullets.slice(0, 4)
+      const bulletEmojis = await generateBulletEmojis(topBullets)
+
+      // Generate all cards IN PARALLEL — each gets different layout + unique Flux bg
+      const cardPromises = Array.from({ length: qty }, async (_, i) => {
+        const chosenLayout = layouts[i % layouts.length]
+        console.log(`[card ${i+1}] layout:${chosenLayout} starting...`)
+        try {
           let sceneUrl: string | null = null
           if (photoUrl) {
-            console.log(`[card ${i+1}] building bg prompt...`)
             const bgPrompt = await buildMatchingBackground(allPhotos[0], productName, category, preset, i, creativity)
             const fluxPrompt = `CRITICAL: Keep the main product COMPLETELY UNCHANGED - same appearance, colors, shape, textures. ONLY change the background. ${bgPrompt} Professional ecommerce product photography. Portrait orientation.`
-            console.log(`[card ${i+1}] calling Flux...`)
             sceneUrl = await runFlux(photoUrl, fluxPrompt, REPLICATE)
-            console.log(`[card ${i+1}] sceneUrl: ${sceneUrl ? 'OK ✅' : 'FAILED ❌'}`)
-          } else {
-            console.warn(`[card ${i+1}] uploadPhoto failed → blur fallback`)
+            console.log(`[card ${i+1}] flux: ${sceneUrl ? 'OK ✅' : 'FAILED ❌'}`)
           }
-          // GPT shortens title + max 4 bullets
-          const shortTitle = await shortenTitle(productName, creativity)
-          const topBullets = cardBullets.slice(0, 4)
-          const bulletEmojis = await generateBulletEmojis(topBullets)
-          // Flux scene as bg, product composited separately, text never overlaps product
           const cardBuf = await renderAllLayouts(allPhotos[0], shortTitle, topBullets, chosenLayout, cardPreset, RMBG, sceneUrl || undefined, bulletEmojis)
-          results.push(await saveBuf(supabase, cardBuf, user.id, 'cards'))
+          const url = await saveBuf(supabase, cardBuf, user.id, 'cards')
           console.log(`[card ${i+1}] done ✅`)
-        } catch (e) { console.error(`card ${i}:`, e) }
-      }
+          return url
+        } catch (e) {
+          console.error(`card ${i+1} failed:`, e)
+          return null
+        }
+      })
+
+      const cardResults = await Promise.all(cardPromises)
+      cardResults.forEach(url => { if (url) results.push(url) })
     }
     // ── PHOTO MODE ────────────────────────────────────────────────────────────
     else {

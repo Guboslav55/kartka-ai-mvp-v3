@@ -286,11 +286,12 @@ async function renderAllLayouts(
       const by = startY + i * (bH + bGap)
       ctx.fillStyle = 'rgba(0,0,0,0.82)'; pill(bx, by, availW, bH)
       ctx.fillStyle = hexAlpha(accent, 0.9); pill(bx, by, 5, bH, [4,0,0,4])
-      const emoji = bulletEmojis?.[i] || String(i + 1)
+      // Numbered accent circle (emoji not supported in canvas)
       ctx.fillStyle = accent
       ctx.beginPath(); ctx.arc(bx + iconR + 14, by + bH / 2, iconR, 0, Math.PI * 2); ctx.fill()
-      ctx.font = `${Math.round(iconR * 1.1)}px sans-serif`; ctx.textAlign = 'center'
-      ctx.fillText(emoji, bx + iconR + 14, by + bH / 2 + Math.round(iconR * 0.38))
+      ctx.fillStyle = '#000000'
+      ctx.font = `bold ${Math.round(iconR * 1.0)}px ${FF}`; ctx.textAlign = 'center'
+      ctx.fillText(String(i + 1), bx + iconR + 14, by + bH / 2 + Math.round(iconR * 0.36))
       ctx.textAlign = 'left'
       const bLines = wrapText(clean, availW - iconR * 2 - 48, `bold ${bFS}px ${FF}`)
       ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${bFS}px ${FF}`
@@ -333,10 +334,10 @@ async function renderAllLayouts(
     const titleFS = Math.min(104, Math.round(maxTW * 0.28))
     const titleLines = wrapText(name.toUpperCase(), maxTW, `bold ${titleFS}px ${FF}`)
     ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${titleFS}px ${FF}`
-    ctx.letterSpacing = '2px'
+    // ctx.letterSpacing = '2px' // not supported
     let ty = 56 + titleFS
     for (const line of titleLines.slice(0, 3)) { ctx.fillText(line, PAD, ty); ty += titleFS + 10 }
-    ctx.letterSpacing = '0px'
+    // ctx.letterSpacing = '0px'
     ctx.fillStyle = accent
     ctx.beginPath(); ctx.roundRect(PAD, ty + 8, Math.round(maxTW * 0.65), 7, 4); ctx.fill()
     ty += 36

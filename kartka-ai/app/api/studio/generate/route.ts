@@ -11,8 +11,8 @@ const COST = 4
 // ─── Font loader ──────────────────────────────────────────────────────────────
 function findFont(bold: boolean): string {
   const names = bold
-    ? ['Inter.ttf','ARIALBD.TTF','ARIBLK.TTF','arialbd.ttf','DejaVuSans-Bold.ttf']
-    : ['Inter.ttf','ARIAL.TTF','arial.ttf','DejaVuSans.ttf']
+    ? ['ARIALBD.TTF','ARIBLK.TTF','arialbd.ttf','DejaVuSans-Bold.ttf']
+    : ['ARIAL.TTF','arial.ttf','DejaVuSans.ttf']
   const dirs = [
     '/var/task/kartka-ai/public/fonts',
     path.join(process.cwd(), 'public/fonts'),
@@ -85,81 +85,35 @@ async function buildMatchingBackground(
   varIdx: number,
   creativity: number
 ): Promise<string> {
-  // Category-specific background scenes — 4 variations per category
-  const categoryScenes: Record<string, string[]> = {
-    'Одяг та взуття': [
-      'clean white studio floor, soft shadow under product, minimalist',
-      'urban concrete sidewalk, natural daylight, lifestyle feel',
-      'wooden floor with soft window light, cozy home atmosphere',
-      'gym floor with dramatic side lighting, sporty dark background',
-    ],
-    'Електроніка': [
-      'dark matte desk surface, soft blue ambient glow, tech aesthetic',
-      'white studio with subtle reflection, clean minimal',
-      'dark gradient background, product spotlight lighting',
-      'modern workspace with keyboard and soft light',
-    ],
-    "Краса та здоров'я": [
-      'white marble surface with soft natural light',
-      'pastel background with botanical elements, clean',
-      'bathroom shelf with soft diffused light',
-      'spa aesthetic, white towels, calm atmosphere',
-    ],
-    'Спорт та відпочинок': [
-      'outdoor trail with natural light, adventure mood',
-      'gym with dramatic lighting, dark motivational aesthetic',
-      'mountain landscape background, soft bokeh',
-      'clean sports studio, white floor, dynamic lighting',
-    ],
-    'Дім та сад': [
-      'cozy home interior, warm lighting, wooden surfaces',
-      'modern kitchen counter, clean minimal aesthetic',
-      'outdoor garden with natural light and greenery',
-      'minimalist shelf with soft ambient light',
-    ],
-    'Дитячі товари': [
-      'bright colorful playroom, soft natural light',
-      'clean white background with pastel accents',
-      'wooden toys aesthetic, warm cozy lighting',
-      'outdoor playground, sunny day, cheerful mood',
-    ],
-  }
-
-  // Find matching category or use generic
-  const catKey = Object.keys(categoryScenes).find(k =>
-    category.toLowerCase().includes(k.toLowerCase().split(' ')[0])
-  )
-  const scenes = catKey ? categoryScenes[catKey] : [
+  const varStyles = [
     'clean studio background, soft even lighting, light gradient',
     'lifestyle environment matching product mood, soft bokeh',
     'minimal abstract background, complementary colors',
     'dynamic scene matching product style, professional lighting',
   ]
-  const baseScene = scenes[varIdx % scenes.length]
-
   try {
     const r = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [{ role: 'user', content: [
         { type: 'image_url', image_url: { url: photo, detail: 'low' } },
-        { type: 'text', text: `Product: "${name}", Category: "${category}".
+        { type: 'text', text: `Product: "${name}", Category: "${category}". Variation ${varIdx+1}.
 
-You are creating a background for a marketplace product card.
-Base scene suggestion: ${baseScene}
+Analyze the product colors and style. Create a background scene description for a product card.
 
-Analyze the product colors and refine the background description:
-- Background must COMPLEMENT product colors, not clash
-- Left side lighter (text overlay goes there)
-- Right side can have depth and texture
-- Keep it ${creativity > 0.65 ? 'creative and atmospheric' : 'clean and professional'}
-- Max 40 words, English only, describe ONLY the background scene
+Rules:
+- Background should COMPLEMENT the product, not compete with it
+- Use LIGHTER tones on the left side (where text will be placed)
+- The right side can have depth/texture
+- Match the product's style: sportswear→dynamic gym, military→tactical outdoor, luxury→dark studio, casual→lifestyle
+- Variation ${varIdx+1} style hint: ${varStyles[varIdx % varStyles.length]}
+- Creativity level ${creativity > 0.65 ? 'high: be creative with the scene' : 'medium: keep it professional'}
 
-Return ONLY the background description:` }
+Return ONLY a short background description (max 40 words, English):` }
       ]}],
-      max_tokens: 80, temperature: 0.5,
+      max_tokens: 80, temperature: 0.6,
     })
-    return r.choices[0]?.message?.content?.trim() || baseScene
-  } catch { return baseScene }
+    return r.choices[0]?.message?.content?.trim() || preset.sceneStyle
+  } catch { return preset.sceneStyle }
 }
 
 // ─── Style presets ────────────────────────────────────────────────────────────
@@ -277,28 +231,26 @@ async function renderAllLayouts(
     startX: number, startY: number, availW: number, availH: number,
     count: number, align: 'left' | 'center' = 'left'
   ) {
-    const bH = Math.min(110, Math.round(availH / count) - 10)
+    const bH = Math.min(105, Math.round(availH / count) - 10)
     const bGap = Math.round((availH - bH * count) / Math.max(count - 1, 1))
-    const bFS = 28, iconR = 25
+    const bFS = 26, iconR = 23
     for (let i = 0; i < count; i++) {
       const clean = bs[i].replace(/^[•✓\-]\s*/, '')
       const bx = startX
       const by = startY + i * (bH + bGap)
-      ctx.fillStyle = 'rgba(0,0,0,0.82)'; pill(bx, by, availW, bH)
-      ctx.fillStyle = hexAlpha(accent, 0.9); pill(bx, by, 5, bH, [4,0,0,4])
-      // Numbered accent circle (emoji not supported in canvas)
+      ctx.fillStyle = 'rgba(0,0,0,0.78)'; pill(bx, by, availW, bH)
+      const emoji = bulletEmojis?.[i] || String(i + 1)
       ctx.fillStyle = accent
-      ctx.beginPath(); ctx.arc(bx + iconR + 14, by + bH / 2, iconR, 0, Math.PI * 2); ctx.fill()
-      ctx.fillStyle = '#000000'
-      ctx.font = `bold ${Math.round(iconR * 1.0)}px ${FF}`; ctx.textAlign = 'center'
-      ctx.fillText(String(i + 1), bx + iconR + 14, by + bH / 2 + Math.round(iconR * 0.36))
+      ctx.beginPath(); ctx.arc(bx + iconR + 8, by + bH / 2, iconR, 0, Math.PI * 2); ctx.fill()
+      ctx.font = `${Math.round(iconR * 1.1)}px sans-serif`; ctx.textAlign = 'center'
+      ctx.fillText(emoji, bx + iconR + 8, by + bH / 2 + Math.round(iconR * 0.38))
       ctx.textAlign = 'left'
-      const bLines = wrapText(clean, availW - iconR * 2 - 48, `bold ${bFS}px ${FF}`)
-      ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${bFS}px ${FF}`
-      ctx.fillText(bLines[0] || '', bx + iconR * 2 + 26, by + (bLines[1] ? bH / 2 - 2 : bH / 2 + bFS * 0.36))
+      const bLines = wrapText(clean, availW - iconR * 2 - 28, `bold ${bFS}px ${FF}`)
+      ctx.fillStyle = '#FFF'; ctx.font = `bold ${bFS}px ${FF}`
+      ctx.fillText(bLines[0] || '', bx + iconR * 2 + 18, by + (bLines[1] ? bH / 2 - 2 : bH / 2 + bFS * 0.36))
       if (bLines[1]) {
-        ctx.fillStyle = 'rgba(255,255,255,0.65)'; ctx.font = `${bFS - 5}px ${FF}`
-        ctx.fillText(bLines[1], bx + iconR * 2 + 26, by + bH / 2 + bFS * 0.62)
+        ctx.fillStyle = 'rgba(255,255,255,0.60)'; ctx.font = `${bFS - 5}px ${FF}`
+        ctx.fillText(bLines[1], bx + iconR * 2 + 18, by + bH / 2 + bFS * 0.58)
       }
     }
   }
@@ -306,10 +258,8 @@ async function renderAllLayouts(
   // Bottom bar (shared by all layouts)
   function drawBottomBar() {
     ctx.fillStyle = accent; ctx.fillRect(0, H - BARH, W, BARH)
-    ctx.fillStyle = 'rgba(0,0,0,0.50)'; ctx.font = `bold 16px ${FF}`; ctx.textAlign = 'center'
-    ctx.fillText('РОЗМІРИ', W / 2, H - BARH + 22)
-    ctx.fillStyle = '#000000'; ctx.font = `bold 32px ${FF}`
-    ctx.fillText('XS · S · M · L · XL · 2XL · 3XL', W / 2, H - BARH / 2 + 16)
+    ctx.fillStyle = '#000'; ctx.font = `bold 30px ${FF}`; ctx.textAlign = 'center'
+    ctx.fillText('XS · S · M · L · XL · 2XL · 3XL', W / 2, H - BARH / 2 + 11)
     ctx.textAlign = 'left'
   }
 
@@ -329,17 +279,14 @@ async function renderAllLayouts(
     ctx.fillRect(COL, 0, 4, H - BARH)
     ctx.globalAlpha = 1
 
-    // Title — large, letter-spaced
+    // Title
     const maxTW = COL - PAD - 16
-    const titleFS = Math.min(104, Math.round(maxTW * 0.28))
+    const titleFS = Math.min(96, Math.round(maxTW * 0.26))
     const titleLines = wrapText(name.toUpperCase(), maxTW, `bold ${titleFS}px ${FF}`)
-    ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${titleFS}px ${FF}`
-    // ctx.letterSpacing = '2px' // not supported
-    let ty = 56 + titleFS
-    for (const line of titleLines.slice(0, 3)) { ctx.fillText(line, PAD, ty); ty += titleFS + 10 }
-    // ctx.letterSpacing = '0px'
-    ctx.fillStyle = accent
-    ctx.beginPath(); ctx.roundRect(PAD, ty + 8, Math.round(maxTW * 0.65), 7, 4); ctx.fill()
+    ctx.fillStyle = '#FFF'; ctx.font = `bold ${titleFS}px ${FF}`
+    let ty = 60 + titleFS
+    for (const line of titleLines.slice(0, 3)) { ctx.fillText(line, PAD, ty); ty += titleFS + 6 }
+    ctx.fillStyle = accent; ctx.fillRect(PAD, ty + 10, Math.round(maxTW * 0.6), 5)
     ty += 36
 
     drawBullets(PAD - 8, ty, COL - PAD, H - BARH - ty - 20, bs.length)
@@ -639,47 +586,39 @@ export async function POST(req: NextRequest) {
       if (!cardBullets.length) return NextResponse.json({ error: 'Додайте переваги товару' }, { status: 400 })
       if (!REPLICATE) return NextResponse.json({ error: 'Потрібен REPLICATE_API_TOKEN' }, { status: 503 })
 
-      const preset = { ...(PRESETS[cardPreset] || PRESETS.urban), _category: category || '' }
-      // Use layout chosen by user for ALL cards (each gets unique Flux background)
-      const userLayout = (cardLayout || 'split') as 'split'|'diagonal'|'radial'|'bold'
+      const preset = PRESETS[cardPreset] || PRESETS.urban
+      const layouts: ('split'|'diagonal'|'radial'|'bold')[] = ['split','diagonal','radial','bold']
 
-      console.log(`Starting ${qty} cards in parallel...`)
-      // Upload photo once (shared across all cards)
-      const photoUrl = await uploadPhoto(supabase, allPhotos[0], user.id, 'card-input')
-      console.log(`photoUrl: ${photoUrl ? 'OK' : 'FAILED'}`)
-
-      // Shared title + bullets (same for all cards)
-      const shortTitle = await shortenTitle(productName, creativity)
-      const topBullets = cardBullets.slice(0, 4)
-      const bulletEmojis = await generateBulletEmojis(topBullets)
-
-      // Generate all cards IN PARALLEL — each gets different layout + unique Flux bg
-      const cardPromises = Array.from({ length: qty }, async (_, i) => {
-        const chosenLayout = userLayout
-        console.log(`[card ${i+1}] layout:${chosenLayout} starting...`)
+      for (let i = 0; i < qty; i++) {
         try {
+          const chosenLayout = layouts[i % layouts.length]
+
+          console.log(`[card ${i+1}] layout:${chosenLayout} flux...`)
+          // Upload photo to get public URL for Flux
+          console.log(`[card ${i+1}] uploading photo...`)
+          const photoUrl = await uploadPhoto(supabase, allPhotos[0], user.id, 'card-input')
+          console.log(`[card ${i+1}] photoUrl: ${photoUrl ? 'OK' : 'FAILED'}`)
           let sceneUrl: string | null = null
           if (photoUrl) {
+            console.log(`[card ${i+1}] building bg prompt...`)
             const bgPrompt = await buildMatchingBackground(allPhotos[0], productName, category, preset, i, creativity)
             const fluxPrompt = `CRITICAL: Keep the main product COMPLETELY UNCHANGED - same appearance, colors, shape, textures. ONLY change the background. ${bgPrompt} Professional ecommerce product photography. Portrait orientation.`
+            console.log(`[card ${i+1}] calling Flux...`)
             sceneUrl = await runFlux(photoUrl, fluxPrompt, REPLICATE)
-            console.log(`[card ${i+1}] flux: ${sceneUrl ? 'OK ✅' : 'FAILED ❌'}`)
+            console.log(`[card ${i+1}] sceneUrl: ${sceneUrl ? 'OK ✅' : 'FAILED ❌'}`)
+          } else {
+            console.warn(`[card ${i+1}] uploadPhoto failed → blur fallback`)
           }
+          // GPT shortens title + max 4 bullets
+          const shortTitle = await shortenTitle(productName, creativity)
+          const topBullets = cardBullets.slice(0, 4)
+          const bulletEmojis = await generateBulletEmojis(topBullets)
+          // Flux scene as bg, product composited separately, text never overlaps product
           const cardBuf = await renderAllLayouts(allPhotos[0], shortTitle, topBullets, chosenLayout, cardPreset, RMBG, sceneUrl || undefined, bulletEmojis, category)
-          const url = await saveBuf(supabase, cardBuf, user.id, 'cards')
+          results.push(await saveBuf(supabase, cardBuf, user.id, 'cards'))
           console.log(`[card ${i+1}] done ✅`)
-          return url
-        } catch (e: any) {
-          console.error(`card ${i+1} FAILED: ${e?.message || String(e)}`)
-          console.error(`card ${i+1} stack: ${e?.stack?.slice(0,300) || 'no stack'}`)
-          return null
-        }
-      })
-
-      const cardResults = await Promise.all(cardPromises)
-      console.log(`Promise.all done: ${cardResults.filter(Boolean).length}/${cardResults.length} cards OK`)
-      cardResults.forEach(url => { if (url) results.push(url) })
-      console.log(`Total results: ${results.length}`)
+        } catch (e) { console.error(`card ${i}:`, e) }
+      }
     }
     // ── PHOTO MODE ────────────────────────────────────────────────────────────
     else {
@@ -731,7 +670,6 @@ export async function POST(req: NextRequest) {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Server error'
     console.error('Studio error:', msg)
-    console.error('Route error:', msg)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

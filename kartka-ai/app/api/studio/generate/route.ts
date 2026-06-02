@@ -153,25 +153,35 @@ async function renderAllLayouts(
     } catch {}
   }
 
-  // ── 2. Generate DALL-E background ─────────────────────────────────────────
-  const dallePrompt = `Abstract dark atmospheric background for a product card. Style: ${preset.sceneStyle}. NO text, NO letters, NO products, NO people, NO faces. Pure background texture only. Dark moody tones with subtle depth.`
-  let bgBuf: Buffer | null = null
-  try {
-    const imgResp = await openai.images.generate({
-      model: 'dall-e-3', prompt: dallePrompt, n: 1,
-      size: '1024x1792', quality: 'standard',
-    })
-    const url = imgResp.data[0]?.url
-    if (url) {
-      const r = await fetch(url)
-      bgBuf = Buffer.from(await r.arrayBuffer())
-    }
-  } catch (e) { console.error('DALL-E bg failed:', e) }
+  // ── 2. Background: Flux scene → blurred product photo → solid dark ─────────
+  let bgFull: Buffer
 
-  // Resize bg to full card size
-  const bgFull = bgBuf
-    ? await sharp(bgBuf).resize(W, H, { fit: 'cover', position: 'centre' }).jpeg({ quality: 90 }).toBuffer()
-    : await sharp({ create: { width: W, height: H, channels: 3, background: { r: 15, g: 15, b: 15 } } }).jpeg().toBuffer()
+  if (fluxBgUrl) {
+    // Best: use Flux-generated scene
+    try {
+      const r = await fetch(fluxBgUrl)
+      const buf = Buffer.from(await r.arrayBuffer())
+      bgFull = await sharp(buf).resize(W, H, { fit: 'cover', position: 'centre' }).jpeg({ quality: 92 }).toBuffer()
+      console.log('bg: flux scene ✅')
+    } catch (e) {
+      console.error('Flux bg fetch failed:', e)
+      bgFull = await sharp({ create: { width: W, height: H, channels: 3, background: { r: 15, g: 15, b: 15 } } }).jpeg().toBuffer()
+    }
+  } else {
+    // Fallback: blur product photo as background (always works, looks decent)
+    try {
+      const rawBuf = m ? Buffer.from(m[2], 'base64') : Buffer.from(productPhoto, 'base64')
+      bgFull = await sharp(rawBuf)
+        .resize(W, H, { fit: 'cover', position: 'centre' })
+        .blur(28)
+        .modulate({ brightness: 0.45, saturation: 0.6 })
+        .jpeg({ quality: 88 })
+        .toBuffer()
+      console.log('bg: blurred product photo ✅')
+    } catch {
+      bgFull = await sharp({ create: { width: W, height: H, channels: 3, background: { r: 15, g: 15, b: 15 } } }).jpeg().toBuffer()
+    }
+  }
 
   // ── 3. Prepare product cutout ──────────────────────────────────────────────
   // Size and position depends on layout

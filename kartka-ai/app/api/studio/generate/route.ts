@@ -425,27 +425,6 @@ async function renderAllLayouts(
 }
 
 
-
-async function uploadPhoto(supabase: any, b64: string, uid: string, folder: string): Promise<string | null> {
-  try {
-    const m = b64.match(/^data:(image\/[\w+]+);base64,(.+)$/s)
-    if (!m) return null
-    const buf = Buffer.from(m[2], 'base64')
-    const fn = `${folder}/${uid}/${Date.now()}.jpg`
-    const { error } = await supabase.storage.from('card-images').upload(fn, buf, { contentType: 'image/jpeg' })
-    if (error) { console.error('uploadPhoto error:', error); return null }
-    return supabase.storage.from('card-images').getPublicUrl(fn).data.publicUrl
-  } catch { return null }
-}
-
-async function saveBuf(supabase: any, buf: Buffer, uid: string, folder: string): Promise<string> {
-  try {
-    const fn = `${folder}/${uid}/${Date.now()}.jpg`
-    await supabase.storage.from('card-images').upload(fn, buf, { contentType: 'image/jpeg' })
-    return supabase.storage.from('card-images').getPublicUrl(fn).data.publicUrl
-  } catch { return `data:image/jpeg;base64,${buf.toString('base64')}` }
-}
-
 // ─── Main Handler ─────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
@@ -487,9 +466,6 @@ export async function POST(req: NextRequest) {
       const cardBullets = (bullets as string[]).filter(Boolean)
       if (!cardBullets.length) return NextResponse.json({ error: 'Додайте переваги товару' }, { status: 400 })
       if (!REPLICATE) return NextResponse.json({ error: 'Потрібен REPLICATE_API_TOKEN' }, { status: 503 })
-
-      const photoUrl = await uploadPhoto(supabase, allPhotos[0], user.id, 'card-input')
-      if (!photoUrl) return NextResponse.json({ error: 'Помилка завантаження фото' }, { status: 500 })
 
       const preset = PRESETS[cardPreset] || PRESETS.urban
       const layouts: ('split'|'diagonal'|'radial'|'bold')[] = ['split','diagonal','radial','bold']

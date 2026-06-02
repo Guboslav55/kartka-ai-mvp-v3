@@ -154,30 +154,21 @@ async function renderAllLayouts(
     } catch {}
   }
 
-  // ── 2. Background: Flux scene → blurred product photo → solid dark ─────────
+  // ── 2. Background: Flux scene → blurred photo → solid dark ───────────────
   let bgFull: Buffer
-
   if (fluxBgUrl) {
-    // Best: use Flux-generated scene
     try {
       const r = await fetch(fluxBgUrl)
-      const buf = Buffer.from(await r.arrayBuffer())
-      bgFull = await sharp(buf).resize(W, H, { fit: 'cover', position: 'centre' }).jpeg({ quality: 92 }).toBuffer()
+      bgFull = await sharp(Buffer.from(await r.arrayBuffer())).resize(W, H, { fit: 'cover', position: 'centre' }).jpeg({ quality: 92 }).toBuffer()
       console.log('bg: flux scene ✅')
     } catch (e) {
       console.error('Flux bg fetch failed:', e)
       bgFull = await sharp({ create: { width: W, height: H, channels: 3, background: { r: 15, g: 15, b: 15 } } }).jpeg().toBuffer()
     }
   } else {
-    // Fallback: blur product photo as background (always works, looks decent)
     try {
       const rawBuf = m ? Buffer.from(m[2], 'base64') : Buffer.from(productPhoto, 'base64')
-      bgFull = await sharp(rawBuf)
-        .resize(W, H, { fit: 'cover', position: 'centre' })
-        .blur(28)
-        .modulate({ brightness: 0.45, saturation: 0.6 })
-        .jpeg({ quality: 88 })
-        .toBuffer()
+      bgFull = await sharp(rawBuf).resize(W, H, { fit: 'cover', position: 'centre' }).blur(28).modulate({ brightness: 0.45, saturation: 0.6 }).jpeg({ quality: 88 }).toBuffer()
       console.log('bg: blurred product photo ✅')
     } catch {
       bgFull = await sharp({ create: { width: W, height: H, channels: 3, background: { r: 15, g: 15, b: 15 } } }).jpeg().toBuffer()
@@ -408,6 +399,46 @@ async function renderAllLayouts(
       if (bLines[1]) {
         ctx.fillStyle = 'rgba(255,255,255,0.60)'; ctx.font = `${bFS2 - 4}px ${FF}`
         ctx.fillText(bLines[1], bx + iconR2 * 2 + 18, by + bH3 / 2 + bFS2 * 1.1)
+      }
+    }
+    drawBottomBar()
+  } else { // bold
+    const BARH2 = 90
+    const bH4 = 82, bGap4 = 14
+    const rows4 = Math.ceil(bs.length / 2)
+    const gridH4 = rows4 * bH4 + (rows4 - 1) * bGap4
+    const gridStart4 = H - BARH2 - 24 - gridH4
+    const gt4 = ctx.createLinearGradient(0, 0, 0, H * 0.24)
+    gt4.addColorStop(0, 'rgba(0,0,0,0.96)'); gt4.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = gt4; ctx.fillRect(0, 0, W, H * 0.24)
+    const gb4 = ctx.createLinearGradient(0, gridStart4 - 70, 0, H)
+    gb4.addColorStop(0, 'rgba(0,0,0,0)'); gb4.addColorStop(1, 'rgba(0,0,0,0.96)')
+    ctx.fillStyle = gb4; ctx.fillRect(0, gridStart4 - 70, W, H - gridStart4 + 70)
+    ctx.fillStyle = accent; ctx.fillRect(0, 0, W, 10)
+    const titleFS4 = Math.min(100, Math.round(W * 0.087))
+    const titleLines4 = wrapText(name.toUpperCase(), W * 0.88, `bold ${titleFS4}px ${FF}`)
+    ctx.fillStyle = '#FFF'; ctx.font = `bold ${titleFS4}px ${FF}`; ctx.textAlign = 'center'
+    let ty4 = 18 + titleFS4
+    for (const line of titleLines4.slice(0, 2)) { ctx.fillText(line, W / 2, ty4); ty4 += titleFS4 + 6 }
+    ctx.fillStyle = hexAlpha(accent, 0.9)
+    ctx.beginPath(); ctx.roundRect(W / 2 - 130, ty4 + 8, 260, 8, 4); ctx.fill()
+    ctx.textAlign = 'left'
+    const colW4 = (W - 48) / 2, bFS4 = 25, iconR4 = 22
+    for (let i4 = 0; i4 < Math.min(bs.length, 4); i4++) {
+      const clean4 = bs[i4].replace(/^[•✓\-]\s*/, '')
+      const col4 = i4 % 2, row4 = Math.floor(i4 / 2)
+      const bx4 = 16 + col4 * (colW4 + 16), by4 = gridStart4 + row4 * (bH4 + bGap4)
+      ctx.fillStyle = 'rgba(0,0,0,0.84)'; ctx.beginPath(); ctx.roundRect(bx4, by4, colW4, bH4, 16); ctx.fill()
+      ctx.fillStyle = accent; ctx.beginPath(); ctx.roundRect(bx4, by4, colW4, 8, [8,8,0,0]); ctx.fill()
+      ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(bx4 + iconR4 + 8, by4 + bH4 / 2 + 4, iconR4, 0, Math.PI * 2); ctx.fill()
+      ctx.fillStyle = '#000'; ctx.font = `bold 16px ${FF}`; ctx.textAlign = 'center'
+      ctx.fillText(String(i4 + 1), bx4 + iconR4 + 8, by4 + bH4 / 2 + 10); ctx.textAlign = 'left'
+      const bLines4 = wrapText(clean4, colW4 - iconR4 * 2 - 26, `bold ${bFS4}px ${FF}`)
+      ctx.fillStyle = '#FFF'; ctx.font = `bold ${bFS4}px ${FF}`
+      ctx.fillText(bLines4[0] || '', bx4 + iconR4 * 2 + 18, by4 + bH4 / 2 + bFS4 * 0.5)
+      if (bLines4[1]) {
+        ctx.fillStyle = 'rgba(255,255,255,0.60)'; ctx.font = `${bFS4 - 4}px ${FF}`
+        ctx.fillText(bLines4[1], bx4 + iconR4 * 2 + 18, by4 + bH4 / 2 + bFS4 * 1.1)
       }
     }
     drawBottomBar()

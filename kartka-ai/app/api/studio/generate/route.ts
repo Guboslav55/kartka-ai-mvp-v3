@@ -425,6 +425,43 @@ async function renderAllLayouts(
 }
 
 
+
+// ─── Upload base64 photo to Supabase storage ──────────────────────────────────
+async function uploadPhoto(
+  supabase: ReturnType<typeof import('@supabase/supabase-js').createClient>,
+  base64: string,
+  userId: string,
+  folder: string
+): Promise<string | null> {
+  try {
+    const m = base64.match(/^data:(image\/[\w+]+);base64,(.+)$/s)
+    const buf = m ? Buffer.from(m[2], 'base64') : Buffer.from(base64, 'base64')
+    const ext = m?.[1]?.split('/')[1] || 'jpg'
+    const path = `${folder}/${userId}/${Date.now()}.${ext}`
+    const { error } = await supabase.storage.from('studio').upload(path, buf, {
+      contentType: m?.[1] || 'image/jpeg', upsert: true
+    })
+    if (error) { console.error('uploadPhoto error:', error); return null }
+    const { data } = supabase.storage.from('studio').getPublicUrl(path)
+    return data.publicUrl
+  } catch (e) { console.error('uploadPhoto exception:', e); return null }
+}
+
+// ─── Save buffer to Supabase storage ─────────────────────────────────────────
+async function saveBuf(
+  supabase: ReturnType<typeof import('@supabase/supabase-js').createClient>,
+  buf: Buffer,
+  userId: string,
+  folder: string
+): Promise<string> {
+  const path = `${folder}/${userId}/${Date.now()}.jpg`
+  await supabase.storage.from('studio').upload(path, buf, {
+    contentType: 'image/jpeg', upsert: true
+  })
+  const { data } = supabase.storage.from('studio').getPublicUrl(path)
+  return data.publicUrl
+}
+
 // ─── Main Handler ─────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {

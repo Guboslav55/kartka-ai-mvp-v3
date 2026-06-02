@@ -175,28 +175,18 @@ async function renderAllLayouts(
     }
   }
 
-  // ── 3. Prepare product cutout ──────────────────────────────────────────────
-  // Size and position depends on layout
-  let prodW: number, prodH: number, prodLeft: number, prodTop: number
+  // ── 3. Product cutout — only for Split (others use Flux scene directly) ────
+  let productResized: Buffer | null = null
+  let prodW = 0, prodH = 0, prodLeft = 0, prodTop = 0
 
   if (layout === 'split') {
     const COL = Math.round(W * 0.385)
-    prodW = W - COL - 60;  prodH = H - BARH - 60
-    prodLeft = COL + 30;   prodTop = 30
-  } else if (layout === 'diagonal') {
-    prodW = Math.round(W * 0.70);  prodH = Math.round(H * 0.65)
-    prodLeft = Math.round(W * 0.28); prodTop = Math.round(H * 0.17)
-  } else if (layout === 'radial') {
-    prodW = Math.round(W * 0.78);  prodH = Math.round(H * 0.52)
-    prodLeft = Math.round(W * 0.11); prodTop = Math.round(H * 0.20)
-  } else { // bold
-    prodW = Math.round(W * 0.82);  prodH = Math.round(H * 0.52)
-    prodLeft = Math.round(W * 0.09); prodTop = Math.round(H * 0.17)
+    prodW = W - COL - 80;  prodH = H - BARH - 80
+    prodLeft = COL + 40;   prodTop = 40
+    productResized = await sharp(productBuf)
+      .resize(prodW, prodH, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .png().toBuffer()
   }
-
-  const productResized = await sharp(productBuf)
-    .resize(prodW, prodH, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-    .png().toBuffer()
 
   // ── 4. Canvas: draw text overlays ─────────────────────────────────────────
   const canvas = createCanvas(W, H)
@@ -449,18 +439,17 @@ async function renderAllLayouts(
   const textOverlay = canvas.toBuffer('image/png')
 
   // ── 5. Sharp composite ─────────────────────────────────────────────────────
-  const compositeInputs: sharp.OverlayOptions[] = [
-    { input: textOverlay, top: 0, left: 0 },
-    { input: productResized, top: prodTop, left: prodLeft },
-  ]
+  const compositeInputs: sharp.OverlayOptions[] = []
 
-  // For split: dark right zone behind product
-  if (layout === 'split') {
+  if (layout === 'split' && productResized) {
     const COL = Math.round(W * 0.385)
-    const rightBg = await sharp({ create: { width: W - COL - 4, height: H - BARH, channels: 3, background: { r: 12, g: 12, b: 12 } } })
-      .jpeg().toBuffer()
-    compositeInputs.unshift({ input: rightBg, top: 0, left: COL + 4 })
+    const rightBg = await sharp({
+      create: { width: W - COL - 4, height: H - BARH, channels: 3, background: { r: 10, g: 10, b: 10 } }
+    }).jpeg().toBuffer()
+    compositeInputs.push({ input: rightBg, top: 0, left: COL + 4 })
+    compositeInputs.push({ input: productResized, top: prodTop, left: prodLeft })
   }
+  compositeInputs.push({ input: textOverlay, top: 0, left: 0 })
 
   return sharp(bgFull)
     .composite(compositeInputs)

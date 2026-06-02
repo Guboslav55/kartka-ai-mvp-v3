@@ -303,13 +303,21 @@ async function renderAllLayouts(
     }
   }
 
+  // Smart sizes by category
+  const catL = (category || '').toLowerCase()
+  let sizesLine = 'XS · S · M · L · XL · 2XL · 3XL'
+  if (catL.includes('взутт') || catL.includes('обувь')) sizesLine = '36 · 37 · 38 · 39 · 40 · 41 · 42 · 43'
+  else if (catL.includes('окуляр') || catL.includes('аксес') || catL.includes('сумк') || catL.includes('ремін')) sizesLine = 'ONE SIZE'
+  else if (catL.includes('електрон') || catL.includes('техніка') || catL.includes('гаджет')) sizesLine = 'В НАЯВНОСТІ'
+  else if (catL.includes('дит')) sizesLine = 'XS · S · M · L · XL'
+
   // Bottom bar (shared by all layouts)
   function drawBottomBar() {
     ctx.fillStyle = accent; ctx.fillRect(0, H - BARH, W, BARH)
     ctx.fillStyle = 'rgba(0,0,0,0.50)'; ctx.font = `bold 16px ${FF}`; ctx.textAlign = 'center'
     ctx.fillText('РОЗМІРИ', W / 2, H - BARH + 22)
     ctx.fillStyle = '#000000'; ctx.font = `bold 32px ${FF}`
-    ctx.fillText('XS · S · M · L · XL · 2XL · 3XL', W / 2, H - BARH / 2 + 16)
+    ctx.fillText(sizesLine, W / 2, H - BARH / 2 + 16)
     ctx.textAlign = 'left'
   }
 
@@ -639,7 +647,7 @@ export async function POST(req: NextRequest) {
       if (!cardBullets.length) return NextResponse.json({ error: 'Додайте переваги товару' }, { status: 400 })
       if (!REPLICATE) return NextResponse.json({ error: 'Потрібен REPLICATE_API_TOKEN' }, { status: 503 })
 
-      const preset = { ...(PRESETS[cardPreset] || PRESETS.urban), _category: category || '' }
+      const preset = PRESETS[cardPreset] || PRESETS.urban
       // Use layout chosen by user for ALL cards (each gets unique Flux background)
       const userLayout = (cardLayout || 'split') as 'split'|'diagonal'|'radial'|'bold'
 

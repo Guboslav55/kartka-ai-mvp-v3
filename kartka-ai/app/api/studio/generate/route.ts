@@ -484,6 +484,196 @@ async function makeCatalog(b64: string, rmbgKey?: string): Promise<Buffer> {
     .composite([{input:rs,top:PAD,left:PAD}]).jpeg({quality:95}).toBuffer()
 }
 
+
+// ─── SPLIT: DALL-E column bg + Sharp composite ────────────────────────────────
+async function renderSplitCard(
+  productPhoto: string,   // base64 of original product photo
+  name: string,
+  bullets: string[],
+  cardPreset: string,
+  rmbgKey?: string
+): Promise<Buffer> {
+  const sharp = (await import('sharp')).default
+  const { createCanvas, GlobalFonts } = await import('@napi-rs/canvas')
+
+  const fontBold = findFont(true)
+  if (fontBold) try { GlobalFonts.registerFromPath(fontBold, 'CF') } catch {}
+  const FF = fontBold ? 'CF' : 'Arial'
+
+  const preset = PRESETS[cardPreset] || PRESETS.urban
+  const { accent } = preset
+  const W = 1080, H = 1440
+  const BARH = 88
+  const COL = Math.round(W * 0.385)   // left column width
+  const PAD = 40
+
+  // ── 1. Generate DALL-E abstract bg for left column ──
+  const colPrompt = `Abstract dark background texture for a product card left panel. Style: ${preset.sceneStyle}. No text, no letters, no products, no people. Dark moody atmosphere with subtle geometric patterns or bokeh. Vertical rectangle.`
+  let colBgBuf: Buffer | null = null
+  try {
+    const imgResp = await openai.images.generate({
+      model: 'dall-e-3',
+      prompt: colPrompt,
+      n: 1,
+      size: '1024x1792',
+      quality: 'standard',
+    })
+    const url = imgResp.data[0]?.url
+    if (url) {
+      const r = await fetch(url)
+      colBgBuf = Buffer.from(await r.arrayBuffer())
+    }
+  } catch (e) { console.error('DALL-E col bg failed:', e) }
+
+  // ── 2. Remove background from product photo ──
+  const m = productPhoto.match(/^data:(image\/[\w+]+);base64,(.+)$/s)
+  let productBuf = m ? Buffer.from(m[2], 'base64') : Buffer.from(productPhoto, 'base64')
+  if (rmbgKey) {
+    try {
+      const fd = new FormData()
+      fd.append('image_file', new Blob([productBuf], { type: m?.[1] || 'image/jpeg' }), 'p.jpg')
+      fd.append('size', 'auto')
+      const r = await fetch('https://api.remove.bg/v1.0/removebg', { method: 'POST', headers: { 'X-Api-Key': rmbgKey }, body: fd })
+      if (r.ok) productBuf = Buffer.from(await r.arrayBuffer())
+    } catch {}
+  }
+
+  // ── 3. Prepare right column (photo zone): W - COL wide, H - BARH tall ──
+  const rightW = W - COL
+  const rightH = H - BARH
+
+  // Resize product to fit right zone with padding
+  const RPAD = 60
+  const productResized = await sharp(productBuf)
+    .resize(rightW - RPAD * 2, rightH - RPAD * 2, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png().toBuffer()
+
+  // Resize left column AI bg to COL × (H - BARH)
+  let leftColBg: Buffer
+  if (colBgBuf) {
+    leftColBg = await sharp(colBgBuf).resize(COL, H - BARH, { fit: 'cover', position: 'centre' }).jpeg({ quality: 90 }).toBuffer()
+  } else {
+    // Fallback: solid dark
+    leftColBg = await sharp({ create: { width: COL, height: H - BARH, channels: 3, background: { r: 15, g: 15, b: 15 } } }).jpeg().toBuffer()
+  }
+
+  // ── 4. Canvas: draw text overlay on left column ──
+  const colCanvas = createCanvas(COL, H - BARH)
+  const ctx = colCanvas.getContext('2d')
+
+  function hexAlpha(hex: string, a: number) {
+    const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16)
+    return `rgba(${r},${g},${b},${a})`
+  }
+  function wrapText(text: string, maxW: number, font: string): string[] {
+    ctx.font = font
+    const words = text.split(' '), lines: string[] = []
+    let cur = ''
+    for (const w of words) {
+      const t = cur ? cur + ' ' + w : w
+      if (ctx.measureText(t).width <= maxW) { cur = t }
+      else { if (cur) lines.push(cur); cur = w }
+    }
+    if (cur) lines.push(cur)
+    return lines
+  }
+
+  // Dark overlay on col bg for readability
+  ctx.fillStyle = 'rgba(0,0,0,0.55)'
+  ctx.fillRect(0, 0, COL, H - BARH)
+
+  // Accent left stripe
+  ctx.fillStyle = accent; ctx.fillRect(0, 0, 8, H - BARH)
+
+  // Title
+  const maxTW = COL - PAD - 16
+  const titleFS = Math.min(96, Math.round(maxTW * 0.26))
+  const titleLines = wrapText(name.toUpperCase(), maxTW, `bold ${titleFS}px ${FF}`)
+  ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${titleFS}px ${FF}`
+  let ty = 60 + titleFS
+  for (const line of titleLines.slice(0, 3)) {
+    ctx.fillText(line, PAD, ty); ty += titleFS + 6
+  }
+  ctx.fillStyle = accent; ctx.fillRect(PAD, ty + 10, Math.round(maxTW * 0.6), 5)
+  ty += 36
+
+  // Bullets evenly distributed
+  const bs = bullets.filter(Boolean).slice(0, 5)
+  const availH = (H - BARH) - ty - 20
+  const bH = Math.min(110, Math.round(availH / bs.length) - 12)
+  const bGap = Math.round((availH - bH * bs.length) / Math.max(bs.length - 1, 1))
+  const bFS = 26, iconR = 24, bw = COL - PAD
+
+  for (let i = 0; i < bs.length; i++) {
+    const clean = bs[i].replace(/^[•✓\-]\s*/, '')
+    const bx = PAD - 8
+    const by = ty + i * (bH + bGap)
+
+    ctx.fillStyle = 'rgba(0,0,0,0.65)'
+    ctx.beginPath(); ctx.roundRect(bx, by, bw, bH, 14); ctx.fill()
+
+    ctx.fillStyle = accent
+    ctx.beginPath(); ctx.arc(bx + iconR + 8, by + bH / 2, iconR, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = '#000000'
+    ctx.font = `bold ${Math.round(iconR * 0.85)}px ${FF}`; ctx.textAlign = 'center'
+    ctx.fillText(String(i + 1), bx + iconR + 8, by + bH / 2 + Math.round(iconR * 0.32))
+    ctx.textAlign = 'left'
+
+    const textX = bx + iconR * 2 + 20
+    const bLines = wrapText(clean, bw - iconR * 2 - 28, `bold ${bFS}px ${FF}`)
+    ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${bFS}px ${FF}`
+    ctx.fillText(bLines[0] || '', textX, by + (bLines[1] ? bH / 2 - 2 : bH / 2 + bFS * 0.35))
+    if (bLines[1]) {
+      ctx.fillStyle = 'rgba(255,255,255,0.60)'; ctx.font = `${bFS - 5}px ${FF}`
+      ctx.fillText(bLines[1], textX, by + bH / 2 + bFS * 0.6)
+    }
+  }
+
+  const textOverlay = colCanvas.toBuffer('image/png')
+
+  // ── 5. Sharp composite final card ──
+  // Canvas: W × H, left col = AI bg + text overlay, right = dark bg + product, bottom bar
+  const accentRGB = { r: parseInt(accent.slice(1,3),16), g: parseInt(accent.slice(3,5),16), b: parseInt(accent.slice(5,7),16) }
+  const bgRGB = { r: 15, g: 15, b: 15 }
+
+  // Bottom bar
+  const barBuf = await sharp({ create: { width: W, height: BARH, channels: 3, background: accentRGB } }).jpeg().toBuffer()
+
+  // Right zone: dark bg
+  const rightBg = await sharp({ create: { width: rightW, height: rightH, channels: 3, background: bgRGB } })
+    .composite([{ input: productResized, top: Math.round((rightH - (await sharp(productResized).metadata()).height!) / 2), left: RPAD }])
+    .jpeg({ quality: 92 }).toBuffer()
+    .catch(async () => {
+      // fallback if centering fails
+      return sharp({ create: { width: rightW, height: rightH, channels: 3, background: bgRGB } })
+        .composite([{ input: productResized, top: RPAD, left: RPAD }])
+        .jpeg({ quality: 92 }).toBuffer()
+    })
+
+  // Separator line between left and right
+  const sepBuf = await sharp({ create: { width: 4, height: H - BARH, channels: 3, background: accentRGB } }).jpeg().toBuffer()
+
+  // Bottom bar text overlay via canvas
+  const barCanvas = createCanvas(W, BARH)
+  const bCtx = barCanvas.getContext('2d')
+  bCtx.fillStyle = accent; bCtx.fillRect(0, 0, W, BARH)
+  bCtx.fillStyle = '#000000'; bCtx.font = `bold 30px ${FF}`; bCtx.textAlign = 'center'
+  bCtx.fillText('XS · S · M · L · XL · 2XL · 3XL', W / 2, BARH / 2 + 11)
+  const barPng = barCanvas.toBuffer('image/png')
+
+  const finalBuf = await sharp({ create: { width: W, height: H, channels: 3, background: bgRGB } })
+    .composite([
+      { input: leftColBg,    top: 0,         left: 0 },
+      { input: textOverlay,  top: 0,         left: 0 },
+      { input: rightBg,      top: 0,         left: COL + 4 },
+      { input: sepBuf,       top: 0,         left: COL },
+      { input: barPng,       top: H - BARH,  left: 0 },
+    ])
+    .jpeg({ quality: 95 }).toBuffer()
+
+  return finalBuf
+}
+
 // ─── Main Handler ─────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
@@ -548,7 +738,12 @@ export async function POST(req: NextRequest) {
           // GPT shortens title + max 4 bullets for bigger, readable text
           const shortTitle = await shortenTitle(productName, creativity)
           const topBullets = cardBullets.slice(0, 4)
-          const cardBuf = await renderCard(sceneUrl, null, shortTitle, topBullets, chosenLayout, cardPreset)
+          let cardBuf: Buffer
+          if (chosenLayout === 'split') {
+            cardBuf = await renderSplitCard(allPhotos[0], shortTitle, topBullets, cardPreset, RMBG)
+          } else {
+            cardBuf = await renderCard(sceneUrl, null, shortTitle, topBullets, chosenLayout, cardPreset)
+          }
           results.push(await saveBuf(supabase, cardBuf, user.id, 'cards'))
           console.log(`[card ${i+1}] done ✅`)
         } catch (e) { console.error(`card ${i}:`, e) }

@@ -121,7 +121,8 @@ async function renderAllLayouts(
   bullets: string[],
   layout: 'split' | 'diagonal' | 'radial' | 'bold',
   cardPreset: string,
-  rmbgKey?: string
+  rmbgKey?: string,
+  fluxBgUrl?: string
 ): Promise<Buffer> {
   const sharp = (await import('sharp')).default
   const { createCanvas, GlobalFonts } = await import('@napi-rs/canvas')
@@ -153,22 +154,19 @@ async function renderAllLayouts(
     } catch {}
   }
 
-  // ── 2. Generate DALL-E background ─────────────────────────────────────────
-  const dallePrompt = `Abstract dark atmospheric background for a product card. Style: ${preset.sceneStyle}. NO text, NO letters, NO products, NO people, NO faces. Pure background texture only. Dark moody tones with subtle depth.`
+  // ── 2. Background: Flux scene if provided, else DALL-E fallback ───────────
   let bgBuf: Buffer | null = null
-  try {
-    const imgResp = await openai.images.generate({
-      model: 'dall-e-3', prompt: dallePrompt, n: 1,
-      size: '1024x1792', quality: 'standard',
-    })
-    const url = imgResp.data[0]?.url
-    if (url) {
-      const r = await fetch(url)
-      bgBuf = Buffer.from(await r.arrayBuffer())
-    }
-  } catch (e) { console.error('DALL-E bg failed:', e) }
-
-  // Resize bg to full card size
+  if (fluxBgUrl) {
+    try { const r = await fetch(fluxBgUrl); bgBuf = Buffer.from(await r.arrayBuffer()) }
+    catch (e) { console.error('Flux bg fetch failed:', e) }
+  } else {
+    const dallePrompt = `Abstract dark atmospheric background for a product card. Style: ${preset.sceneStyle}. NO text, NO letters, NO products, NO people, NO faces. Pure background texture only. Dark moody tones with subtle depth.`
+    try {
+      const imgResp = await openai.images.generate({ model: 'dall-e-3', prompt: dallePrompt, n: 1, size: '1024x1792', quality: 'standard' })
+      const url = imgResp.data[0]?.url
+      if (url) { const r = await fetch(url); bgBuf = Buffer.from(await r.arrayBuffer()) }
+    } catch (e) { console.error('DALL-E bg failed:', e) }
+  }
   const bgFull = bgBuf
     ? await sharp(bgBuf).resize(W, H, { fit: 'cover', position: 'centre' }).jpeg({ quality: 90 }).toBuffer()
     : await sharp({ create: { width: W, height: H, channels: 3, background: { r: 15, g: 15, b: 15 } } }).jpeg().toBuffer()
@@ -425,32 +423,6 @@ async function renderAllLayouts(
 }
 
 
-
-async function uploadPhoto(_supabase: any, b64: string, uid: string, folder: string): Promise<string | null> {
-  try {
-    const { createClient } = await import('@supabase/supabase-js')
-    const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
-    const m = b64.match(/^data:(image\/[\w+]+);base64,(.+)$/s)
-    if (!m) return null
-    const buf = Buffer.from(m[2], 'base64')
-    const fn = `${folder}/${uid}/${Date.now()}.jpg`
-    const { error } = await admin.storage.from('card-images').upload(fn, buf, { contentType: 'image/jpeg' })
-    if (error) { console.error('uploadPhoto error:', error); return null }
-    return admin.storage.from('card-images').getPublicUrl(fn).data.publicUrl
-  } catch (e) { console.error('uploadPhoto ex:', e); return null }
-}
-
-async function saveBuf(_supabase: any, buf: Buffer, uid: string, folder: string): Promise<string> {
-  try {
-    const { createClient } = await import('@supabase/supabase-js')
-    const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
-    const fn = `${folder}/${uid}/${Date.now()}.jpg`
-    const { error } = await admin.storage.from('card-images').upload(fn, buf, { contentType: 'image/jpeg' })
-    if (error) { console.error('saveBuf error:', error); return `data:image/jpeg;base64,${buf.toString('base64')}` }
-    return admin.storage.from('card-images').getPublicUrl(fn).data.publicUrl
-  } catch (e) { console.error('saveBuf ex:', e); return `data:image/jpeg;base64,${buf.toString('base64')}` }
-}
-
 // ─── Main Handler ─────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
@@ -491,6 +463,11 @@ export async function POST(req: NextRequest) {
     if (mode === 'card') {
       const cardBullets = (bullets as string[]).filter(Boolean)
       if (!cardBullets.length) return NextResponse.json({ error: 'Додайте переваги товару' }, { status: 400 })
+      if (!REPLICATE) return NextResponse.json({ error: 'Потрібен REPLICATE_API_TOKEN' }, { status: 503 })
+
+      const photoUrl = await uploadPhoto(supabase, allPhotos[0], user.id, 'card-input')
+      if (!photoUrl) return NextResponse.json({ error: 'Помилка завантаження фото' }, { status: 500 })
+
       const preset = PRESETS[cardPreset] || PRESETS.urban
       const layouts: ('split'|'diagonal'|'radial'|'bold')[] = ['split','diagonal','radial','bold']
 
@@ -498,13 +475,17 @@ export async function POST(req: NextRequest) {
         try {
           const chosenLayout = layouts[i % layouts.length]
 
-          // Flux generates scene (portrait 2:3, product preserved)
-          // Analyse product to build a matching background prompt
-          console.log(`[card ${i+1}] layout:${chosenLayout} dalle...`)
-          // GPT shortens title + max 4 bullets for bigger, readable text
+          // Flux generates beautiful scene as background
+          const bgPrompt = await buildMatchingBackground(allPhotos[0], productName, category, preset, i, creativity)
+          const fluxPrompt = `CRITICAL: Keep the main product COMPLETELY UNCHANGED. ONLY change the background. ${bgPrompt} Professional ecommerce photography. Portrait orientation.`
+          console.log(`[card ${i+1}] layout:${chosenLayout} flux...`)
+          const sceneUrl = await runFlux(photoUrl, fluxPrompt, REPLICATE)
+          if (!sceneUrl) { console.warn(`Card ${i+1}: Flux failed`) }
+          // GPT shortens title + max 4 bullets
           const shortTitle = await shortenTitle(productName, creativity)
           const topBullets = cardBullets.slice(0, 4)
-          const cardBuf = await renderAllLayouts(allPhotos[0], shortTitle, topBullets, chosenLayout, cardPreset, RMBG)
+          // Flux scene = bg, product cutout composited separately, text never overlaps product
+          const cardBuf = await renderAllLayouts(allPhotos[0], shortTitle, topBullets, chosenLayout, cardPreset, RMBG, sceneUrl || undefined)
           results.push(await saveBuf(supabase, cardBuf, user.id, 'cards'))
           console.log(`[card ${i+1}] done ✅`)
         } catch (e) { console.error(`card ${i}:`, e) }

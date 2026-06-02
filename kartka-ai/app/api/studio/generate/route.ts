@@ -10,9 +10,10 @@ const COST = 4
 
 // ─── Font loader ──────────────────────────────────────────────────────────────
 function findFont(bold: boolean): string {
+  // Inter first (modern, professional), then fallbacks
   const names = bold
-    ? ['ARIALBD.TTF','ARIBLK.TTF','arialbd.ttf','DejaVuSans-Bold.ttf']
-    : ['ARIAL.TTF','arial.ttf','DejaVuSans.ttf']
+    ? ['Inter.ttf', 'ARIALBD.TTF', 'ARIBLK.TTF', 'arialbd.ttf', 'DejaVuSans-Bold.ttf']
+    : ['Inter.ttf', 'ARIAL.TTF', 'arial.ttf', 'DejaVuSans.ttf']
   const dirs = [
     '/var/task/kartka-ai/public/fonts',
     path.join(process.cwd(), 'public/fonts'),

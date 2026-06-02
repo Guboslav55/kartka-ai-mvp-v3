@@ -34,8 +34,12 @@ async function shortenTitle(name: string, creativity: number): Promise<string> {
       messages: [{ role: 'user', content: 'Shorten this product name for a marketplace card.\nProduct: "' + name + '"\nRules:\n- Max 12 chars per line, 2 lines max\n- Keep product type + brand/material\n- Remove: prepositions, repeated adjectives\n- Do NOT add new words not in original name\n- Match input language (Ukrainian/Russian)\nReturn ONLY uppercase shortened title:' }],
       max_tokens: 20, temperature: Math.max(0.1, creativity * 0.4),
     })
-    const t = (r.choices[0]?.message?.content?.trim() || name).toUpperCase()
-    return t.slice(0, 28)
+    const t = (r.choices[0]?.message?.content?.trim() || name)
+      .toUpperCase()
+      .replace(/\n/g, ' ')      // remove newlines GPT sometimes adds
+      .replace(/\s{2,}/g, ' ')  // collapse multiple spaces
+      .trim()
+    return t.slice(0, 32)
   } catch { return name.toUpperCase().slice(0, 28) }
 }
 

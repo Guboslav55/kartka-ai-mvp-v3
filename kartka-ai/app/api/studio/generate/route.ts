@@ -114,382 +114,12 @@ const PRESETS: Record<string, { accent: string; bg: string; textColor: string; s
 }
 
 // ─── Layout Engine using @napi-rs/canvas ─────────────────────────────────────
-async function renderCard(
-  sceneUrl: string,
-  _productUrl: string | null,
+// ─── Universal card renderer: DALL-E bg + Sharp composite + Canvas text ───────
+async function renderAllLayouts(
+  productPhoto: string,
   name: string,
   bullets: string[],
   layout: 'split' | 'diagonal' | 'radial' | 'bold',
-  cardPreset: string
-): Promise<Buffer> {
-  const { createCanvas, loadImage, GlobalFonts } = await import('@napi-rs/canvas')
-
-  const fontBold = findFont(true)
-  const fontReg  = findFont(false)
-  if (fontBold) try { GlobalFonts.registerFromPath(fontBold, 'CF') } catch {}
-  const FF = fontBold ? 'CF' : 'Arial'
-
-  const W = 1080, H = 1440
-  const canvas = createCanvas(W, H)
-  const ctx = canvas.getContext('2d')
-
-  const preset = PRESETS[cardPreset] || PRESETS.urban
-  const { accent } = preset
-
-  // ── helpers ────────────────────────────────────────────────────────────────
-  function hexAlpha(hex: string, a: number) {
-    const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16)
-    return `rgba(${r},${g},${b},${a})`
-  }
-  function roundRect(x: number, y: number, w: number, h: number, r: number) {
-    ctx.beginPath(); ctx.roundRect(x,y,w,h,r); ctx.fill()
-  }
-  function wrapText(text: string, maxW: number, font: string): string[] {
-    ctx.font = font
-    const words = text.split(' ')
-    const lines: string[] = []
-    let cur = ''
-    for (const w of words) {
-      const t = cur ? cur + ' ' + w : w
-      if (ctx.measureText(t).width <= maxW) { cur = t }
-      else { if (cur) lines.push(cur); cur = w }
-    }
-    if (cur) lines.push(cur)
-    return lines
-  }
-  function accentLine(x: number, y: number, w: number) {
-    ctx.fillStyle = accent; ctx.beginPath(); ctx.roundRect(x, y, w, 6, 3); ctx.fill()
-  }
-
-  // Load scene
-  const scene = await loadImage(sceneUrl)
-  ctx.drawImage(scene, 0, 0, W, H)
-
-  const bs = bullets.filter(Boolean).slice(0, 4)
-
-  // ── SPLIT layout ─────────────────────────────────────────────────────────────
-  // Solid LEFT column (38%) — title top, bullets fill remaining space evenly
-  if (layout === 'split') {
-    const COL = Math.round(W * 0.385)
-    const PAD = 40
-    const BARH = 88
-
-    // Solid dark left column
-    ctx.fillStyle = preset.bg || '#0f0f0f'
-    ctx.fillRect(0, 0, COL, H)
-
-    // Accent left stripe
-    ctx.fillStyle = accent; ctx.fillRect(0, 0, 8, H)
-
-    // Accent bottom bar (full width)
-    ctx.fillStyle = accent; ctx.fillRect(0, H - BARH, W, BARH)
-    ctx.fillStyle = '#000000'; ctx.font = `bold 30px ${FF}`; ctx.textAlign = 'center'
-    ctx.fillText('XS · S · M · L · XL · 2XL · 3XL', W / 2, H - BARH / 2 + 11)
-    ctx.textAlign = 'left'
-
-    // Thin separator between column and photo
-    ctx.fillStyle = hexAlpha(accent, 0.6); ctx.fillRect(COL, 0, 4, H - BARH)
-
-    // ── Title ──
-    const maxTW = COL - PAD - 16
-    const titleFS = Math.min(96, Math.round(maxTW * 0.26))
-    const titleLines = wrapText(name.toUpperCase(), maxTW, `bold ${titleFS}px ${FF}`)
-    ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${titleFS}px ${FF}`
-    let ty = 60 + titleFS
-    for (const line of titleLines.slice(0, 3)) {
-      ctx.fillText(line, PAD, ty); ty += titleFS + 6
-    }
-    // Accent underline
-    ctx.fillStyle = accent; ctx.fillRect(PAD, ty + 10, Math.round(maxTW * 0.6), 5)
-    ty += 36
-
-    // ── Bullets — evenly distributed from ty to bottom bar ──
-    const availH = H - BARH - 24 - ty
-    const bH = Math.min(110, Math.round(availH / bs.length) - 12)
-    const bGap = Math.round((availH - bH * bs.length) / Math.max(bs.length - 1, 1))
-    const bFS = 26
-    const iconR = 24
-    const bw = COL - PAD
-
-    for (let i = 0; i < bs.length; i++) {
-      const clean = bs[i].replace(/^[•✓\-]\s*/, '')
-      const bx = PAD - 8
-      const by = ty + i * (bH + bGap)
-
-      // Pill bg
-      ctx.fillStyle = 'rgba(255,255,255,0.08)'
-      ctx.beginPath(); ctx.roundRect(bx, by, bw, bH, 14); ctx.fill()
-
-      // Accent circle
-      ctx.fillStyle = accent
-      ctx.beginPath(); ctx.arc(bx + iconR + 8, by + bH / 2, iconR, 0, Math.PI * 2); ctx.fill()
-      ctx.fillStyle = preset.bg || '#0f0f0f'
-      ctx.font = `bold ${Math.round(iconR * 0.85)}px ${FF}`; ctx.textAlign = 'center'
-      ctx.fillText(String(i + 1), bx + iconR + 8, by + bH / 2 + Math.round(iconR * 0.32))
-      ctx.textAlign = 'left'
-
-      // Text
-      const textX = bx + iconR * 2 + 20
-      const bLines = wrapText(clean, bw - iconR * 2 - 28, `bold ${bFS}px ${FF}`)
-      ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${bFS}px ${FF}`
-      ctx.fillText(bLines[0] || '', textX, by + (bLines[1] ? bH / 2 - 2 : bH / 2 + bFS * 0.35))
-      if (bLines[1]) {
-        ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.font = `${bFS - 5}px ${FF}`
-        ctx.fillText(bLines[1], textX, by + bH / 2 + bFS * 0.6)
-      }
-    }
-  }
-
-  // ── DIAGONAL layout ─────────────────────────────────────────────────────────
-  // Title top-left, diagonal accent stripe across center, bullets bottom-right
-  else if (layout === 'diagonal') {
-    // Dark top-left gradient for title
-    const g1 = ctx.createLinearGradient(0, 0, W * 0.65, H * 0.48)
-    g1.addColorStop(0, 'rgba(0,0,0,0.95)'); g1.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = g1; ctx.fillRect(0, 0, W, H)
-
-    // Dark bottom gradient for bullets
-    const g2 = ctx.createLinearGradient(0, H * 0.62, 0, H)
-    g2.addColorStop(0, 'rgba(0,0,0,0)'); g2.addColorStop(1, 'rgba(0,0,0,0.95)')
-    ctx.fillStyle = g2; ctx.fillRect(0, H * 0.62, W, H * 0.38)
-
-    // ── Diagonal accent stripe ──
-    ctx.save()
-    ctx.strokeStyle = accent; ctx.lineWidth = 12
-    ctx.shadowColor = accent; ctx.shadowBlur = 18
-    ctx.beginPath(); ctx.moveTo(0, H * 0.44); ctx.lineTo(W, H * 0.56); ctx.stroke()
-    ctx.restore()
-
-    // ── Title top-left ──
-    const titleFS = Math.min(100, Math.round(W * 0.087))
-    const titleLines = wrapText(name.toUpperCase(), Math.round(W * 0.56), `bold ${titleFS}px ${FF}`)
-    ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${titleFS}px ${FF}`
-    let ty = 68 + titleFS
-    for (const line of titleLines.slice(0, 2)) { ctx.fillText(line, 40, ty); ty += titleFS + 6 }
-    ctx.fillStyle = accent; ctx.fillRect(40, ty + 8, 180, 5)
-
-    // ── Bullets bottom — compact stacked ──
-    const BARH = 90
-    const bH = 70; const bGap = 12
-    const totalBH = bs.length * bH + (bs.length - 1) * bGap
-    const bStartY = H - BARH - 20 - totalBH
-    const bFS = 26; const iconR = 22
-
-    for (let i = 0; i < bs.length; i++) {
-      const clean = bs[i].replace(/^[•✓\-]\s*/, '')
-      const by = bStartY + i * (bH + bGap)
-      const bw = W - 40
-      ctx.fillStyle = 'rgba(0,0,0,0.80)'
-      ctx.beginPath(); ctx.roundRect(20, by, bw, bH, 14); ctx.fill()
-
-      ctx.fillStyle = accent
-      ctx.beginPath(); ctx.arc(20 + iconR + 8, by + bH / 2, iconR, 0, Math.PI * 2); ctx.fill()
-      ctx.fillStyle = '#000'; ctx.font = `bold 18px ${FF}`; ctx.textAlign = 'center'
-      ctx.fillText(String(i + 1), 20 + iconR + 8, by + bH / 2 + 6)
-      ctx.textAlign = 'left'
-
-      const bLines = wrapText(clean, bw - iconR * 2 - 30, `bold ${bFS}px ${FF}`)
-      ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${bFS}px ${FF}`
-      ctx.fillText(bLines[0] || '', 20 + iconR * 2 + 18, by + bH / 2 + bFS * 0.36)
-    }
-
-    ctx.fillStyle = accent; ctx.fillRect(0, H - BARH, W, BARH)
-    ctx.fillStyle = '#000'; ctx.font = `bold 28px ${FF}`; ctx.textAlign = 'center'
-    ctx.fillText('XS · S · M · L · XL · 2XL · 3XL', W / 2, H - BARH / 2 + 10)
-    ctx.textAlign = 'left'
-  }
-
-  // ── RADIAL layout ───────────────────────────────────────────────────────────
-  // Title top center, product center FREE, 2-col bullets pinned to bottom
-  else if (layout === 'radial') {
-    const BARH = 90
-    const bH = 72; const bGap = 12
-    const rows = Math.ceil(Math.min(bs.length, 4) / 2)
-    const gridH = rows * bH + (rows - 1) * bGap
-    const gridStartY = H - BARH - 20 - gridH
-
-    // Top gradient
-    const gh = ctx.createLinearGradient(0, 0, 0, H * 0.28)
-    gh.addColorStop(0, 'rgba(0,0,0,0.95)'); gh.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = gh; ctx.fillRect(0, 0, W, H * 0.28)
-
-    // Bottom gradient (from gridStartY - 40)
-    const gbl = ctx.createLinearGradient(0, gridStartY - 60, 0, H)
-    gbl.addColorStop(0, 'rgba(0,0,0,0)'); gbl.addColorStop(1, 'rgba(0,0,0,0.96)')
-    ctx.fillStyle = gbl; ctx.fillRect(0, gridStartY - 60, W, H - gridStartY + 60)
-
-    // Title centered
-    const titleFS = Math.min(94, Math.round(W * 0.082))
-    const titleLines = wrapText(name.toUpperCase(), W * 0.84, `bold ${titleFS}px ${FF}`)
-    ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${titleFS}px ${FF}`; ctx.textAlign = 'center'
-    let ty = 60 + titleFS
-    for (const line of titleLines.slice(0, 2)) { ctx.fillText(line, W / 2, ty); ty += titleFS + 6 }
-    ctx.fillStyle = accent; ctx.beginPath(); ctx.roundRect(W / 2 - 100, ty + 8, 200, 6, 3); ctx.fill()
-    ctx.textAlign = 'left'
-
-    // 2-col grid pinned above bottom bar
-    const colW = (W - 48) / 2; const bFS = 23; const iconR = 20
-    for (let i = 0; i < Math.min(bs.length, 4); i++) {
-      const clean = bs[i].replace(/^[•✓\-]\s*/, '')
-      const col = i % 2; const row = Math.floor(i / 2)
-      const bx = 16 + col * (colW + 16)
-      const by = gridStartY + row * (bH + bGap)
-
-      ctx.fillStyle = 'rgba(0,0,0,0.82)'; ctx.beginPath(); ctx.roundRect(bx, by, colW, bH, 14); ctx.fill()
-      ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(bx + iconR + 8, by + bH / 2, iconR, 0, Math.PI * 2); ctx.fill()
-      ctx.fillStyle = '#000'; ctx.font = `bold 15px ${FF}`; ctx.textAlign = 'center'
-      ctx.fillText(String(i + 1), bx + iconR + 8, by + bH / 2 + 5); ctx.textAlign = 'left'
-      const bLines = wrapText(clean, colW - iconR * 2 - 22, `bold ${bFS}px ${FF}`)
-      ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${bFS}px ${FF}`
-      ctx.fillText(bLines[0] || '', bx + iconR * 2 + 18, by + bH / 2 + bFS * 0.36)
-    }
-
-    ctx.fillStyle = accent; ctx.fillRect(0, H - BARH, W, BARH)
-    ctx.fillStyle = '#000'; ctx.font = `bold 28px ${FF}`; ctx.textAlign = 'center'
-    ctx.fillText('XS · S · M · L · XL · 2XL · 3XL', W / 2, H - BARH / 2 + 10)
-    ctx.textAlign = 'left'
-  }
-
-  // ── BOLD layout ─────────────────────────────────────────────────────────────
-  // Large title top, product center FREE, 2-col grid pinned to bottom
-  else if (layout === 'bold') {
-    const BARH = 90
-    const bH = 78; const bGap = 14
-    const rows = Math.ceil(Math.min(bs.length, 4) / 2)
-    const gridH = rows * bH + (rows - 1) * bGap
-    const gridStartY = H - BARH - 24 - gridH
-
-    // Top gradient
-    const gt = ctx.createLinearGradient(0, 0, 0, H * 0.30)
-    gt.addColorStop(0, 'rgba(0,0,0,0.97)'); gt.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = gt; ctx.fillRect(0, 0, W, H * 0.30)
-
-    // Bottom gradient
-    const gb = ctx.createLinearGradient(0, gridStartY - 60, 0, H)
-    gb.addColorStop(0, 'rgba(0,0,0,0)'); gb.addColorStop(1, 'rgba(0,0,0,0.97)')
-    ctx.fillStyle = gb; ctx.fillRect(0, gridStartY - 60, W, H - gridStartY + 60)
-
-    // Top accent bar
-    ctx.fillStyle = accent; ctx.fillRect(0, 0, W, 10)
-
-    // Large title
-    const titleFS = Math.min(100, Math.round(W * 0.087))
-    const titleLines = wrapText(name.toUpperCase(), W * 0.88, `bold ${titleFS}px ${FF}`)
-    ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${titleFS}px ${FF}`; ctx.textAlign = 'center'
-    let ty = 20 + titleFS
-    for (const line of titleLines.slice(0, 2)) { ctx.fillText(line, W / 2, ty); ty += titleFS + 6 }
-    ctx.fillStyle = hexAlpha(accent, 0.9)
-    ctx.beginPath(); ctx.roundRect(W / 2 - 130, ty + 8, 260, 8, 4); ctx.fill()
-    ctx.textAlign = 'left'
-
-    // 2-col grid pinned above bottom bar
-    const colW = (W - 48) / 2; const bFS = 25; const iconR = 22
-    const pad = 16; const gap = 16
-
-    for (let i = 0; i < Math.min(bs.length, 4); i++) {
-      const clean = bs[i].replace(/^[•✓\-]\s*/, '')
-      const col = i % 2; const row = Math.floor(i / 2)
-      const bx = pad + col * (colW + gap)
-      const by = gridStartY + row * (bH + bGap)
-
-      ctx.fillStyle = 'rgba(0,0,0,0.84)'; ctx.beginPath(); ctx.roundRect(bx, by, colW, bH, 16); ctx.fill()
-      ctx.fillStyle = accent; ctx.beginPath(); ctx.roundRect(bx, by, colW, 8, [8,8,0,0]); ctx.fill()
-      ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(bx + iconR + 8, by + bH / 2 + 4, iconR, 0, Math.PI * 2); ctx.fill()
-      ctx.fillStyle = '#000'; ctx.font = `bold 16px ${FF}`; ctx.textAlign = 'center'
-      ctx.fillText(String(i + 1), bx + iconR + 8, by + bH / 2 + 10); ctx.textAlign = 'left'
-      const bLines = wrapText(clean, colW - iconR * 2 - 26, `bold ${bFS}px ${FF}`)
-      ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${bFS}px ${FF}`
-      ctx.fillText(bLines[0] || '', bx + iconR * 2 + 18, by + bH / 2 + bFS * 0.5)
-      if (bLines[1]) {
-        ctx.fillStyle = 'rgba(255,255,255,0.60)'; ctx.font = `${bFS - 4}px ${FF}`
-        ctx.fillText(bLines[1], bx + iconR * 2 + 18, by + bH / 2 + bFS * 1.1)
-      }
-    }
-
-    ctx.fillStyle = accent; ctx.fillRect(0, H - BARH, W, BARH)
-    ctx.fillStyle = '#000'; ctx.font = `bold 28px ${FF}`; ctx.textAlign = 'center'
-    ctx.fillText('XS · S · M · L · XL · 2XL · 3XL', W / 2, H - BARH / 2 + 10)
-    ctx.textAlign = 'left'
-  }
-
-  return canvas.toBuffer('image/jpeg', { quality: 94 })
-}
-
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-async function uploadPhoto(supabase: any, b64: string, uid: string, folder: string): Promise<string | null> {
-  try {
-    const m = b64.match(/^data:(image\/[\w+]+);base64,(.+)$/s)
-    if (!m) return null
-    const buf = Buffer.from(m[2], 'base64')
-    const fn = `${folder}/${uid}/${Date.now()}.jpg`
-    const { error } = await supabase.storage.from('card-images').upload(fn, buf, { contentType: 'image/jpeg' })
-    if (error) return null
-    return supabase.storage.from('card-images').getPublicUrl(fn).data.publicUrl
-  } catch { return null }
-}
-
-async function saveBuf(supabase: any, buf: Buffer, uid: string, folder: string): Promise<string> {
-  try {
-    const fn = `${folder}/${uid}/${Date.now()}.jpg`
-    await supabase.storage.from('card-images').upload(fn, buf, { contentType: 'image/jpeg' })
-    return supabase.storage.from('card-images').getPublicUrl(fn).data.publicUrl
-  } catch { return `data:image/jpeg;base64,${buf.toString('base64')}` }
-}
-
-async function saveUrl(supabase: any, url: string, uid: string, folder: string): Promise<string> {
-  try {
-    const sharp = (await import('sharp')).default
-    const buf = Buffer.from(await (await fetch(url)).arrayBuffer())
-    const fn = `${folder}/${uid}/${Date.now()}.jpg`
-    await supabase.storage.from('card-images').upload(fn, await sharp(buf).jpeg({ quality: 93 }).toBuffer(), { contentType: 'image/jpeg' })
-    return supabase.storage.from('card-images').getPublicUrl(fn).data.publicUrl
-  } catch { return url }
-}
-
-async function runFlux(imageUrl: string, prompt: string, token: string): Promise<string | null> {
-  try {
-    const pred = await fetch('https://api.replicate.com/v1/models/black-forest-labs/flux-kontext-pro/predictions', {
-      method: 'POST',
-      headers: { Authorization: `Token ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ input: { input_image: imageUrl, prompt, aspect_ratio: '2:3', output_format: 'jpg', output_quality: 90, safety_tolerance: 2 } })
-    })
-    if (!pred.ok) return null
-    const { id } = await pred.json()
-    for (let i = 0; i < 40; i++) {
-      await new Promise(r => setTimeout(r, 3000))
-      const r = await fetch(`https://api.replicate.com/v1/predictions/${id}`, { headers: { Authorization: `Token ${token}` } })
-      const d = await r.json()
-      if (d.status === 'succeeded') return Array.isArray(d.output) ? d.output[0] : d.output
-      if (d.status === 'failed') return null
-    }
-    return null
-  } catch { return null }
-}
-
-async function makeCatalog(b64: string, rmbgKey?: string): Promise<Buffer> {
-  const sharp = (await import('sharp')).default
-  const m = b64.match(/^data:(image\/[\w+]+);base64,(.+)$/s)
-  let p = m ? Buffer.from(m[2], 'base64') : Buffer.from(b64, 'base64')
-  if (rmbgKey) {
-    try {
-      const fd = new FormData(); fd.append('image_file', new Blob([p], { type: m?.[1] || 'image/jpeg' }), 'p.jpg'); fd.append('size', 'auto')
-      const r = await fetch('https://api.remove.bg/v1.0/removebg', { method: 'POST', headers: { 'X-Api-Key': rmbgKey }, body: fd })
-      if (r.ok) p = Buffer.from(await r.arrayBuffer())
-    } catch {}
-  }
-  const S = 1200, PAD = 100
-  const rs = await sharp(p).resize(S-PAD*2, S-PAD*2, { fit: 'contain', background: { r:0,g:0,b:0,alpha:0 } }).png().toBuffer()
-  return sharp({ create: { width:S, height:S, channels:4, background:{r:248,g:248,b:248,alpha:255} } })
-    .composite([{input:rs,top:PAD,left:PAD}]).jpeg({quality:95}).toBuffer()
-}
-
-
-// ─── SPLIT: DALL-E column bg + Sharp composite ────────────────────────────────
-async function renderSplitCard(
-  productPhoto: string,   // base64 of original product photo
-  name: string,
-  bullets: string[],
   cardPreset: string,
   rmbgKey?: string
 ): Promise<Buffer> {
@@ -502,30 +132,15 @@ async function renderSplitCard(
 
   const preset = PRESETS[cardPreset] || PRESETS.urban
   const { accent } = preset
-  const W = 1080, H = 1440
-  const BARH = 88
-  const COL = Math.round(W * 0.385)   // left column width
-  const PAD = 40
+  const W = 1080, H = 1440, BARH = 88
+  const bs = bullets.filter(Boolean).slice(0, 5)
 
-  // ── 1. Generate DALL-E abstract bg for left column ──
-  const colPrompt = `Abstract dark background texture for a product card left panel. Style: ${preset.sceneStyle}. No text, no letters, no products, no people. Dark moody atmosphere with subtle geometric patterns or bokeh. Vertical rectangle.`
-  let colBgBuf: Buffer | null = null
-  try {
-    const imgResp = await openai.images.generate({
-      model: 'dall-e-3',
-      prompt: colPrompt,
-      n: 1,
-      size: '1024x1792',
-      quality: 'standard',
-    })
-    const url = imgResp.data[0]?.url
-    if (url) {
-      const r = await fetch(url)
-      colBgBuf = Buffer.from(await r.arrayBuffer())
-    }
-  } catch (e) { console.error('DALL-E col bg failed:', e) }
+  // ── helpers ────────────────────────────────────────────────────────────────
+  function accentRGB() {
+    return { r: parseInt(accent.slice(1,3),16), g: parseInt(accent.slice(3,5),16), b: parseInt(accent.slice(5,7),16) }
+  }
 
-  // ── 2. Remove background from product photo ──
+  // ── 1. Remove bg from product ──────────────────────────────────────────────
   const m = productPhoto.match(/^data:(image\/[\w+]+);base64,(.+)$/s)
   let productBuf = m ? Buffer.from(m[2], 'base64') : Buffer.from(productPhoto, 'base64')
   if (rmbgKey) {
@@ -538,33 +153,54 @@ async function renderSplitCard(
     } catch {}
   }
 
-  // ── 3. Prepare right column (photo zone): W - COL wide, H - BARH tall ──
-  const rightW = W - COL
-  const rightH = H - BARH
+  // ── 2. Generate DALL-E background ─────────────────────────────────────────
+  const dallePrompt = `Abstract dark atmospheric background for a product card. Style: ${preset.sceneStyle}. NO text, NO letters, NO products, NO people, NO faces. Pure background texture only. Dark moody tones with subtle depth.`
+  let bgBuf: Buffer | null = null
+  try {
+    const imgResp = await openai.images.generate({
+      model: 'dall-e-3', prompt: dallePrompt, n: 1,
+      size: '1024x1792', quality: 'standard',
+    })
+    const url = imgResp.data[0]?.url
+    if (url) {
+      const r = await fetch(url)
+      bgBuf = Buffer.from(await r.arrayBuffer())
+    }
+  } catch (e) { console.error('DALL-E bg failed:', e) }
 
-  // Resize product to fit right zone with padding
-  const RPAD = 60
+  // Resize bg to full card size
+  const bgFull = bgBuf
+    ? await sharp(bgBuf).resize(W, H, { fit: 'cover', position: 'centre' }).jpeg({ quality: 90 }).toBuffer()
+    : await sharp({ create: { width: W, height: H, channels: 3, background: { r: 15, g: 15, b: 15 } } }).jpeg().toBuffer()
+
+  // ── 3. Prepare product cutout ──────────────────────────────────────────────
+  // Size and position depends on layout
+  let prodW: number, prodH: number, prodLeft: number, prodTop: number
+
+  if (layout === 'split') {
+    const COL = Math.round(W * 0.385)
+    prodW = W - COL - 60;  prodH = H - BARH - 60
+    prodLeft = COL + 30;   prodTop = 30
+  } else if (layout === 'diagonal') {
+    prodW = Math.round(W * 0.70);  prodH = Math.round(H * 0.65)
+    prodLeft = Math.round(W * 0.28); prodTop = Math.round(H * 0.17)
+  } else if (layout === 'radial') {
+    prodW = Math.round(W * 0.78);  prodH = Math.round(H * 0.52)
+    prodLeft = Math.round(W * 0.11); prodTop = Math.round(H * 0.20)
+  } else { // bold
+    prodW = Math.round(W * 0.82);  prodH = Math.round(H * 0.52)
+    prodLeft = Math.round(W * 0.09); prodTop = Math.round(H * 0.17)
+  }
+
   const productResized = await sharp(productBuf)
-    .resize(rightW - RPAD * 2, rightH - RPAD * 2, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .resize(prodW, prodH, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .png().toBuffer()
 
-  // Resize left column AI bg to COL × (H - BARH)
-  let leftColBg: Buffer
-  if (colBgBuf) {
-    leftColBg = await sharp(colBgBuf).resize(COL, H - BARH, { fit: 'cover', position: 'centre' }).jpeg({ quality: 90 }).toBuffer()
-  } else {
-    // Fallback: solid dark
-    leftColBg = await sharp({ create: { width: COL, height: H - BARH, channels: 3, background: { r: 15, g: 15, b: 15 } } }).jpeg().toBuffer()
-  }
+  // ── 4. Canvas: draw text overlays ─────────────────────────────────────────
+  const canvas = createCanvas(W, H)
+  const ctx = canvas.getContext('2d')
+  ctx.clearRect(0, 0, W, H)
 
-  // ── 4. Canvas: draw text overlay on left column ──
-  const colCanvas = createCanvas(COL, H - BARH)
-  const ctx = colCanvas.getContext('2d')
-
-  function hexAlpha(hex: string, a: number) {
-    const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16)
-    return `rgba(${r},${g},${b},${a})`
-  }
   function wrapText(text: string, maxW: number, font: string): string[] {
     ctx.font = font
     const words = text.split(' '), lines: string[] = []
@@ -578,101 +214,216 @@ async function renderSplitCard(
     return lines
   }
 
-  // Dark overlay on col bg for readability
-  ctx.fillStyle = 'rgba(0,0,0,0.55)'
-  ctx.fillRect(0, 0, COL, H - BARH)
-
-  // Accent left stripe
-  ctx.fillStyle = accent; ctx.fillRect(0, 0, 8, H - BARH)
-
-  // Title
-  const maxTW = COL - PAD - 16
-  const titleFS = Math.min(96, Math.round(maxTW * 0.26))
-  const titleLines = wrapText(name.toUpperCase(), maxTW, `bold ${titleFS}px ${FF}`)
-  ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${titleFS}px ${FF}`
-  let ty = 60 + titleFS
-  for (const line of titleLines.slice(0, 3)) {
-    ctx.fillText(line, PAD, ty); ty += titleFS + 6
+  function pill(x: number, y: number, w: number, h: number, r = 14) {
+    ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill()
   }
-  ctx.fillStyle = accent; ctx.fillRect(PAD, ty + 10, Math.round(maxTW * 0.6), 5)
-  ty += 36
 
-  // Bullets evenly distributed
-  const bs = bullets.filter(Boolean).slice(0, 5)
-  const availH = (H - BARH) - ty - 20
-  const bH = Math.min(110, Math.round(availH / bs.length) - 12)
-  const bGap = Math.round((availH - bH * bs.length) / Math.max(bs.length - 1, 1))
-  const bFS = 26, iconR = 24, bw = COL - PAD
-
-  for (let i = 0; i < bs.length; i++) {
-    const clean = bs[i].replace(/^[•✓\-]\s*/, '')
-    const bx = PAD - 8
-    const by = ty + i * (bH + bGap)
-
-    ctx.fillStyle = 'rgba(0,0,0,0.65)'
-    ctx.beginPath(); ctx.roundRect(bx, by, bw, bH, 14); ctx.fill()
-
-    ctx.fillStyle = accent
-    ctx.beginPath(); ctx.arc(bx + iconR + 8, by + bH / 2, iconR, 0, Math.PI * 2); ctx.fill()
-    ctx.fillStyle = '#000000'
-    ctx.font = `bold ${Math.round(iconR * 0.85)}px ${FF}`; ctx.textAlign = 'center'
-    ctx.fillText(String(i + 1), bx + iconR + 8, by + bH / 2 + Math.round(iconR * 0.32))
-    ctx.textAlign = 'left'
-
-    const textX = bx + iconR * 2 + 20
-    const bLines = wrapText(clean, bw - iconR * 2 - 28, `bold ${bFS}px ${FF}`)
-    ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${bFS}px ${FF}`
-    ctx.fillText(bLines[0] || '', textX, by + (bLines[1] ? bH / 2 - 2 : bH / 2 + bFS * 0.35))
-    if (bLines[1]) {
-      ctx.fillStyle = 'rgba(255,255,255,0.60)'; ctx.font = `${bFS - 5}px ${FF}`
-      ctx.fillText(bLines[1], textX, by + bH / 2 + bFS * 0.6)
+  function drawBullets(
+    startX: number, startY: number, availW: number, availH: number,
+    count: number, align: 'left' | 'center' = 'left'
+  ) {
+    const bH = Math.min(105, Math.round(availH / count) - 10)
+    const bGap = Math.round((availH - bH * count) / Math.max(count - 1, 1))
+    const bFS = 26, iconR = 23
+    for (let i = 0; i < count; i++) {
+      const clean = bs[i].replace(/^[•✓\-]\s*/, '')
+      const bx = startX
+      const by = startY + i * (bH + bGap)
+      ctx.fillStyle = 'rgba(0,0,0,0.78)'; pill(bx, by, availW, bH)
+      ctx.fillStyle = accent
+      ctx.beginPath(); ctx.arc(bx + iconR + 8, by + bH / 2, iconR, 0, Math.PI * 2); ctx.fill()
+      ctx.fillStyle = '#000'; ctx.font = `bold ${Math.round(iconR * 0.85)}px ${FF}`; ctx.textAlign = 'center'
+      ctx.fillText(String(i + 1), bx + iconR + 8, by + bH / 2 + Math.round(iconR * 0.32))
+      ctx.textAlign = 'left'
+      const bLines = wrapText(clean, availW - iconR * 2 - 28, `bold ${bFS}px ${FF}`)
+      ctx.fillStyle = '#FFF'; ctx.font = `bold ${bFS}px ${FF}`
+      ctx.fillText(bLines[0] || '', bx + iconR * 2 + 18, by + (bLines[1] ? bH / 2 - 2 : bH / 2 + bFS * 0.36))
+      if (bLines[1]) {
+        ctx.fillStyle = 'rgba(255,255,255,0.60)'; ctx.font = `${bFS - 5}px ${FF}`
+        ctx.fillText(bLines[1], bx + iconR * 2 + 18, by + bH / 2 + bFS * 0.58)
+      }
     }
   }
 
-  const textOverlay = colCanvas.toBuffer('image/png')
+  // Bottom bar (shared by all layouts)
+  function drawBottomBar() {
+    ctx.fillStyle = accent; ctx.fillRect(0, H - BARH, W, BARH)
+    ctx.fillStyle = '#000'; ctx.font = `bold 30px ${FF}`; ctx.textAlign = 'center'
+    ctx.fillText('XS · S · M · L · XL · 2XL · 3XL', W / 2, H - BARH / 2 + 11)
+    ctx.textAlign = 'left'
+  }
 
-  // ── 5. Sharp composite final card ──
-  // Canvas: W × H, left col = AI bg + text overlay, right = dark bg + product, bottom bar
-  const accentRGB = { r: parseInt(accent.slice(1,3),16), g: parseInt(accent.slice(3,5),16), b: parseInt(accent.slice(5,7),16) }
-  const bgRGB = { r: 15, g: 15, b: 15 }
+  if (layout === 'split') {
+    const COL = Math.round(W * 0.385)
+    const PAD = 40
 
-  // Bottom bar
-  const barBuf = await sharp({ create: { width: W, height: BARH, channels: 3, background: accentRGB } }).jpeg().toBuffer()
+    // Dark overlay on left column
+    ctx.fillStyle = 'rgba(0,0,0,0.62)'
+    ctx.fillRect(0, 0, COL, H - BARH)
 
-  // Right zone: dark bg
-  const rightBg = await sharp({ create: { width: rightW, height: rightH, channels: 3, background: bgRGB } })
-    .composite([{ input: productResized, top: Math.round((rightH - (await sharp(productResized).metadata()).height!) / 2), left: RPAD }])
-    .jpeg({ quality: 92 }).toBuffer()
-    .catch(async () => {
-      // fallback if centering fails
-      return sharp({ create: { width: rightW, height: rightH, channels: 3, background: bgRGB } })
-        .composite([{ input: productResized, top: RPAD, left: RPAD }])
-        .jpeg({ quality: 92 }).toBuffer()
-    })
+    // Accent stripe
+    ctx.fillStyle = accent; ctx.fillRect(0, 0, 8, H - BARH)
 
-  // Separator line between left and right
-  const sepBuf = await sharp({ create: { width: 4, height: H - BARH, channels: 3, background: accentRGB } }).jpeg().toBuffer()
+    // Separator
+    ctx.fillStyle = accent; ctx.globalAlpha = 0.7
+    ctx.fillRect(COL, 0, 4, H - BARH)
+    ctx.globalAlpha = 1
 
-  // Bottom bar text overlay via canvas
-  const barCanvas = createCanvas(W, BARH)
-  const bCtx = barCanvas.getContext('2d')
-  bCtx.fillStyle = accent; bCtx.fillRect(0, 0, W, BARH)
-  bCtx.fillStyle = '#000000'; bCtx.font = `bold 30px ${FF}`; bCtx.textAlign = 'center'
-  bCtx.fillText('XS · S · M · L · XL · 2XL · 3XL', W / 2, BARH / 2 + 11)
-  const barPng = barCanvas.toBuffer('image/png')
+    // Title
+    const maxTW = COL - PAD - 16
+    const titleFS = Math.min(96, Math.round(maxTW * 0.26))
+    const titleLines = wrapText(name.toUpperCase(), maxTW, `bold ${titleFS}px ${FF}`)
+    ctx.fillStyle = '#FFF'; ctx.font = `bold ${titleFS}px ${FF}`
+    let ty = 60 + titleFS
+    for (const line of titleLines.slice(0, 3)) { ctx.fillText(line, PAD, ty); ty += titleFS + 6 }
+    ctx.fillStyle = accent; ctx.fillRect(PAD, ty + 10, Math.round(maxTW * 0.6), 5)
+    ty += 36
 
-  const finalBuf = await sharp({ create: { width: W, height: H, channels: 3, background: bgRGB } })
-    .composite([
-      { input: leftColBg,    top: 0,         left: 0 },
-      { input: textOverlay,  top: 0,         left: 0 },
-      { input: rightBg,      top: 0,         left: COL + 4 },
-      { input: sepBuf,       top: 0,         left: COL },
-      { input: barPng,       top: H - BARH,  left: 0 },
-    ])
-    .jpeg({ quality: 95 }).toBuffer()
+    drawBullets(PAD - 8, ty, COL - PAD, H - BARH - ty - 20, bs.length)
+    drawBottomBar()
 
-  return finalBuf
+  } else if (layout === 'diagonal') {
+    // Dark bands top-left and bottom
+    const g1 = ctx.createLinearGradient(0, 0, W * 0.6, H * 0.45)
+    g1.addColorStop(0, 'rgba(0,0,0,0.88)'); g1.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = g1; ctx.fillRect(0, 0, W, H)
+
+    const g2 = ctx.createLinearGradient(0, H * 0.65, 0, H)
+    g2.addColorStop(0, 'rgba(0,0,0,0)'); g2.addColorStop(1, 'rgba(0,0,0,0.92)')
+    ctx.fillStyle = g2; ctx.fillRect(0, H * 0.65, W, H * 0.35)
+
+    // Diagonal accent line
+    ctx.save()
+    ctx.strokeStyle = accent; ctx.lineWidth = 12
+    ctx.shadowColor = accent; ctx.shadowBlur = 16
+    ctx.beginPath(); ctx.moveTo(0, H * 0.44); ctx.lineTo(W, H * 0.56); ctx.stroke()
+    ctx.restore()
+
+    // Title top-left
+    const titleFS = Math.min(100, Math.round(W * 0.087))
+    const titleLines = wrapText(name.toUpperCase(), Math.round(W * 0.52), `bold ${titleFS}px ${FF}`)
+    ctx.fillStyle = '#FFF'; ctx.font = `bold ${titleFS}px ${FF}`
+    let ty = 60 + titleFS
+    for (const line of titleLines.slice(0, 2)) { ctx.fillText(line, 40, ty); ty += titleFS + 6 }
+    ctx.fillStyle = accent; ctx.fillRect(40, ty + 8, 180, 5)
+
+    // Bullets bottom
+    const bStartY = H * 0.68
+    const availH = H - BARH - 20 - bStartY
+    drawBullets(20, bStartY, W - 40, availH, bs.length)
+    drawBottomBar()
+
+  } else if (layout === 'radial') {
+    // Top dark band
+    const gt = ctx.createLinearGradient(0, 0, 0, H * 0.26)
+    gt.addColorStop(0, 'rgba(0,0,0,0.94)'); gt.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = gt; ctx.fillRect(0, 0, W, H * 0.26)
+
+    // Bottom dark band for bullets
+    const bRows = Math.ceil(bs.length / 2)
+    const bH2 = 74, bGap2 = 12
+    const gridH = bRows * bH2 + (bRows - 1) * bGap2
+    const gridStartY = H - BARH - 20 - gridH
+    const gbl = ctx.createLinearGradient(0, gridStartY - 70, 0, H)
+    gbl.addColorStop(0, 'rgba(0,0,0,0)'); gbl.addColorStop(1, 'rgba(0,0,0,0.94)')
+    ctx.fillStyle = gbl; ctx.fillRect(0, gridStartY - 70, W, H - gridStartY + 70)
+
+    // Title centered top
+    const titleFS = Math.min(94, Math.round(W * 0.082))
+    const titleLines = wrapText(name.toUpperCase(), W * 0.84, `bold ${titleFS}px ${FF}`)
+    ctx.fillStyle = '#FFF'; ctx.font = `bold ${titleFS}px ${FF}`; ctx.textAlign = 'center'
+    let ty = 52 + titleFS
+    for (const line of titleLines.slice(0, 2)) { ctx.fillText(line, W / 2, ty); ty += titleFS + 6 }
+    ctx.fillStyle = accent; ctx.beginPath(); ctx.roundRect(W / 2 - 100, ty + 8, 200, 6, 3); ctx.fill()
+    ctx.textAlign = 'left'
+
+    // 2-col grid bullets
+    const colW = (W - 48) / 2, bFS = 23, iconR = 20
+    for (let i = 0; i < Math.min(bs.length, 4); i++) {
+      const clean = bs[i].replace(/^[•✓\-]\s*/, '')
+      const col = i % 2, row = Math.floor(i / 2)
+      const bx = 16 + col * (colW + 16), by = gridStartY + row * (bH2 + bGap2)
+      ctx.fillStyle = 'rgba(0,0,0,0.82)'; ctx.beginPath(); ctx.roundRect(bx, by, colW, bH2, 14); ctx.fill()
+      ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(bx + iconR + 8, by + bH2 / 2, iconR, 0, Math.PI * 2); ctx.fill()
+      ctx.fillStyle = '#000'; ctx.font = `bold 15px ${FF}`; ctx.textAlign = 'center'
+      ctx.fillText(String(i + 1), bx + iconR + 8, by + bH2 / 2 + 5); ctx.textAlign = 'left'
+      const bLines = wrapText(clean, colW - iconR * 2 - 22, `bold ${bFS}px ${FF}`)
+      ctx.fillStyle = '#FFF'; ctx.font = `bold ${bFS}px ${FF}`
+      ctx.fillText(bLines[0] || '', bx + iconR * 2 + 16, by + bH2 / 2 + bFS * 0.36)
+    }
+    drawBottomBar()
+
+  } else { // bold
+    // Top dark band
+    const gt = ctx.createLinearGradient(0, 0, 0, H * 0.24)
+    gt.addColorStop(0, 'rgba(0,0,0,0.96)'); gt.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = gt; ctx.fillRect(0, 0, W, H * 0.24)
+
+    // Bottom dark band
+    const bRows2 = Math.ceil(bs.length / 2)
+    const bH3 = 82, bGap3 = 14
+    const gridH2 = bRows2 * bH3 + (bRows2 - 1) * bGap3
+    const gridStart2 = H - BARH - 24 - gridH2
+    const gb2 = ctx.createLinearGradient(0, gridStart2 - 70, 0, H)
+    gb2.addColorStop(0, 'rgba(0,0,0,0)'); gb2.addColorStop(1, 'rgba(0,0,0,0.96)')
+    ctx.fillStyle = gb2; ctx.fillRect(0, gridStart2 - 70, W, H - gridStart2 + 70)
+
+    // Top accent bar
+    ctx.fillStyle = accent; ctx.fillRect(0, 0, W, 10)
+
+    // Large title
+    const titleFS = Math.min(100, Math.round(W * 0.087))
+    const titleLines = wrapText(name.toUpperCase(), W * 0.88, `bold ${titleFS}px ${FF}`)
+    ctx.fillStyle = '#FFF'; ctx.font = `bold ${titleFS}px ${FF}`; ctx.textAlign = 'center'
+    let ty = 18 + titleFS
+    for (const line of titleLines.slice(0, 2)) { ctx.fillText(line, W / 2, ty); ty += titleFS + 6 }
+    ctx.fillStyle = accent; ctx.beginPath(); ctx.roundRect(W / 2 - 130, ty + 8, 260, 8, 4); ctx.fill()
+    ctx.textAlign = 'left'
+
+    // 2-col grid bullets
+    const colW2 = (W - 48) / 2, bFS2 = 25, iconR2 = 22
+    for (let i = 0; i < Math.min(bs.length, 4); i++) {
+      const clean = bs[i].replace(/^[•✓\-]\s*/, '')
+      const col = i % 2, row = Math.floor(i / 2)
+      const bx = 16 + col * (colW2 + 16), by = gridStart2 + row * (bH3 + bGap3)
+      ctx.fillStyle = 'rgba(0,0,0,0.84)'; ctx.beginPath(); ctx.roundRect(bx, by, colW2, bH3, 16); ctx.fill()
+      ctx.fillStyle = accent; ctx.beginPath(); ctx.roundRect(bx, by, colW2, 8, [8,8,0,0]); ctx.fill()
+      ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(bx + iconR2 + 8, by + bH3 / 2 + 4, iconR2, 0, Math.PI * 2); ctx.fill()
+      ctx.fillStyle = '#000'; ctx.font = `bold 16px ${FF}`; ctx.textAlign = 'center'
+      ctx.fillText(String(i + 1), bx + iconR2 + 8, by + bH3 / 2 + 10); ctx.textAlign = 'left'
+      const bLines = wrapText(clean, colW2 - iconR2 * 2 - 26, `bold ${bFS2}px ${FF}`)
+      ctx.fillStyle = '#FFF'; ctx.font = `bold ${bFS2}px ${FF}`
+      ctx.fillText(bLines[0] || '', bx + iconR2 * 2 + 18, by + bH3 / 2 + bFS2 * 0.5)
+      if (bLines[1]) {
+        ctx.fillStyle = 'rgba(255,255,255,0.60)'; ctx.font = `${bFS2 - 4}px ${FF}`
+        ctx.fillText(bLines[1], bx + iconR2 * 2 + 18, by + bH3 / 2 + bFS2 * 1.1)
+      }
+    }
+    drawBottomBar()
+  }
+
+  const textOverlay = canvas.toBuffer('image/png')
+
+  // ── 5. Sharp composite ─────────────────────────────────────────────────────
+  const compositeInputs: sharp.OverlayOptions[] = [
+    { input: textOverlay, top: 0, left: 0 },
+    { input: productResized, top: prodTop, left: prodLeft },
+  ]
+
+  // For split: dark right zone behind product
+  if (layout === 'split') {
+    const COL = Math.round(W * 0.385)
+    const rightBg = await sharp({ create: { width: W - COL - 4, height: H - BARH, channels: 3, background: { r: 12, g: 12, b: 12 } } })
+      .jpeg().toBuffer()
+    compositeInputs.unshift({ input: rightBg, top: 0, left: COL + 4 })
+  }
+
+  return sharp(bgFull)
+    .composite(compositeInputs)
+    .jpeg({ quality: 95 })
+    .toBuffer()
 }
+
 
 // ─── Main Handler ─────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
@@ -728,22 +479,11 @@ export async function POST(req: NextRequest) {
 
           // Flux generates scene (portrait 2:3, product preserved)
           // Analyse product to build a matching background prompt
-          const bgPrompt = await buildMatchingBackground(allPhotos[0], productName, category, preset, i, creativity)
-          const fluxPrompt = `CRITICAL: Keep the main product/subject/clothing/person COMPLETELY UNCHANGED - same appearance, colors, shape, textures, logos. ONLY change the background. ${bgPrompt} Product is on the RIGHT side (60% of frame). LEFT side is slightly lighter/cleaner for text overlay. Professional ecommerce product photography.`
-          console.log(`[card ${i+1}] layout:${chosenLayout} flux...`)
-
-          const sceneUrl = await runFlux(photoUrl, fluxPrompt, REPLICATE)
-          if (!sceneUrl) { console.warn(`Card ${i+1}: Flux failed`); continue }
-
+          console.log(`[card ${i+1}] layout:${chosenLayout} dalle...`)
           // GPT shortens title + max 4 bullets for bigger, readable text
           const shortTitle = await shortenTitle(productName, creativity)
           const topBullets = cardBullets.slice(0, 4)
-          let cardBuf: Buffer
-          if (chosenLayout === 'split') {
-            cardBuf = await renderSplitCard(allPhotos[0], shortTitle, topBullets, cardPreset, RMBG)
-          } else {
-            cardBuf = await renderCard(sceneUrl, null, shortTitle, topBullets, chosenLayout, cardPreset)
-          }
+          const cardBuf = await renderAllLayouts(allPhotos[0], shortTitle, topBullets, chosenLayout, cardPreset, RMBG)
           results.push(await saveBuf(supabase, cardBuf, user.id, 'cards'))
           console.log(`[card ${i+1}] done ✅`)
         } catch (e) { console.error(`card ${i}:`, e) }

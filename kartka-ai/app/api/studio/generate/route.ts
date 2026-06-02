@@ -402,7 +402,9 @@ async function renderAllLayouts(
       }
     }
     drawBottomBar()
-  } else { // bold
+  }
+
+  if (layout === 'bold') {
     const BARH2 = 90
     const bH4 = 82, bGap4 = 14
     const rows4 = Math.ceil(bs.length / 2)

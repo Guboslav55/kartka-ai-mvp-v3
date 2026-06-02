@@ -185,7 +185,8 @@ async function renderAllLayouts(
   cardPreset: string,
   rmbgKey?: string,
   fluxBgUrl?: string,
-  bulletEmojis?: string[]
+  bulletEmojis?: string[],
+  category?: string
 ): Promise<Buffer> {
   const sharp = (await import('sharp')).default
   const { createCanvas, GlobalFonts } = await import('@napi-rs/canvas')
@@ -194,7 +195,7 @@ async function renderAllLayouts(
   if (fontBold) try { GlobalFonts.registerFromPath(fontBold, 'CF') } catch {}
   const FF = fontBold ? 'CF' : 'Arial'
 
-  const preset = PRESETS[cardPreset] || PRESETS.urban
+  const preset = { ...(PRESETS[cardPreset] || PRESETS.urban), _category: category || '' }
   const { accent } = preset
   const W = 1080, H = 1440, BARH = 88
   const bs = bullets.filter(Boolean).slice(0, 5)
@@ -244,8 +245,8 @@ async function renderAllLayouts(
 
   if (layout === 'split') {
     const COL = Math.round(W * 0.385)
-    prodW = W - COL - 80;  prodH = H - BARH - 80
-    prodLeft = COL + 40;   prodTop = 40
+    prodW = W - COL - 40;  prodH = H - BARH - 40
+    prodLeft = COL + 20;   prodTop = 20
     productResized = await sharp(productBuf)
       .resize(prodW, prodH, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .png().toBuffer()
@@ -304,12 +305,20 @@ async function renderAllLayouts(
   }
 
   // Bottom bar (shared by all layouts)
+  // Smart sizes based on category
+  const catLower = (preset as any)._category?.toLowerCase() || ''
+  let sizesLine = 'XS · S · M · L · XL · 2XL · 3XL'
+  if (catLower.includes('взутт') || catLower.includes('обувь')) sizesLine = '36 · 37 · 38 · 39 · 40 · 41 · 42 · 43'
+  else if (catLower.includes('аксес') || catLower.includes('окуляр') || catLower.includes('сумк') || catLower.includes('ремін')) sizesLine = 'ONE SIZE'
+  else if (catLower.includes('електрон') || catLower.includes('техніка') || catLower.includes('гаджет')) sizesLine = 'В НАЯВНОСТІ'
+  else if (catLower.includes('дит') || catLower.includes('дети')) sizesLine = 'XS · S · M · L · XL'
+
   function drawBottomBar() {
     ctx.fillStyle = accent; ctx.fillRect(0, H - BARH, W, BARH)
     ctx.fillStyle = 'rgba(0,0,0,0.50)'; ctx.font = `bold 16px ${FF}`; ctx.textAlign = 'center'
     ctx.fillText('РОЗМІРИ', W / 2, H - BARH + 22)
     ctx.fillStyle = '#000000'; ctx.font = `bold 32px ${FF}`
-    ctx.fillText('XS · S · M · L · XL · 2XL · 3XL', W / 2, H - BARH / 2 + 16)
+    ctx.fillText(sizesLine, W / 2, H - BARH / 2 + 16)
     ctx.textAlign = 'left'
   }
 
@@ -663,7 +672,7 @@ export async function POST(req: NextRequest) {
             sceneUrl = await runFlux(photoUrl, fluxPrompt, REPLICATE)
             console.log(`[card ${i+1}] flux: ${sceneUrl ? 'OK ✅' : 'FAILED ❌'}`)
           }
-          const cardBuf = await renderAllLayouts(allPhotos[0], shortTitle, topBullets, chosenLayout, cardPreset, RMBG, sceneUrl || undefined, bulletEmojis)
+          const cardBuf = await renderAllLayouts(allPhotos[0], shortTitle, topBullets, chosenLayout, cardPreset, RMBG, sceneUrl || undefined, bulletEmojis, category)
           const url = await saveBuf(supabase, cardBuf, user.id, 'cards')
           console.log(`[card ${i+1}] done ✅`)
           return url

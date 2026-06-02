@@ -99,7 +99,7 @@ async function buildMatchingBackground(
       'dark gradient background, product spotlight lighting',
       'modern workspace with keyboard and soft light',
     ],
-    'Краса та здоров'я': [
+    "Краса та здоров'я": [
       'white marble surface with soft natural light',
       'pastel background with botanical elements, clean',
       'bathroom shelf with soft diffused light',

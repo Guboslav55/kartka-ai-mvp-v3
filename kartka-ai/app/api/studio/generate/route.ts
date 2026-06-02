@@ -85,35 +85,81 @@ async function buildMatchingBackground(
   varIdx: number,
   creativity: number
 ): Promise<string> {
-  const varStyles = [
+  // Category-specific background scenes — 4 variations per category
+  const categoryScenes: Record<string, string[]> = {
+    'Одяг та взуття': [
+      'clean white studio floor, soft shadow under product, minimalist',
+      'urban concrete sidewalk, natural daylight, lifestyle feel',
+      'wooden floor with soft window light, cozy home atmosphere',
+      'gym floor with dramatic side lighting, sporty dark background',
+    ],
+    'Електроніка': [
+      'dark matte desk surface, soft blue ambient glow, tech aesthetic',
+      'white studio with subtle reflection, clean minimal',
+      'dark gradient background, product spotlight lighting',
+      'modern workspace with keyboard and soft light',
+    ],
+    'Краса та здоров'я': [
+      'white marble surface with soft natural light',
+      'pastel background with botanical elements, clean',
+      'bathroom shelf with soft diffused light',
+      'spa aesthetic, white towels, calm atmosphere',
+    ],
+    'Спорт та відпочинок': [
+      'outdoor trail with natural light, adventure mood',
+      'gym with dramatic lighting, dark motivational aesthetic',
+      'mountain landscape background, soft bokeh',
+      'clean sports studio, white floor, dynamic lighting',
+    ],
+    'Дім та сад': [
+      'cozy home interior, warm lighting, wooden surfaces',
+      'modern kitchen counter, clean minimal aesthetic',
+      'outdoor garden with natural light and greenery',
+      'minimalist shelf with soft ambient light',
+    ],
+    'Дитячі товари': [
+      'bright colorful playroom, soft natural light',
+      'clean white background with pastel accents',
+      'wooden toys aesthetic, warm cozy lighting',
+      'outdoor playground, sunny day, cheerful mood',
+    ],
+  }
+
+  // Find matching category or use generic
+  const catKey = Object.keys(categoryScenes).find(k =>
+    category.toLowerCase().includes(k.toLowerCase().split(' ')[0])
+  )
+  const scenes = catKey ? categoryScenes[catKey] : [
     'clean studio background, soft even lighting, light gradient',
     'lifestyle environment matching product mood, soft bokeh',
     'minimal abstract background, complementary colors',
     'dynamic scene matching product style, professional lighting',
   ]
+  const baseScene = scenes[varIdx % scenes.length]
+
   try {
     const r = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [{ role: 'user', content: [
         { type: 'image_url', image_url: { url: photo, detail: 'low' } },
-        { type: 'text', text: `Product: "${name}", Category: "${category}". Variation ${varIdx+1}.
+        { type: 'text', text: `Product: "${name}", Category: "${category}".
 
-Analyze the product colors and style. Create a background scene description for a product card.
+You are creating a background for a marketplace product card.
+Base scene suggestion: ${baseScene}
 
-Rules:
-- Background should COMPLEMENT the product, not compete with it
-- Use LIGHTER tones on the left side (where text will be placed)
-- The right side can have depth/texture
-- Match the product's style: sportswear→dynamic gym, military→tactical outdoor, luxury→dark studio, casual→lifestyle
-- Variation ${varIdx+1} style hint: ${varStyles[varIdx % varStyles.length]}
-- Creativity level ${creativity > 0.65 ? 'high: be creative with the scene' : 'medium: keep it professional'}
+Analyze the product colors and refine the background description:
+- Background must COMPLEMENT product colors, not clash
+- Left side lighter (text overlay goes there)
+- Right side can have depth and texture
+- Keep it ${creativity > 0.65 ? 'creative and atmospheric' : 'clean and professional'}
+- Max 40 words, English only, describe ONLY the background scene
 
-Return ONLY a short background description (max 40 words, English):` }
+Return ONLY the background description:` }
       ]}],
-      max_tokens: 80, temperature: 0.6,
+      max_tokens: 80, temperature: 0.5,
     })
-    return r.choices[0]?.message?.content?.trim() || preset.sceneStyle
-  } catch { return preset.sceneStyle }
+    return r.choices[0]?.message?.content?.trim() || baseScene
+  } catch { return baseScene }
 }
 
 // ─── Style presets ────────────────────────────────────────────────────────────

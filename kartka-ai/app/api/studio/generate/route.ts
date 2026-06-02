@@ -121,7 +121,8 @@ async function renderAllLayouts(
   bullets: string[],
   layout: 'split' | 'diagonal' | 'radial' | 'bold',
   cardPreset: string,
-  rmbgKey?: string
+  rmbgKey?: string,
+  fluxBgUrl?: string
 ): Promise<Buffer> {
   const sharp = (await import('sharp')).default
   const { createCanvas, GlobalFonts } = await import('@napi-rs/canvas')

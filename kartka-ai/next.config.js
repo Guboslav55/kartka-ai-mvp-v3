@@ -12,6 +12,14 @@ const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ['@napi-rs/canvas'],
     serverActions: { bodySizeLimit: '20mb' },
+    // Кладём файл шрифта внутрь серверной функции инфографики,
+    // чтобы кириллица рисовалась на Vercel.
+    outputFileTracingIncludes: {
+      '/api/generate-infographic': [
+        './public/fonts/DejaVuSans.ttf',
+        './public/fonts/DejaVuSans-Bold.ttf',
+      ],
+    },
   },
   webpack: (config, { isServer }) => {
     if (isServer) {

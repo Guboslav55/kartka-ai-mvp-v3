@@ -498,7 +498,7 @@ export default function StudioPage() {
                   <div className="mb-3">
                     <span className="text-white/50 text-xs font-bold uppercase block mb-2">Стиль карточки</span>
                     <div className="grid grid-cols-3 gap-1.5">
-                      {([['military','🎖️ Мілітарі'],['urban','⚡ Урбан'],['premium','💎 Преміум'],['rozetka','🟠 Rozetka'],['prom','🔵 Prom'],['minimal','◻️ Мінімал']] as [string,string][]).map(([v,l]) => (
+                      {([['military','🎖️ Мілітарі'],['urban','⚡ Урбан'],['premium','💎 Преміум'],['rozetka','🟠 Rozetka'],['prom','🔵 Prom'],['minimal','◻️ Мінімал'],['social','💖 Соціальний'],['noir','🌑 Нуар'],['emerald','💚 Смарагд'],['crimson','❤️ Багряний'],['ocean','🌊 Океан'],['sunset','🌅 Захід'],['royal','👑 Роял'],['goldlux','🏆 Лакшері'],['mint','🌿 Мʼята'],['coral','🪸 Корал'],['steel','⚙️ Сталь'],['forest','🌲 Ліс']] as [string,string][]).map(([v,l]) => (
                         <button key={v} onClick={() => setCardPreset(v)}
                           className={['py-1.5 px-1 rounded-lg text-xs font-semibold transition-all', cardPreset===v ? 'bg-gold text-black' : 'bg-white/8 text-white/60 hover:bg-white/15'].join(' ')}>
                           {l}

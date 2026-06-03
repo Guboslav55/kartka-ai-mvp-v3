@@ -188,7 +188,7 @@ export default function StudioPage() {
   const [photoStyle, setPhotoStyle] = useState<PhotoStyle>('commercial')
   const [cardStyle, setCardStyle] = useState<CardStyle>('classic')
   const [cardPreset, setCardPreset] = useState('urban')
-  const [cardLayout, setCardLayout] = useState<'split'|'diagonal'|'radial'|'bold'>('split')
+  const [cardLayout, setCardLayout] = useState<'split'|'diagonal'|'radial'|'bold'|'poster'|'magazine'>('split')
   const [creativity, setCreativity] = useState(0.5)
   const [format, setFormat] = useState<Format>('1:1')
   const [count, setCount] = useState(4)
@@ -527,7 +527,7 @@ export default function StudioPage() {
                   <div className="mb-3">
                     <span className="text-white/50 text-xs font-bold uppercase block mb-2">Розміщення</span>
                     <div className="grid grid-cols-2 gap-1.5">
-                      {([['split','◧ Split','Текст+Товар'],['diagonal','◢ Diagonal','Діагональ'],['radial','◎ Radial','Навколо'],['bold','⬛ Bold','Великий']] as [string,string,string][]).map(([v,l,d])=>(
+                      {([['split','◧ Split','Текст+Товар'],['diagonal','◢ Diagonal','Діагональ'],['radial','◎ Radial','Навколо'],['bold','⬛ Bold','Великий'],['poster','🖼 Poster','Постер'],['magazine','📰 Magazine','Журнал']] as [string,string,string][]).map(([v,l,d])=>(
                         <button key={v} onClick={()=>setCardLayout(v as any)} className={['py-1.5 px-2 rounded-lg text-xs transition-all',cardLayout===v?'bg-gold text-black font-bold':'bg-white/8 text-white/60 hover:bg-white/15'].join(' ')}>
                           <span className="block font-bold">{l}</span><span className="text-[10px] opacity-60">{d}</span>
                         </button>

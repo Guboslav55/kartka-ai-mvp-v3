@@ -207,10 +207,12 @@ async function renderAllLayouts(
 
   // ── 2. Background: Flux scene → blurred photo → solid dark ───────────────
   let bgFull: Buffer
+  let fluxScene: Buffer | null = null
   if (fluxBgUrl) {
     try {
       const r = await fetch(fluxBgUrl)
-      bgFull = await sharp(Buffer.from(await r.arrayBuffer())).resize(W, H, { fit: 'cover', position: 'centre' }).jpeg({ quality: 92 }).toBuffer()
+      fluxScene = Buffer.from(await r.arrayBuffer())
+      bgFull = await sharp(fluxScene).resize(W, H, { fit: 'cover', position: 'centre' }).jpeg({ quality: 92 }).toBuffer()
       console.log('bg: flux scene ✅')
     } catch (e) {
       console.error('Flux bg fetch failed:', e)
@@ -226,7 +228,8 @@ async function renderAllLayouts(
     }
   }
 
-  // ── 3. Product cutout — only for Split (others use Flux scene directly) ────
+  // ── 3. Showcase image for Split/Sidebar = Flux scene (product on NEW bg).
+  //       Falls back to the original photo only if Flux is unavailable. ───────
   let productResized: Buffer | null = null
   let prodW = 0, prodH = 0, prodLeft = 0, prodTop = 0
 
@@ -235,8 +238,9 @@ async function renderAllLayouts(
     prodW = W - COL - 80;  prodH = H - BARH - 80
     prodTop = 40
     prodLeft = layout === 'split' ? COL + 40 : 40
-    productResized = await sharp(productBuf)
-      .resize(prodW, prodH, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    const showcaseSrc = fluxScene || productBuf
+    productResized = await sharp(showcaseSrc)
+      .resize(prodW, prodH, { fit: fluxScene ? 'cover' : 'contain', position: 'centre', background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .png().toBuffer()
   }
 
@@ -573,9 +577,13 @@ async function renderAllLayouts(
 
   if (layout === 'split' && productResized) {
     const COL = Math.round(W * 0.385)
+    const leftBg = await sharp({
+      create: { width: COL, height: H - BARH, channels: 3, background: { r: 13, g: 13, b: 16 } }
+    }).jpeg().toBuffer()
     const rightBg = await sharp({
       create: { width: W - COL - 4, height: H - BARH, channels: 3, background: { r: 10, g: 10, b: 10 } }
     }).jpeg().toBuffer()
+    compositeInputs.push({ input: leftBg, top: 0, left: 0 })
     compositeInputs.push({ input: rightBg, top: 0, left: COL + 4 })
     compositeInputs.push({ input: productResized, top: prodTop, left: prodLeft })
   } else if (layout === 'sidebar' && productResized) {
@@ -583,7 +591,11 @@ async function renderAllLayouts(
     const leftBg = await sharp({
       create: { width: W - COL - 4, height: H - BARH, channels: 3, background: { r: 10, g: 10, b: 10 } }
     }).jpeg().toBuffer()
+    const rightBg = await sharp({
+      create: { width: COL, height: H - BARH, channels: 3, background: { r: 13, g: 13, b: 16 } }
+    }).jpeg().toBuffer()
     compositeInputs.push({ input: leftBg, top: 0, left: 0 })
+    compositeInputs.push({ input: rightBg, top: 0, left: W - COL })
     compositeInputs.push({ input: productResized, top: prodTop, left: prodLeft })
   }
   compositeInputs.push({ input: textOverlay, top: 0, left: 0 })

@@ -158,7 +158,7 @@ async function renderAllLayouts(
   productPhoto: string,
   name: string,
   bullets: string[],
-  layout: 'split' | 'diagonal' | 'radial' | 'bold',
+  layout: 'split' | 'diagonal' | 'radial' | 'bold' | 'poster' | 'magazine',
   cardPreset: string,
   rmbgKey?: string,
   fluxBgUrl?: string,
@@ -186,6 +186,11 @@ async function renderAllLayouts(
   function accentRGB() {
     return { r: parseInt(accent.slice(1,3),16), g: parseInt(accent.slice(3,5),16), b: parseInt(accent.slice(5,7),16) }
   }
+  function hexAlpha(h: string, a: number): string {
+    const { r, g, b } = (() => { const hh = h.replace('#',''); return { r: parseInt(hh.slice(0,2),16), g: parseInt(hh.slice(2,4),16), b: parseInt(hh.slice(4,6),16) } })()
+    return `rgba(${r},${g},${b},${a})`
+  }
+  const cleanTitle = (s: string) => s.replace(/\s+/g, ' ').trim().toUpperCase()
 
   // ── 1. Remove bg from product ──────────────────────────────────────────────
   const m = productPhoto.match(/^data:(image\/[\w+]+);base64,(.+)$/s)
@@ -392,7 +397,7 @@ async function renderAllLayouts(
     }
     drawBottomBar()
 
-  } else { // bold
+  } else if (layout === 'bold') { // bold
     // Top dark band
     const gt = ctx.createLinearGradient(0, 0, 0, H * 0.24)
     gt.addColorStop(0, 'rgba(0,0,0,0.96)'); gt.addColorStop(1, 'rgba(0,0,0,0)')
@@ -480,6 +485,55 @@ async function renderAllLayouts(
         ctx.fillText(bLines4[1], bx4 + iconR4 * 2 + 18, by4 + bH4 / 2 + bFS4 * 1.1)
       }
     }
+    drawBottomBar()
+  }
+
+  if (layout === 'poster') {
+    let gt = ctx.createLinearGradient(0,0,0,H*0.30); gt.addColorStop(0,'rgba(0,0,0,0.85)'); gt.addColorStop(1,'rgba(0,0,0,0)'); ctx.fillStyle=gt; ctx.fillRect(0,0,W,H*0.30)
+    let gb = ctx.createLinearGradient(0,H*0.55,0,H); gb.addColorStop(0,'rgba(0,0,0,0)'); gb.addColorStop(1,'rgba(0,0,0,0.92)'); ctx.fillStyle=gb; ctx.fillRect(0,H*0.55,W,H*0.45)
+    ctx.strokeStyle = accent; ctx.lineWidth = 6; ctx.strokeRect(22,22,W-44,H-BARH-22)
+    const tFS = Math.min(82, Math.round(W*0.075))
+    const tl = wrapText(cleanTitle(name), W-160, `bold ${tFS}px ${FF}`)
+    ctx.fillStyle='#fff'; ctx.font=`bold ${tFS}px ${FF}`; ctx.textAlign='center'
+    let ty = 70 + tFS; for (const l of tl.slice(0,2)) { ctx.fillText(l, W/2, ty); ty += tFS + 4 }
+    ctx.fillStyle=accent; ctx.beginPath(); ctx.roundRect(W/2-70, ty+6, 140, 6, 3); ctx.fill(); ctx.textAlign='left'
+    const items = bs.slice(0,5)
+    const lh = 72, listH = items.length*lh, startY = H - BARH - 40 - listH
+    items.forEach((b,i)=>{
+      const clean = b.replace(/^[•✓\-]\s*/,'')
+      const y = startY + i*lh + lh/2
+      ctx.fillStyle=accent; ctx.beginPath(); ctx.arc(60,y,16,0,Math.PI*2); ctx.fill()
+      ctx.fillStyle='#000'; ctx.font=`bold 20px ${FF}`; ctx.textAlign='center'; ctx.fillText('✓',60,y+7); ctx.textAlign='left'
+      ctx.fillStyle='#fff'; ctx.font=`bold 32px ${FF}`
+      const tline = wrapText(clean, W-160, `bold 32px ${FF}`)[0] || clean
+      ctx.fillText(tline, 96, y+11)
+      if (i < items.length-1) { ctx.strokeStyle='rgba(255,255,255,0.12)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(60, startY+(i+1)*lh); ctx.lineTo(W-60, startY+(i+1)*lh); ctx.stroke() }
+    })
+    drawBottomBar()
+  }
+
+  if (layout === 'magazine') {
+    ctx.fillStyle=accent; ctx.fillRect(0,0,12,H-BARH)
+    let gb = ctx.createLinearGradient(0,H*0.55,0,H); gb.addColorStop(0,'rgba(0,0,0,0)'); gb.addColorStop(1,'rgba(0,0,0,0.94)'); ctx.fillStyle=gb; ctx.fillRect(0,H*0.55,W,H*0.45)
+    let gt = ctx.createLinearGradient(0,0,0,H*0.40); gt.addColorStop(0,'rgba(0,0,0,0.55)'); gt.addColorStop(1,'rgba(0,0,0,0)'); ctx.fillStyle=gt; ctx.fillRect(0,0,W,H*0.40)
+    const items = bs.slice(0,4)
+    const chipW = 440, chipH = 58, gap = 12, rx = W - chipW - 34
+    items.forEach((b,i)=>{
+      const clean = b.replace(/^[•✓\-]\s*/,'')
+      const y = 44 + i*(chipH+gap)
+      ctx.fillStyle='rgba(0,0,0,0.72)'; pill(rx, y, chipW, chipH, 12)
+      ctx.fillStyle=accent; pill(rx, y, 5, chipH, 2)
+      ctx.fillStyle=accent; ctx.beginPath(); ctx.arc(rx+34, y+chipH/2, 13, 0, Math.PI*2); ctx.fill()
+      ctx.fillStyle='#000'; ctx.font=`bold 15px ${FF}`; ctx.textAlign='center'; ctx.fillText(String(i+1), rx+34, y+chipH/2+5); ctx.textAlign='left'
+      const tline = wrapText(clean, chipW-90, `bold 22px ${FF}`)[0] || clean
+      ctx.fillStyle='#fff'; ctx.font=`bold 22px ${FF}`; ctx.fillText(tline, rx+60, y+chipH/2+8)
+    })
+    const tFS = Math.min(104, Math.round(W*0.092))
+    const tl = wrapText(cleanTitle(name), W*0.78, `bold ${tFS}px ${FF}`).slice(0,3)
+    ctx.fillStyle=accent; ctx.fillRect(40, H-BARH-60-(tl.length)*(tFS+4)-2, 90, 7)
+    ctx.fillStyle='#fff'; ctx.font=`bold ${tFS}px ${FF}`
+    let by = H - BARH - 60 - (tl.length-1)*(tFS+4)
+    for (const l of tl) { ctx.fillText(l, 40, by); by += tFS + 4 }
     drawBottomBar()
   }
 
@@ -616,11 +670,12 @@ export async function POST(req: NextRequest) {
       if (!REPLICATE) return NextResponse.json({ error: 'Потрібен REPLICATE_API_TOKEN' }, { status: 503 })
 
       const preset = PRESETS[cardPreset] || PRESETS.urban
-      const layouts: ('split'|'diagonal'|'radial'|'bold')[] = ['split','diagonal','radial','bold']
+      const VALID = ['split','diagonal','radial','bold','poster','magazine']
+      const userLayout = VALID.includes(cardLayout) ? cardLayout : 'split'
 
       for (let i = 0; i < qty; i++) {
         try {
-          const chosenLayout = layouts[i % layouts.length]
+          const chosenLayout = userLayout as 'split'|'diagonal'|'radial'|'bold'|'poster'|'magazine'
 
           console.log(`[card ${i+1}] layout:${chosenLayout} flux...`)
           // Upload photo to get public URL for Flux

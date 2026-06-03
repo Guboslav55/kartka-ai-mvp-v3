@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import { createClient } from '@supabase/supabase-js'
+import { ensureFonts, FONT_FAMILY } from '@/app/lib/fonts'
 
 export const maxDuration = 120
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
@@ -85,15 +86,16 @@ async function compositeInfographic(bgBuf: Buffer, prodB64: string, name: string
 <rect width="1024" height="180" fill="url(#g1)"/><rect y="844" width="1024" height="180" fill="url(#g2)"/>
 <rect x="0" y="0" width="8" height="1024" fill="${accent}"/>
 <rect x="20" y="18" width="${Math.min(sn.length*17+40,720)}" height="60" rx="10" fill="${textBg}"/>
-<text x="40" y="58" font-family="Arial,sans-serif" font-size="29" font-weight="bold" fill="${tc}">${esc(sn)}</text>
+<text x="40" y="58" font-family="${FONT_FAMILY}" font-size="29" font-weight="bold" fill="${tc}">${esc(sn)}</text>
 ${bs.map((b,i)=>`<rect x="20" y="${880+i*44}" width="${Math.min(b.length*13+55,720)}" height="38" rx="8" fill="${textBg}"/>
-<text x="50" y="${905+i*44}" font-family="Arial,sans-serif" font-size="20" fill="${tc}">✓ ${esc(b)}</text>`).join('\n')}
+<text x="50" y="${905+i*44}" font-family="${FONT_FAMILY}" font-size="20" fill="${tc}">✓ ${esc(b)}</text>`).join('\n')}
 <rect x="1016" y="0" width="8" height="1024" fill="${accent}"/></svg>`
   return sharp(bgBuf).composite([{input:prodResized,top:297,left:297,blend:'over'},{input:Buffer.from(svg),top:0,left:0}]).jpeg({quality:92}).toBuffer()
 }
 
 export async function POST(req: NextRequest) {
   try {
+    ensureFonts()
     const token = req.headers.get('authorization')?.replace('Bearer ','')
     if (!token) return NextResponse.json({error:'Unauthorized'},{status:401})
 

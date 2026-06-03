@@ -264,29 +264,35 @@ async function renderAllLayouts(
 
   function drawBullets(
     startX: number, startY: number, availW: number, availH: number,
-    count: number, align: 'left' | 'center' = 'left'
+    count: number, _align: 'left' | 'center' = 'left'
   ) {
-    const bH = Math.min(105, Math.round(availH / count) - 10)
-    const bGap = Math.round((availH - bH * count) / Math.max(count - 1, 1))
-    const bFS = 26, iconR = 23
+    const iconR = 22, bFS = 27, subFS = 21, padX = 24, gap = 16
+    const items: { lines: string[] }[] = []
     for (let i = 0; i < count; i++) {
       const clean = bs[i].replace(/^[•✓\-]\s*/, '')
-      const bx = startX
-      const by = startY + i * (bH + bGap)
-      ctx.fillStyle = 'rgba(0,0,0,0.78)'; pill(bx, by, availW, bH)
-      const emoji = bulletEmojis?.[i] || String(i + 1)
+      const lines = wrapText(clean, availW - iconR * 2 - padX - 28, `bold ${bFS}px ${FF}`).slice(0, 2)
+      items.push({ lines })
+    }
+    let y = startY
+    for (let i = 0; i < count; i++) {
+      const { lines } = items[i]
+      const bH = lines.length > 1 ? 96 : 64
+      const bx = startX, cy = y + bH / 2
+      ctx.fillStyle = 'rgba(0,0,0,0.80)'; pill(bx, y, availW, bH, 14)
       ctx.fillStyle = accent
-      ctx.beginPath(); ctx.arc(bx + iconR + 8, by + bH / 2, iconR, 0, Math.PI * 2); ctx.fill()
-      ctx.font = `${Math.round(iconR * 1.1)}px sans-serif`; ctx.textAlign = 'center'
-      ctx.fillText(emoji, bx + iconR + 8, by + bH / 2 + Math.round(iconR * 0.38))
-      ctx.textAlign = 'left'
-      const bLines = wrapText(clean, availW - iconR * 2 - 28, `bold ${bFS}px ${FF}`)
+      ctx.beginPath(); ctx.arc(bx + iconR + 14, cy, iconR, 0, Math.PI * 2); ctx.fill()
+      ctx.fillStyle = '#000'; ctx.font = `bold ${Math.round(iconR * 1.05)}px ${FF}`; ctx.textAlign = 'center'
+      ctx.fillText(String(i + 1), bx + iconR + 14, cy + iconR * 0.36); ctx.textAlign = 'left'
+      const tx = bx + iconR * 2 + 28
       ctx.fillStyle = '#FFF'; ctx.font = `bold ${bFS}px ${FF}`
-      ctx.fillText(bLines[0] || '', bx + iconR * 2 + 18, by + (bLines[1] ? bH / 2 - 2 : bH / 2 + bFS * 0.36))
-      if (bLines[1]) {
-        ctx.fillStyle = 'rgba(255,255,255,0.60)'; ctx.font = `${bFS - 5}px ${FF}`
-        ctx.fillText(bLines[1], bx + iconR * 2 + 18, by + bH / 2 + bFS * 0.58)
+      if (lines.length > 1) {
+        ctx.fillText(lines[0], tx, cy - 4)
+        ctx.fillStyle = 'rgba(255,255,255,0.66)'; ctx.font = `${subFS}px ${FF}`
+        ctx.fillText(lines[1], tx, cy + subFS + 2)
+      } else {
+        ctx.fillText(lines[0] || '', tx, cy + bFS * 0.36)
       }
+      y += bH + gap
     }
   }
 
@@ -316,8 +322,11 @@ async function renderAllLayouts(
 
     // Title
     const maxTW = COL - PAD - 16
-    const titleFS = Math.min(96, Math.round(maxTW * 0.26))
-    const titleLines = wrapText(name.toUpperCase(), maxTW, `bold ${titleFS}px ${FF}`)
+    let titleFS = Math.min(96, Math.round(maxTW * 0.26))
+    const _tw = cleanTitle(name).split(' ')
+    const _widest = () => { ctx.font = `bold ${titleFS}px ${FF}`; return Math.max(..._tw.map(w => ctx.measureText(w).width)) }
+    while (titleFS > 30 && _widest() > maxTW) titleFS -= 2
+    const titleLines = wrapText(cleanTitle(name), maxTW, `bold ${titleFS}px ${FF}`)
     ctx.fillStyle = '#FFF'; ctx.font = `bold ${titleFS}px ${FF}`
     let ty = 60 + titleFS
     for (const line of titleLines.slice(0, 3)) { ctx.fillText(line, PAD, ty); ty += titleFS + 6 }
@@ -346,7 +355,7 @@ async function renderAllLayouts(
 
     // Title top-left
     const titleFS = Math.min(100, Math.round(W * 0.087))
-    const titleLines = wrapText(name.toUpperCase(), Math.round(W * 0.52), `bold ${titleFS}px ${FF}`)
+    const titleLines = wrapText(cleanTitle(name), Math.round(W * 0.52), `bold ${titleFS}px ${FF}`)
     ctx.fillStyle = '#FFF'; ctx.font = `bold ${titleFS}px ${FF}`
     let ty = 60 + titleFS
     for (const line of titleLines.slice(0, 2)) { ctx.fillText(line, 40, ty); ty += titleFS + 6 }
@@ -375,7 +384,7 @@ async function renderAllLayouts(
 
     // Title centered top
     const titleFS = Math.min(94, Math.round(W * 0.082))
-    const titleLines = wrapText(name.toUpperCase(), W * 0.84, `bold ${titleFS}px ${FF}`)
+    const titleLines = wrapText(cleanTitle(name), W * 0.84, `bold ${titleFS}px ${FF}`)
     ctx.fillStyle = '#FFF'; ctx.font = `bold ${titleFS}px ${FF}`; ctx.textAlign = 'center'
     let ty = 52 + titleFS
     for (const line of titleLines.slice(0, 2)) { ctx.fillText(line, W / 2, ty); ty += titleFS + 6 }
@@ -418,7 +427,7 @@ async function renderAllLayouts(
 
     // Large title
     const titleFS = Math.min(100, Math.round(W * 0.087))
-    const titleLines = wrapText(name.toUpperCase(), W * 0.88, `bold ${titleFS}px ${FF}`)
+    const titleLines = wrapText(cleanTitle(name), W * 0.88, `bold ${titleFS}px ${FF}`)
     ctx.fillStyle = '#FFF'; ctx.font = `bold ${titleFS}px ${FF}`; ctx.textAlign = 'center'
     let ty = 18 + titleFS
     for (const line of titleLines.slice(0, 2)) { ctx.fillText(line, W / 2, ty); ty += titleFS + 6 }
@@ -461,7 +470,7 @@ async function renderAllLayouts(
     ctx.fillStyle = gb4; ctx.fillRect(0, gridStart4 - 70, W, H - gridStart4 + 70)
     ctx.fillStyle = accent; ctx.fillRect(0, 0, W, 10)
     const titleFS4 = Math.min(100, Math.round(W * 0.087))
-    const titleLines4 = wrapText(name.toUpperCase(), W * 0.88, `bold ${titleFS4}px ${FF}`)
+    const titleLines4 = wrapText(cleanTitle(name), W * 0.88, `bold ${titleFS4}px ${FF}`)
     ctx.fillStyle = '#FFF'; ctx.font = `bold ${titleFS4}px ${FF}`; ctx.textAlign = 'center'
     let ty4 = 18 + titleFS4
     for (const line of titleLines4.slice(0, 2)) { ctx.fillText(line, W / 2, ty4); ty4 += titleFS4 + 6 }

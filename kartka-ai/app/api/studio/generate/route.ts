@@ -158,7 +158,7 @@ async function renderAllLayouts(
   productPhoto: string,
   name: string,
   bullets: string[],
-  layout: 'split' | 'diagonal' | 'radial' | 'bold' | 'poster' | 'magazine',
+  layout: 'split' | 'diagonal' | 'radial' | 'bold' | 'poster' | 'magazine' | 'sidebar',
   cardPreset: string,
   rmbgKey?: string,
   fluxBgUrl?: string,
@@ -230,10 +230,11 @@ async function renderAllLayouts(
   let productResized: Buffer | null = null
   let prodW = 0, prodH = 0, prodLeft = 0, prodTop = 0
 
-  if (layout === 'split') {
+  if (layout === 'split' || layout === 'sidebar') {
     const COL = Math.round(W * 0.385)
     prodW = W - COL - 80;  prodH = H - BARH - 80
-    prodLeft = COL + 40;   prodTop = 40
+    prodTop = 40
+    prodLeft = layout === 'split' ? COL + 40 : 40
     productResized = await sharp(productBuf)
       .resize(prodW, prodH, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .png().toBuffer()
@@ -537,6 +538,25 @@ async function renderAllLayouts(
     drawBottomBar()
   }
 
+  if (layout === 'sidebar') {
+    const COL = Math.round(W * 0.385), PAD = 40, PX = W - COL
+    ctx.fillStyle = 'rgba(0,0,0,0.62)'; ctx.fillRect(PX, 0, COL, H - BARH)
+    ctx.fillStyle = accent; ctx.fillRect(W - 8, 0, 8, H - BARH)
+    ctx.fillStyle = hexAlpha(accent, 0.7); ctx.fillRect(PX, 0, 4, H - BARH)
+    const maxTW = COL - PAD * 2
+    let titleFS = Math.min(96, Math.round(maxTW * 0.26))
+    const words = cleanTitle(name).split(' ')
+    const widest = () => { ctx.font = `bold ${titleFS}px ${FF}`; return Math.max(...words.map(w => ctx.measureText(w).width)) }
+    while (titleFS > 28 && widest() > maxTW) titleFS -= 2
+    const tl = wrapText(cleanTitle(name), maxTW, `bold ${titleFS}px ${FF}`)
+    ctx.fillStyle = '#FFF'; ctx.font = `bold ${titleFS}px ${FF}`
+    let ty = 60 + titleFS
+    for (const l of tl.slice(0, 3)) { ctx.fillText(l, PX + PAD, ty); ty += titleFS + 6 }
+    ctx.fillStyle = accent; ctx.fillRect(PX + PAD, ty + 10, Math.round(maxTW * 0.6), 5); ty += 36
+    drawBullets(PX + PAD, ty, COL - PAD * 2, H - BARH - ty - 20, Math.min(bs.length, 4))
+    drawBottomBar()
+  }
+
   const textOverlay = canvas.toBuffer('image/png')
 
   // ── 5. Sharp composite ─────────────────────────────────────────────────────
@@ -548,6 +568,13 @@ async function renderAllLayouts(
       create: { width: W - COL - 4, height: H - BARH, channels: 3, background: { r: 10, g: 10, b: 10 } }
     }).jpeg().toBuffer()
     compositeInputs.push({ input: rightBg, top: 0, left: COL + 4 })
+    compositeInputs.push({ input: productResized, top: prodTop, left: prodLeft })
+  } else if (layout === 'sidebar' && productResized) {
+    const COL = Math.round(W * 0.385)
+    const leftBg = await sharp({
+      create: { width: W - COL - 4, height: H - BARH, channels: 3, background: { r: 10, g: 10, b: 10 } }
+    }).jpeg().toBuffer()
+    compositeInputs.push({ input: leftBg, top: 0, left: 0 })
     compositeInputs.push({ input: productResized, top: prodTop, left: prodLeft })
   }
   compositeInputs.push({ input: textOverlay, top: 0, left: 0 })
@@ -670,12 +697,12 @@ export async function POST(req: NextRequest) {
       if (!REPLICATE) return NextResponse.json({ error: 'Потрібен REPLICATE_API_TOKEN' }, { status: 503 })
 
       const preset = PRESETS[cardPreset] || PRESETS.urban
-      const VALID = ['split','diagonal','radial','bold','poster','magazine']
+      const VALID = ['split','diagonal','radial','bold','poster','magazine','sidebar']
       const userLayout = VALID.includes(cardLayout) ? cardLayout : 'split'
 
       for (let i = 0; i < qty; i++) {
         try {
-          const chosenLayout = userLayout as 'split'|'diagonal'|'radial'|'bold'|'poster'|'magazine'
+          const chosenLayout = userLayout as 'split'|'diagonal'|'radial'|'bold'|'poster'|'magazine'|'sidebar'
 
           console.log(`[card ${i+1}] layout:${chosenLayout} flux...`)
           // Upload photo to get public URL for Flux

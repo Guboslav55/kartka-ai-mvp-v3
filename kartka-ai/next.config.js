@@ -19,6 +19,13 @@ const nextConfig = {
         './public/fonts/DejaVuSans.ttf',
         './public/fonts/DejaVuSans-Bold.ttf',
       ],
+      '/api/studio/generate': [
+        './public/fonts/DejaVuSans.ttf',
+        './public/fonts/DejaVuSans-Bold.ttf',
+        './public/fonts/Inter.ttf',
+        './public/fonts/ARIAL.TTF',
+        './public/fonts/ARIALBD.TTF',
+      ],
     },
   },
   webpack: (config, { isServer }) => {

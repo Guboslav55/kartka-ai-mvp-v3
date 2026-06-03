@@ -26,6 +26,16 @@ function findFont(bold: boolean): string {
   return ''
 }
 
+// Find a specific font file (by candidate names) in the deployed font dirs
+function fontFile(names: string[]): string {
+  const dirs = ['/var/task/kartka-ai/public/fonts', path.join(process.cwd(), 'public/fonts')]
+  for (const d of dirs) for (const n of names) {
+    const p = path.join(d, n)
+    try { if (fs.existsSync(p)) return p } catch {}
+  }
+  return ''
+}
+
 // ─── GPT: shorten title to fit card ──────────────────────────────────────────
 async function shortenTitle(name: string, creativity: number): Promise<string> {
   try {
@@ -117,16 +127,29 @@ Return ONLY a short background description (max 40 words, English):` }
 }
 
 // ─── Style presets ────────────────────────────────────────────────────────────
-const PRESETS: Record<string, { accent: string; bg: string; textColor: string; sceneStyle: string }> = {
-  auto:        { accent: '#FFD700', bg: '#111111', textColor: '#FFFFFF', sceneStyle: 'dramatic professional product marketing scene, dynamic lighting, dark atmospheric background' },
-  military:    { accent: '#8B9E4C', bg: '#1a1f0f', textColor: '#FFFFFF', sceneStyle: 'dark tactical military style, smoke and fog, olive khaki tones, dramatic moody lighting, metal textures' },
-  premium:     { accent: '#C9A84C', bg: '#0d0d0d', textColor: '#C9A84C', sceneStyle: 'luxury premium dark style, cinematic studio lighting, deep black background, elegant gold light tones' },
-  marketplace: { accent: '#FF6600', bg: '#FFFFFF', textColor: '#1a1a1a', sceneStyle: 'clean white studio background, soft even product photography lighting, professional ecommerce style' },
-  social:      { accent: '#E91E8C', bg: '#0d0d0d', textColor: '#FFFFFF', sceneStyle: 'trendy social media aesthetic, vibrant colors, lifestyle background, Instagram-style lighting' },
-  minimal:     { accent: '#FFFFFF', bg: '#111111', textColor: '#FFFFFF', sceneStyle: 'minimalist dark background, elegant single light source, luxury product photography' },
-  urban:       { accent: '#FFD700', bg: '#111111', textColor: '#FFFFFF', sceneStyle: 'urban streetwear style, dark gradient, energetic composition' },
-  rozetka:     { accent: '#FF6600', bg: '#FFFFFF', textColor: '#1a1a1a', sceneStyle: 'clean white studio, soft even lighting, professional ecommerce' },
-  prom:        { accent: '#0066CC', bg: '#F5F7FF', textColor: '#1a1a1a', sceneStyle: 'clean light studio, professional marketplace photography' },
+const PRESETS: Record<string, { accent: string; bg: string; textColor: string; sceneStyle: string; font: string }> = {
+  // ── Existing styles (unchanged colors, font added) ──
+  auto:        { accent: '#FFD700', bg: '#111111', textColor: '#FFFFFF', font: 'KAIInter',  sceneStyle: 'dramatic professional product marketing scene, dynamic lighting, dark atmospheric background' },
+  military:    { accent: '#8B9E4C', bg: '#1a1f0f', textColor: '#FFFFFF', font: 'KAIDejaVu', sceneStyle: 'dark tactical military style, smoke and fog, olive khaki tones, dramatic moody lighting, metal textures' },
+  premium:     { accent: '#C9A84C', bg: '#0d0d0d', textColor: '#C9A84C', font: 'KAIArial',  sceneStyle: 'luxury premium dark style, cinematic studio lighting, deep black background, elegant gold light tones' },
+  marketplace: { accent: '#FF6600', bg: '#FFFFFF', textColor: '#1a1a1a', font: 'KAIInter',  sceneStyle: 'clean white studio background, soft even product photography lighting, professional ecommerce style' },
+  social:      { accent: '#E91E8C', bg: '#0d0d0d', textColor: '#FFFFFF', font: 'KAIInter',  sceneStyle: 'trendy social media aesthetic, vibrant colors, lifestyle background, Instagram-style lighting' },
+  minimal:     { accent: '#FFFFFF', bg: '#111111', textColor: '#FFFFFF', font: 'KAIInter',  sceneStyle: 'minimalist dark background, elegant single light source, luxury product photography' },
+  urban:       { accent: '#FFD700', bg: '#111111', textColor: '#FFFFFF', font: 'KAIArial',  sceneStyle: 'urban streetwear style, dark gradient, energetic composition' },
+  rozetka:     { accent: '#FF6600', bg: '#FFFFFF', textColor: '#1a1a1a', font: 'KAIArial',  sceneStyle: 'clean white studio, soft even lighting, professional ecommerce' },
+  prom:        { accent: '#0066CC', bg: '#F5F7FF', textColor: '#1a1a1a', font: 'KAIArial',  sceneStyle: 'clean light studio, professional marketplace photography' },
+  // ── New styles ──
+  noir:        { accent: '#B8B8B8', bg: '#0a0a0a', textColor: '#FFFFFF', font: 'KAIInter',  sceneStyle: 'high-contrast black and white studio, dramatic single spotlight, deep shadows, monochrome elegance, no text' },
+  emerald:     { accent: '#2ECC71', bg: '#07140d', textColor: '#FFFFFF', font: 'KAIArial',  sceneStyle: 'deep emerald green studio, soft glowing light, luxurious dark green gradient background, no text' },
+  crimson:     { accent: '#E63946', bg: '#160808', textColor: '#FFFFFF', font: 'KAIArial',  sceneStyle: 'bold dramatic red lighting, dark cinematic background, energetic intense atmosphere, no text' },
+  ocean:       { accent: '#00B4D8', bg: '#06121f', textColor: '#FFFFFF', font: 'KAIInter',  sceneStyle: 'cool blue aqua studio, soft gradient, fresh modern atmosphere, subtle reflections, no text' },
+  sunset:      { accent: '#FF7B00', bg: '#1a0f1e', textColor: '#FFFFFF', font: 'KAIDejaVu', sceneStyle: 'warm sunset gradient, orange and purple tones, golden hour glow, atmospheric haze, no text' },
+  royal:       { accent: '#9D4EDD', bg: '#100a1a', textColor: '#FFFFFF', font: 'KAIInter',  sceneStyle: 'royal purple luxury studio, velvet textures, elegant deep violet lighting, no text' },
+  goldlux:     { accent: '#D4AF37', bg: '#050505', textColor: '#FFFFFF', font: 'KAIArial',  sceneStyle: 'ultra luxury pure black studio, golden rim lighting, premium reflective surfaces, no text' },
+  mint:        { accent: '#06D6A0', bg: '#F3FFFB', textColor: '#1a1a1a', font: 'KAIInter',  sceneStyle: 'clean fresh mint white studio, soft natural light, airy minimalist background, no text' },
+  coral:       { accent: '#FF5D8F', bg: '#1a0c14', textColor: '#FFFFFF', font: 'KAIInter',  sceneStyle: 'trendy coral pink lighting, soft glow, modern lifestyle aesthetic, vibrant, no text' },
+  steel:       { accent: '#6C8CB5', bg: '#0c1118', textColor: '#FFFFFF', font: 'KAIDejaVu', sceneStyle: 'industrial steel blue-grey studio, brushed metal textures, cool professional lighting, no text' },
+  forest:      { accent: '#52B788', bg: '#0a140e', textColor: '#FFFFFF', font: 'KAIDejaVu', sceneStyle: 'natural forest green ambiance, organic earthy tones, soft daylight, eco lifestyle, no text' },
 }
 
 // ─── Layout Engine using @napi-rs/canvas ─────────────────────────────────────
@@ -144,11 +167,17 @@ async function renderAllLayouts(
   const sharp = (await import('sharp')).default
   const { createCanvas, GlobalFonts } = await import('@napi-rs/canvas')
 
+  const regFam = (names: string[], alias: string) => { const p = fontFile(names); if (p) { try { GlobalFonts.registerFromPath(p, alias) } catch {} } }
+  regFam(['DejaVuSans.ttf'], 'KAIDejaVu'); regFam(['DejaVuSans-Bold.ttf'], 'KAIDejaVu')
+  regFam(['Inter.ttf'], 'KAIInter')
+  regFam(['ARIAL.TTF','arial.ttf'], 'KAIArial'); regFam(['ARIALBD.TTF','arialbd.ttf'], 'KAIArial')
+  // Legacy fallback (keeps old behaviour if font files are missing)
   const fontBold = findFont(true)
   if (fontBold) try { GlobalFonts.registerFromPath(fontBold, 'CF') } catch {}
-  const FF = fontBold ? 'CF' : 'Arial'
 
   const preset = PRESETS[cardPreset] || PRESETS.urban
+  const fontsOk = !!fontFile(['DejaVuSans.ttf'])
+  const FF = (fontsOk && preset.font) ? preset.font : (fontBold ? 'CF' : 'Arial')
   const { accent } = preset
   const W = 1080, H = 1440, BARH = 88
   const bs = bullets.filter(Boolean).slice(0, 5)

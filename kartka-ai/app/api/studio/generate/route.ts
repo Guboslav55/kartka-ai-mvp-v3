@@ -249,12 +249,19 @@ async function renderAllLayouts(
       showcaseBg = fluxScene
         ? await sharp(fluxScene).resize(showW, showH, { fit: 'cover', position: 'centre' }).blur(16).modulate({ brightness: 0.9 }).jpeg({ quality: 88 }).toBuffer()
         : await sharp({ create: { width: showW, height: showH, channels: 3, background: { r: 14, g: 14, b: 16 } } }).jpeg().toBuffer()
-      const margin = 90
+      const margin = 80
       prodW = showW - margin * 2; prodH = showH - margin * 2
-      prodTop = margin; prodLeft = showLeft + margin
-      productResized = await sharp(productBuf)
-        .resize(prodW, prodH, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      // Trim transparent border so the PRODUCT centers (not the original framing)
+      let cutBuf = productBuf
+      try { cutBuf = await sharp(productBuf).trim({ threshold: 12 }).toBuffer() } catch {}
+      const resized = await sharp(cutBuf)
+        .resize(prodW, prodH, { fit: 'contain', position: 'centre', background: { r: 0, g: 0, b: 0, alpha: 0 } })
         .png().toBuffer()
+      // centre the trimmed product within the showcase area
+      const meta = await sharp(resized).metadata()
+      prodTop = Math.round((showH - (meta.height || prodH)) / 2)
+      prodLeft = showLeft + Math.round((showW - (meta.width || prodW)) / 2)
+      productResized = resized
     } else {
       // no cut-out → show the scene (or original photo) itself, cover-fit
       const src = fluxScene || productBuf

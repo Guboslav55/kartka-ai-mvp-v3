@@ -162,7 +162,8 @@ async function renderAllLayouts(
   cardPreset: string,
   rmbgKey?: string,
   fluxBgUrl?: string,
-  bulletEmojis?: string[]
+  bulletEmojis?: string[],
+  category?: string
 ): Promise<Buffer> {
   const sharp = (await import('sharp')).default
   const { createCanvas, GlobalFonts } = await import('@napi-rs/canvas')
@@ -228,20 +229,37 @@ async function renderAllLayouts(
     }
   }
 
-  // ── 3. Showcase image for Split/Sidebar = Flux scene (product on NEW bg).
-  //       Falls back to the original photo only if Flux is unavailable. ───────
-  let productResized: Buffer | null = null
+  // ── 3. Showcase for Split/Sidebar: cut-out product (with air) over a softly
+  //       blurred scene. If no cut-out is available, show the scene itself. ────
+  let productResized: Buffer | null = null      // crisp cut-out product
+  let showcaseBg: Buffer | null = null          // backdrop behind product
   let prodW = 0, prodH = 0, prodLeft = 0, prodTop = 0
+  let showW = 0, showH = 0, showLeft = 0
 
   if (layout === 'split' || layout === 'sidebar') {
     const COL = Math.round(W * 0.385)
-    prodW = W - COL - 80;  prodH = H - BARH - 80
-    prodTop = 40
-    prodLeft = layout === 'split' ? COL + 40 : 40
-    const showcaseSrc = fluxScene || productBuf
-    productResized = await sharp(showcaseSrc)
-      .resize(prodW, prodH, { fit: fluxScene ? 'cover' : 'contain', position: 'centre', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-      .png().toBuffer()
+    showW = W - COL - 4; showH = H - BARH
+    showLeft = layout === 'split' ? COL + 4 : 0
+
+    let hasAlpha = false
+    try { hasAlpha = !!(await sharp(productBuf).metadata()).hasAlpha } catch {}
+
+    if (hasAlpha) {
+      // backdrop = blurred scene (or dark), product sits crisp on top with margins
+      showcaseBg = fluxScene
+        ? await sharp(fluxScene).resize(showW, showH, { fit: 'cover', position: 'centre' }).blur(16).modulate({ brightness: 0.9 }).jpeg({ quality: 88 }).toBuffer()
+        : await sharp({ create: { width: showW, height: showH, channels: 3, background: { r: 14, g: 14, b: 16 } } }).jpeg().toBuffer()
+      const margin = 90
+      prodW = showW - margin * 2; prodH = showH - margin * 2
+      prodTop = margin; prodLeft = showLeft + margin
+      productResized = await sharp(productBuf)
+        .resize(prodW, prodH, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .png().toBuffer()
+    } else {
+      // no cut-out → show the scene (or original photo) itself, cover-fit
+      const src = fluxScene || productBuf
+      showcaseBg = await sharp(src).resize(showW, showH, { fit: 'cover', position: 'centre' }).jpeg({ quality: 92 }).toBuffer()
+    }
   }
 
   // ── 4. Canvas: draw text overlays ─────────────────────────────────────────
@@ -266,33 +284,71 @@ async function renderAllLayouts(
     ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill()
   }
 
+  // Simple line-icons drawn in dark, mapped to bullet keywords
+  function pickIcon(t: string): string {
+    const s = t.toLowerCase()
+    if (/дихаюч|тканин|сітчаст|матеріал|fabric|кро[йя]|бавовн/.test(s)) return 'fabric'
+    if (/амортиз|підошв|комфорт|sole|устілк|пружн/.test(s)) return 'sole'
+    if (/розмір|size|габарит|об[\u0027’]?єм|вмісти/.test(s)) return 'ruler'
+    if (/волог|water|захист|непром|водо|дощ/.test(s)) return 'drop'
+    if (/актив|спорт|енерг|швидк|потужн|динам/.test(s)) return 'bolt'
+    if (/стиль|дизайн|сучасн|якіс|преміум|елегант/.test(s)) return 'star'
+    return 'check'
+  }
+  function drawIcon(type: string, cx: number, cy: number, s: number) {
+    ctx.save(); ctx.translate(cx, cy)
+    ctx.strokeStyle = '#111'; ctx.fillStyle = '#111'
+    ctx.lineWidth = Math.max(2.6, s * 0.16); ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+    ctx.beginPath()
+    if (type === 'fabric') {
+      ctx.moveTo(-s*0.7,-s*0.35); ctx.lineTo(-s*0.22,-s*0.7); ctx.lineTo(0,-s*0.5); ctx.lineTo(s*0.22,-s*0.7); ctx.lineTo(s*0.7,-s*0.35); ctx.lineTo(s*0.42,-s*0.05); ctx.lineTo(s*0.42,s*0.7); ctx.lineTo(-s*0.42,s*0.7); ctx.lineTo(-s*0.42,-s*0.05); ctx.closePath(); ctx.stroke()
+    } else if (type === 'sole') {
+      ctx.moveTo(-s*0.75,s*0.25); ctx.bezierCurveTo(-s*0.3,-s*0.55,s*0.3,-s*0.55,s*0.75,s*0.25); ctx.stroke()
+      ctx.beginPath(); ctx.arc(-s*0.32,s*0.55,s*0.13,0,7); ctx.fill(); ctx.beginPath(); ctx.arc(0,s*0.55,s*0.13,0,7); ctx.fill(); ctx.beginPath(); ctx.arc(s*0.32,s*0.55,s*0.13,0,7); ctx.fill()
+    } else if (type === 'ruler') {
+      ctx.rect(-s*0.78,-s*0.32,s*1.56,s*0.64); ctx.stroke()
+      for (let i=-2;i<=2;i++){ ctx.beginPath(); ctx.moveTo(i*s*0.32,-s*0.32); ctx.lineTo(i*s*0.32, i%2?-s*0.02:s*0.08); ctx.stroke() }
+    } else if (type === 'drop') {
+      ctx.moveTo(0,-s*0.8); ctx.bezierCurveTo(s*0.72,-s*0.1,s*0.55,s*0.72,0,s*0.72); ctx.bezierCurveTo(-s*0.55,s*0.72,-s*0.72,-s*0.1,0,-s*0.8); ctx.closePath(); ctx.stroke()
+    } else if (type === 'bolt') {
+      ctx.moveTo(s*0.18,-s*0.8); ctx.lineTo(-s*0.5,s*0.08); ctx.lineTo(-s*0.05,s*0.08); ctx.lineTo(-s*0.18,s*0.8); ctx.lineTo(s*0.5,-s*0.08); ctx.lineTo(s*0.05,-s*0.08); ctx.closePath(); ctx.fill()
+    } else if (type === 'star') {
+      for (let i=0;i<5;i++){ const a=-Math.PI/2+i*2*Math.PI/5; const x=Math.cos(a)*s*0.85,y=Math.sin(a)*s*0.85; i?ctx.lineTo(x,y):ctx.moveTo(x,y); const a2=a+Math.PI/5; ctx.lineTo(Math.cos(a2)*s*0.38,Math.sin(a2)*s*0.38) } ctx.closePath(); ctx.fill()
+    } else {
+      ctx.moveTo(-s*0.6,0); ctx.lineTo(-s*0.12,s*0.5); ctx.lineTo(s*0.65,-s*0.55); ctx.stroke()
+    }
+    ctx.restore()
+  }
+
   function drawBullets(
     startX: number, startY: number, availW: number, availH: number,
     count: number, _align: 'left' | 'center' = 'left'
   ) {
     const iconR = 22, bFS = 27, subFS = 21, padX = 24, gap = 16
-    const items: { lines: string[] }[] = []
+    const badge = 30
+    const items: { lines: string[], icon: string }[] = []
     for (let i = 0; i < count; i++) {
       const clean = bs[i].replace(/^[•✓\-]\s*/, '')
-      const lines = wrapText(clean, availW - iconR * 2 - padX - 28, `bold ${bFS}px ${FF}`).slice(0, 2)
-      items.push({ lines })
+      const lines = wrapText(clean, availW - badge * 2 - padX - 24, `bold ${bFS}px ${FF}`).slice(0, 2)
+      items.push({ lines, icon: pickIcon(clean) })
     }
     let y = startY
     for (let i = 0; i < count; i++) {
-      const { lines } = items[i]
-      const bH = lines.length > 1 ? 96 : 64
+      const { lines, icon } = items[i]
+      const bH = lines.length > 1 ? 98 : 70
       const bx = startX, cy = y + bH / 2
-      ctx.fillStyle = 'rgba(0,0,0,0.80)'; pill(bx, y, availW, bH, 14)
+      ctx.fillStyle = 'rgba(0,0,0,0.80)'; pill(bx, y, availW, bH, 16)
+      ctx.strokeStyle = hexAlpha(accent, 0.34); ctx.lineWidth = 1.5
+      ctx.beginPath(); ctx.roundRect(bx, y, availW, bH, 16); ctx.stroke()
       ctx.fillStyle = accent
-      ctx.beginPath(); ctx.arc(bx + iconR + 14, cy, iconR, 0, Math.PI * 2); ctx.fill()
-      ctx.fillStyle = '#000'; ctx.font = `bold ${Math.round(iconR * 1.05)}px ${FF}`; ctx.textAlign = 'center'
-      ctx.fillText(String(i + 1), bx + iconR + 14, cy + iconR * 0.36); ctx.textAlign = 'left'
-      const tx = bx + iconR * 2 + 28
+      ctx.beginPath(); ctx.roundRect(bx + 14, cy - badge, badge * 2, badge * 2, 12); ctx.fill()
+      drawIcon(icon, bx + 14 + badge, cy, badge * 0.6)
+      const tx = bx + 14 + badge * 2 + 20
       ctx.fillStyle = '#FFF'; ctx.font = `bold ${bFS}px ${FF}`
       if (lines.length > 1) {
-        ctx.fillText(lines[0], tx, cy - 4)
-        ctx.fillStyle = 'rgba(255,255,255,0.66)'; ctx.font = `${subFS}px ${FF}`
-        ctx.fillText(lines[1], tx, cy + subFS + 2)
+        ctx.fillText(lines[0], tx, cy - 3)
+        ctx.fillStyle = 'rgba(255,255,255,0.62)'; ctx.font = `${subFS}px ${FF}`
+        ctx.fillText(lines[1], tx, cy + subFS + 3)
       } else {
         ctx.fillText(lines[0] || '', tx, cy + bFS * 0.36)
       }
@@ -324,15 +380,22 @@ async function renderAllLayouts(
     ctx.fillRect(COL, 0, 4, H - BARH)
     ctx.globalAlpha = 1
 
-    // Title
+    // Title (small category lead + big name)
     const maxTW = COL - PAD - 16
+    let titleTop = 60
+    const cat = (category || '').trim()
+    if (cat) {
+      ctx.fillStyle = accent; ctx.font = `bold 26px ${FF}`
+      ctx.fillText(cleanTitle(cat).slice(0, 22), PAD, 70)
+      titleTop = 104
+    }
     let titleFS = Math.min(96, Math.round(maxTW * 0.26))
     const _tw = cleanTitle(name).split(' ')
     const _widest = () => { ctx.font = `bold ${titleFS}px ${FF}`; return Math.max(..._tw.map(w => ctx.measureText(w).width)) }
     while (titleFS > 30 && _widest() > maxTW) titleFS -= 2
     const titleLines = wrapText(cleanTitle(name), maxTW, `bold ${titleFS}px ${FF}`)
     ctx.fillStyle = '#FFF'; ctx.font = `bold ${titleFS}px ${FF}`
-    let ty = 60 + titleFS
+    let ty = titleTop + titleFS
     for (const line of titleLines.slice(0, 3)) { ctx.fillText(line, PAD, ty); ty += titleFS + 6 }
     ctx.fillStyle = accent; ctx.fillRect(PAD, ty + 10, Math.round(maxTW * 0.6), 5)
     ty += 36
@@ -557,13 +620,20 @@ async function renderAllLayouts(
     ctx.fillStyle = accent; ctx.fillRect(W - 8, 0, 8, H - BARH)
     ctx.fillStyle = hexAlpha(accent, 0.7); ctx.fillRect(PX, 0, 4, H - BARH)
     const maxTW = COL - PAD * 2
+    let sbTitleTop = 60
+    const sbCat = (category || '').trim()
+    if (sbCat) {
+      ctx.fillStyle = accent; ctx.font = `bold 26px ${FF}`
+      ctx.fillText(cleanTitle(sbCat).slice(0, 22), PX + PAD, 70)
+      sbTitleTop = 104
+    }
     let titleFS = Math.min(96, Math.round(maxTW * 0.26))
     const words = cleanTitle(name).split(' ')
     const widest = () => { ctx.font = `bold ${titleFS}px ${FF}`; return Math.max(...words.map(w => ctx.measureText(w).width)) }
     while (titleFS > 28 && widest() > maxTW) titleFS -= 2
     const tl = wrapText(cleanTitle(name), maxTW, `bold ${titleFS}px ${FF}`)
     ctx.fillStyle = '#FFF'; ctx.font = `bold ${titleFS}px ${FF}`
-    let ty = 60 + titleFS
+    let ty = sbTitleTop + titleFS
     for (const l of tl.slice(0, 3)) { ctx.fillText(l, PX + PAD, ty); ty += titleFS + 6 }
     ctx.fillStyle = accent; ctx.fillRect(PX + PAD, ty + 10, Math.round(maxTW * 0.6), 5); ty += 36
     drawBullets(PX + PAD, ty, COL - PAD * 2, H - BARH - ty - 20, Math.min(bs.length, 4))
@@ -575,28 +645,18 @@ async function renderAllLayouts(
   // ── 5. Sharp composite ─────────────────────────────────────────────────────
   const compositeInputs: sharp.OverlayOptions[] = []
 
-  if (layout === 'split' && productResized) {
+  if ((layout === 'split' || layout === 'sidebar') && showcaseBg) {
     const COL = Math.round(W * 0.385)
-    const leftBg = await sharp({
+    // clean opaque panel on the text side
+    const panel = await sharp({
       create: { width: COL, height: H - BARH, channels: 3, background: { r: 13, g: 13, b: 16 } }
     }).jpeg().toBuffer()
-    const rightBg = await sharp({
-      create: { width: W - COL - 4, height: H - BARH, channels: 3, background: { r: 10, g: 10, b: 10 } }
-    }).jpeg().toBuffer()
-    compositeInputs.push({ input: leftBg, top: 0, left: 0 })
-    compositeInputs.push({ input: rightBg, top: 0, left: COL + 4 })
-    compositeInputs.push({ input: productResized, top: prodTop, left: prodLeft })
-  } else if (layout === 'sidebar' && productResized) {
-    const COL = Math.round(W * 0.385)
-    const leftBg = await sharp({
-      create: { width: W - COL - 4, height: H - BARH, channels: 3, background: { r: 10, g: 10, b: 10 } }
-    }).jpeg().toBuffer()
-    const rightBg = await sharp({
-      create: { width: COL, height: H - BARH, channels: 3, background: { r: 13, g: 13, b: 16 } }
-    }).jpeg().toBuffer()
-    compositeInputs.push({ input: leftBg, top: 0, left: 0 })
-    compositeInputs.push({ input: rightBg, top: 0, left: W - COL })
-    compositeInputs.push({ input: productResized, top: prodTop, left: prodLeft })
+    const panelLeft = layout === 'split' ? 0 : W - COL
+    compositeInputs.push({ input: panel, top: 0, left: panelLeft })
+    // showcase backdrop (blurred scene or scene cover)
+    compositeInputs.push({ input: showcaseBg, top: 0, left: showLeft })
+    // crisp cut-out product floating with air (only when available)
+    if (productResized) compositeInputs.push({ input: productResized, top: prodTop, left: prodLeft })
   }
   compositeInputs.push({ input: textOverlay, top: 0, left: 0 })
 
@@ -734,7 +794,7 @@ export async function POST(req: NextRequest) {
           if (photoUrl) {
             console.log(`[card ${i+1}] building bg prompt...`)
             const bgPrompt = await buildMatchingBackground(allPhotos[0], productName, category, preset, i, creativity)
-            const fluxPrompt = `CRITICAL: Keep the main product COMPLETELY UNCHANGED - same appearance, colors, shape, textures. ONLY change the background. ${bgPrompt} Professional ecommerce product photography. Portrait orientation.`
+            const fluxPrompt = `CRITICAL: Keep the main product COMPLETELY UNCHANGED - same appearance, colors, shape, textures. ONLY change the background. ${bgPrompt} The background must be ONE single seamless cohesive surface with soft bokeh blur and even diffused lighting. No split background, no seam, no vertical dividing line, no two-tone halves. Professional ecommerce product photography. Portrait orientation.`
             console.log(`[card ${i+1}] calling Flux...`)
             sceneUrl = await runFlux(photoUrl, fluxPrompt, REPLICATE)
             console.log(`[card ${i+1}] sceneUrl: ${sceneUrl ? 'OK ✅' : 'FAILED ❌'}`)

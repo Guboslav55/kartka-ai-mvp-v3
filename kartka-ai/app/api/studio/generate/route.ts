@@ -269,6 +269,31 @@ async function renderAllLayouts(
     }
   }
 
+  // Centred cut-out over full-bleed blurred scene (radial / bold / poster)
+  if (layout === 'radial' || layout === 'bold' || layout === 'poster') {
+    showW = W; showH = H - BARH; showLeft = 0
+    let hasAlpha = false
+    try { hasAlpha = !!(await sharp(productBuf).metadata()).hasAlpha } catch {}
+    const blurAmt = layout === 'bold' ? 9 : 16
+    const bright = layout === 'bold' ? 0.78 : 0.88
+    showcaseBg = fluxScene
+      ? await sharp(fluxScene).resize(W, H - BARH, { fit: 'cover', position: 'centre' }).blur(blurAmt).modulate({ brightness: bright }).jpeg({ quality: 88 }).toBuffer()
+      : await sharp({ create: { width: W, height: H - BARH, channels: 3, background: { r: 14, g: 14, b: 16 } } }).jpeg().toBuffer()
+    if (hasAlpha) {
+      let cutBuf = productBuf
+      try { cutBuf = await sharp(productBuf).trim({ threshold: 12 }).toBuffer() } catch {}
+      let boxW = 560, boxH = 560, cx = W / 2, cy = Math.round((H - BARH) * 0.54)
+      if (layout === 'bold')   { boxW = 720; boxH = 560; cy = Math.round((H - BARH) * 0.32) }
+      if (layout === 'poster') { boxW = 600; boxH = 540; cy = Math.round((H - BARH) * 0.42) }
+      productResized = await sharp(cutBuf)
+        .resize(boxW, boxH, { fit: 'contain', position: 'centre', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .png().toBuffer()
+      prodW = boxW; prodH = boxH
+      prodLeft = Math.round(cx - boxW / 2)
+      prodTop = Math.round(cy - boxH / 2)
+    }
+  }
+
   // ── 4. Canvas: draw text overlays ─────────────────────────────────────────
   const canvas = createCanvas(W, H)
   const ctx = canvas.getContext('2d')
@@ -371,6 +396,27 @@ async function renderAllLayouts(
     ctx.textAlign = 'left'
   }
 
+  // Compact feature chip: dark pill + accent icon badge + text (with optional sub-line)
+  function chip(bx: number, by: number, bw: number, bh: number, text: string) {
+    const clean = text.replace(/^[•✓\-]\s*/, '')
+    ctx.fillStyle = 'rgba(0,0,0,0.82)'; ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 14); ctx.fill()
+    ctx.strokeStyle = hexAlpha(accent, 0.34); ctx.lineWidth = 1.5
+    ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 14); ctx.stroke()
+    const r = bh / 2 - 9, cyc = by + bh / 2
+    ctx.fillStyle = accent; ctx.beginPath(); ctx.roundRect(bx + 10, cyc - r, r * 2, r * 2, 9); ctx.fill()
+    drawIcon(pickIcon(clean), bx + 10 + r, cyc, r * 0.6)
+    const bFS = 24, tx = bx + 10 + r * 2 + 16
+    const tl = wrapText(clean, bw - r * 2 - 44, `bold ${bFS}px ${FF}`).slice(0, 2)
+    ctx.fillStyle = '#fff'; ctx.font = `bold ${bFS}px ${FF}`
+    if (tl.length > 1) {
+      ctx.fillText(tl[0], tx, cyc - 3)
+      ctx.fillStyle = 'rgba(255,255,255,0.62)'; ctx.font = `${bFS - 5}px ${FF}`
+      ctx.fillText(tl[1], tx, cyc + bFS - 5)
+    } else {
+      ctx.fillText(tl[0] || clean, tx, cyc + bFS * 0.36)
+    }
+  }
+
   if (layout === 'split') {
     const COL = Math.round(W * 0.385)
     const PAD = 40
@@ -442,157 +488,66 @@ async function renderAllLayouts(
     drawBottomBar()
 
   } else if (layout === 'radial') {
-    // Top dark band
-    const gt = ctx.createLinearGradient(0, 0, 0, H * 0.26)
-    gt.addColorStop(0, 'rgba(0,0,0,0.94)'); gt.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = gt; ctx.fillRect(0, 0, W, H * 0.26)
-
-    // Bottom dark band for bullets
-    const bRows = Math.ceil(bs.length / 2)
-    const bH2 = 74, bGap2 = 12
-    const gridH = bRows * bH2 + (bRows - 1) * bGap2
-    const gridStartY = H - BARH - 20 - gridH
-    const gbl = ctx.createLinearGradient(0, gridStartY - 70, 0, H)
-    gbl.addColorStop(0, 'rgba(0,0,0,0)'); gbl.addColorStop(1, 'rgba(0,0,0,0.94)')
-    ctx.fillStyle = gbl; ctx.fillRect(0, gridStartY - 70, W, H - gridStartY + 70)
-
-    // Title centered top
-    const titleFS = Math.min(94, Math.round(W * 0.082))
-    const titleLines = wrapText(cleanTitle(name), W * 0.84, `bold ${titleFS}px ${FF}`)
+    // Title top-centre
+    const titleFS = Math.min(72, Math.round(W * 0.066))
+    const titleLines = wrapText(cleanTitle(name), W - 120, `bold ${titleFS}px ${FF}`).slice(0, 2)
     ctx.fillStyle = '#FFF'; ctx.font = `bold ${titleFS}px ${FF}`; ctx.textAlign = 'center'
-    let ty = 52 + titleFS
-    for (const line of titleLines.slice(0, 2)) { ctx.fillText(line, W / 2, ty); ty += titleFS + 6 }
-    ctx.fillStyle = accent; ctx.beginPath(); ctx.roundRect(W / 2 - 100, ty + 8, 200, 6, 3); ctx.fill()
+    let ty = 56 + titleFS
+    for (const line of titleLines) { ctx.fillText(line, W / 2, ty); ty += titleFS + 4 }
+    ctx.fillStyle = accent; ctx.beginPath(); ctx.roundRect(W / 2 - 90, ty + 6, 180, 6, 3); ctx.fill()
     ctx.textAlign = 'left'
-
-    // 2-col grid bullets
-    const colW = (W - 48) / 2, bFS = 23, iconR = 20
+    // Four callout chips around the centred product, with connector lines
+    const pw = 384, ph = 78, cx = W / 2, cyP = Math.round((H - BARH) * 0.54)
+    const pos: [number, number][] = [[40, H * 0.30], [W - 40 - pw, H * 0.30], [40, H * 0.66], [W - 40 - pw, H * 0.66]]
     for (let i = 0; i < Math.min(bs.length, 4); i++) {
-      const clean = bs[i].replace(/^[•✓\-]\s*/, '')
-      const col = i % 2, row = Math.floor(i / 2)
-      const bx = 16 + col * (colW + 16), by = gridStartY + row * (bH2 + bGap2)
-      ctx.fillStyle = 'rgba(0,0,0,0.82)'; ctx.beginPath(); ctx.roundRect(bx, by, colW, bH2, 14); ctx.fill()
-      ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(bx + iconR + 8, by + bH2 / 2, iconR, 0, Math.PI * 2); ctx.fill()
-      ctx.fillStyle = '#000'; ctx.font = `bold 15px ${FF}`; ctx.textAlign = 'center'
-      ctx.fillText(String(i + 1), bx + iconR + 8, by + bH2 / 2 + 5); ctx.textAlign = 'left'
-      const bLines = wrapText(clean, colW - iconR * 2 - 22, `bold ${bFS}px ${FF}`)
-      ctx.fillStyle = '#FFF'; ctx.font = `bold ${bFS}px ${FF}`
-      ctx.fillText(bLines[0] || '', bx + iconR * 2 + 16, by + bH2 / 2 + bFS * 0.36)
+      const px = pos[i][0], py = pos[i][1]
+      const sx = px < W / 2 ? px + pw : px, sy = py + ph / 2
+      ctx.strokeStyle = hexAlpha(accent, 0.55); ctx.lineWidth = 2
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(cx, cyP); ctx.stroke()
+      ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(cx, cyP, 5, 0, Math.PI * 2); ctx.fill()
+      chip(px, py, pw, ph, bs[i])
     }
     drawBottomBar()
 
-  } else if (layout === 'bold') { // bold
-    // Top dark band
-    const gt = ctx.createLinearGradient(0, 0, 0, H * 0.24)
-    gt.addColorStop(0, 'rgba(0,0,0,0.96)'); gt.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = gt; ctx.fillRect(0, 0, W, H * 0.24)
-
-    // Bottom dark band
-    const bRows2 = Math.ceil(bs.length / 2)
-    const bH3 = 82, bGap3 = 14
-    const gridH2 = bRows2 * bH3 + (bRows2 - 1) * bGap3
-    const gridStart2 = H - BARH - 24 - gridH2
-    const gb2 = ctx.createLinearGradient(0, gridStart2 - 70, 0, H)
-    gb2.addColorStop(0, 'rgba(0,0,0,0)'); gb2.addColorStop(1, 'rgba(0,0,0,0.96)')
-    ctx.fillStyle = gb2; ctx.fillRect(0, gridStart2 - 70, W, H - gridStart2 + 70)
-
-    // Top accent bar
-    ctx.fillStyle = accent; ctx.fillRect(0, 0, W, 10)
-
-    // Large title
-    const titleFS = Math.min(100, Math.round(W * 0.087))
-    const titleLines = wrapText(cleanTitle(name), W * 0.88, `bold ${titleFS}px ${FF}`)
-    ctx.fillStyle = '#FFF'; ctx.font = `bold ${titleFS}px ${FF}`; ctx.textAlign = 'center'
-    let ty = 18 + titleFS
-    for (const line of titleLines.slice(0, 2)) { ctx.fillText(line, W / 2, ty); ty += titleFS + 6 }
-    ctx.fillStyle = accent; ctx.beginPath(); ctx.roundRect(W / 2 - 130, ty + 8, 260, 8, 4); ctx.fill()
-    ctx.textAlign = 'left'
-
-    // 2-col grid bullets
-    const colW2 = (W - 48) / 2, bFS2 = 25, iconR2 = 22
-    for (let i = 0; i < Math.min(bs.length, 4); i++) {
-      const clean = bs[i].replace(/^[•✓\-]\s*/, '')
-      const col = i % 2, row = Math.floor(i / 2)
-      const bx = 16 + col * (colW2 + 16), by = gridStart2 + row * (bH3 + bGap3)
-      ctx.fillStyle = 'rgba(0,0,0,0.84)'; ctx.beginPath(); ctx.roundRect(bx, by, colW2, bH3, 16); ctx.fill()
-      ctx.fillStyle = accent; ctx.beginPath(); ctx.roundRect(bx, by, colW2, 8, [8,8,0,0]); ctx.fill()
-      ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(bx + iconR2 + 8, by + bH3 / 2 + 4, iconR2, 0, Math.PI * 2); ctx.fill()
-      ctx.fillStyle = '#000'; ctx.font = `bold 16px ${FF}`; ctx.textAlign = 'center'
-      ctx.fillText(String(i + 1), bx + iconR2 + 8, by + bH3 / 2 + 10); ctx.textAlign = 'left'
-      const bLines = wrapText(clean, colW2 - iconR2 * 2 - 26, `bold ${bFS2}px ${FF}`)
-      ctx.fillStyle = '#FFF'; ctx.font = `bold ${bFS2}px ${FF}`
-      ctx.fillText(bLines[0] || '', bx + iconR2 * 2 + 18, by + bH3 / 2 + bFS2 * 0.5)
-      if (bLines[1]) {
-        ctx.fillStyle = 'rgba(255,255,255,0.60)'; ctx.font = `${bFS2 - 4}px ${FF}`
-        ctx.fillText(bLines[1], bx + iconR2 * 2 + 18, by + bH3 / 2 + bFS2 * 1.1)
-      }
-    }
-    drawBottomBar()
-  }
-
-  if (layout === 'bold') {
-    const BARH2 = 90
-    const bH4 = 82, bGap4 = 14
-    const rows4 = Math.ceil(bs.length / 2)
-    const gridH4 = rows4 * bH4 + (rows4 - 1) * bGap4
-    const gridStart4 = H - BARH2 - 24 - gridH4
-    const gt4 = ctx.createLinearGradient(0, 0, 0, H * 0.24)
-    gt4.addColorStop(0, 'rgba(0,0,0,0.96)'); gt4.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = gt4; ctx.fillRect(0, 0, W, H * 0.24)
-    const gb4 = ctx.createLinearGradient(0, gridStart4 - 70, 0, H)
-    gb4.addColorStop(0, 'rgba(0,0,0,0)'); gb4.addColorStop(1, 'rgba(0,0,0,0.96)')
-    ctx.fillStyle = gb4; ctx.fillRect(0, gridStart4 - 70, W, H - gridStart4 + 70)
-    ctx.fillStyle = accent; ctx.fillRect(0, 0, W, 10)
-    const titleFS4 = Math.min(100, Math.round(W * 0.087))
-    const titleLines4 = wrapText(cleanTitle(name), W * 0.88, `bold ${titleFS4}px ${FF}`)
-    ctx.fillStyle = '#FFF'; ctx.font = `bold ${titleFS4}px ${FF}`; ctx.textAlign = 'center'
-    let ty4 = 18 + titleFS4
-    for (const line of titleLines4.slice(0, 2)) { ctx.fillText(line, W / 2, ty4); ty4 += titleFS4 + 6 }
-    ctx.fillStyle = hexAlpha(accent, 0.9)
-    ctx.beginPath(); ctx.roundRect(W / 2 - 130, ty4 + 8, 260, 8, 4); ctx.fill()
-    ctx.textAlign = 'left'
-    const colW4 = (W - 48) / 2, bFS4 = 25, iconR4 = 22
-    for (let i4 = 0; i4 < Math.min(bs.length, 4); i4++) {
-      const clean4 = bs[i4].replace(/^[•✓\-]\s*/, '')
-      const col4 = i4 % 2, row4 = Math.floor(i4 / 2)
-      const bx4 = 16 + col4 * (colW4 + 16), by4 = gridStart4 + row4 * (bH4 + bGap4)
-      ctx.fillStyle = 'rgba(0,0,0,0.84)'; ctx.beginPath(); ctx.roundRect(bx4, by4, colW4, bH4, 16); ctx.fill()
-      ctx.fillStyle = accent; ctx.beginPath(); ctx.roundRect(bx4, by4, colW4, 8, [8,8,0,0]); ctx.fill()
-      ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(bx4 + iconR4 + 8, by4 + bH4 / 2 + 4, iconR4, 0, Math.PI * 2); ctx.fill()
-      ctx.fillStyle = '#000'; ctx.font = `bold 16px ${FF}`; ctx.textAlign = 'center'
-      ctx.fillText(String(i4 + 1), bx4 + iconR4 + 8, by4 + bH4 / 2 + 10); ctx.textAlign = 'left'
-      const bLines4 = wrapText(clean4, colW4 - iconR4 * 2 - 26, `bold ${bFS4}px ${FF}`)
-      ctx.fillStyle = '#FFF'; ctx.font = `bold ${bFS4}px ${FF}`
-      ctx.fillText(bLines4[0] || '', bx4 + iconR4 * 2 + 18, by4 + bH4 / 2 + bFS4 * 0.5)
-      if (bLines4[1]) {
-        ctx.fillStyle = 'rgba(255,255,255,0.60)'; ctx.font = `${bFS4 - 4}px ${FF}`
-        ctx.fillText(bLines4[1], bx4 + iconR4 * 2 + 18, by4 + bH4 / 2 + bFS4 * 1.1)
-      }
-    }
+  } else if (layout === 'bold') {
+    // Bottom gradient for the giant title
+    const gb = ctx.createLinearGradient(0, H * 0.45, 0, H)
+    gb.addColorStop(0, 'rgba(0,0,0,0)'); gb.addColorStop(1, 'rgba(0,0,0,0.92)')
+    ctx.fillStyle = gb; ctx.fillRect(0, H * 0.45, W, H)
+    ctx.fillStyle = accent; ctx.fillRect(0, 0, W, 12)
+    // Single row of compact chips above the bottom bar
+    const rowY = H - BARH - 96, cw = (W - 48 - 3 * 12) / 4
+    for (let i = 0; i < Math.min(bs.length, 4); i++) chip(16 + i * (cw + 12), rowY, cw, 72, bs[i])
+    // GIANT title bottom-left
+    const titleFS = Math.min(150, Math.round(W * 0.135))
+    const titleLines = wrapText(cleanTitle(name), W - 80, `bold ${titleFS}px ${FF}`).slice(0, 3)
+    const lineH = Math.round(titleFS * 0.96)
+    ctx.fillStyle = accent; ctx.fillRect(40, rowY - 40 - titleLines.length * lineH, 120, 10)
+    ctx.fillStyle = '#FFF'; ctx.font = `bold ${titleFS}px ${FF}`; ctx.textAlign = 'left'
+    let ty = rowY - 40 - (titleLines.length - 1) * lineH
+    for (const line of titleLines) { ctx.fillText(line, 40, ty); ty += lineH }
     drawBottomBar()
   }
 
   if (layout === 'poster') {
-    let gt = ctx.createLinearGradient(0,0,0,H*0.30); gt.addColorStop(0,'rgba(0,0,0,0.85)'); gt.addColorStop(1,'rgba(0,0,0,0)'); ctx.fillStyle=gt; ctx.fillRect(0,0,W,H*0.30)
-    let gb = ctx.createLinearGradient(0,H*0.55,0,H); gb.addColorStop(0,'rgba(0,0,0,0)'); gb.addColorStop(1,'rgba(0,0,0,0.92)'); ctx.fillStyle=gb; ctx.fillRect(0,H*0.55,W,H*0.45)
-    ctx.strokeStyle = accent; ctx.lineWidth = 6; ctx.strokeRect(22,22,W-44,H-BARH-22)
-    const tFS = Math.min(82, Math.round(W*0.075))
-    const tl = wrapText(cleanTitle(name), W-160, `bold ${tFS}px ${FF}`)
-    ctx.fillStyle='#fff'; ctx.font=`bold ${tFS}px ${FF}`; ctx.textAlign='center'
-    let ty = 70 + tFS; for (const l of tl.slice(0,2)) { ctx.fillText(l, W/2, ty); ty += tFS + 4 }
-    ctx.fillStyle=accent; ctx.beginPath(); ctx.roundRect(W/2-70, ty+6, 140, 6, 3); ctx.fill(); ctx.textAlign='left'
-    const items = bs.slice(0,5)
-    const lh = 72, listH = items.length*lh, startY = H - BARH - 40 - listH
-    items.forEach((b,i)=>{
-      const clean = b.replace(/^[•✓\-]\s*/,'')
-      const y = startY + i*lh + lh/2
-      ctx.fillStyle=accent; ctx.beginPath(); ctx.arc(60,y,16,0,Math.PI*2); ctx.fill()
-      ctx.fillStyle='#000'; ctx.font=`bold 20px ${FF}`; ctx.textAlign='center'; ctx.fillText('✓',60,y+7); ctx.textAlign='left'
-      ctx.fillStyle='#fff'; ctx.font=`bold 32px ${FF}`
-      const tline = wrapText(clean, W-160, `bold 32px ${FF}`)[0] || clean
-      ctx.fillText(tline, 96, y+11)
-      if (i < items.length-1) { ctx.strokeStyle='rgba(255,255,255,0.12)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(60, startY+(i+1)*lh); ctx.lineTo(W-60, startY+(i+1)*lh); ctx.stroke() }
-    })
+    ctx.strokeStyle = accent; ctx.lineWidth = 6; ctx.strokeRect(26, 26, W - 52, H - BARH - 30)
+    const cat = (category || '').trim()
+    ctx.textAlign = 'center'
+    if (cat) { ctx.fillStyle = accent; ctx.font = `bold 26px ${FF}`; ctx.fillText(cleanTitle(cat).slice(0, 26), W / 2, 92) }
+    const tFS = Math.min(76, Math.round(W * 0.07))
+    const tl = wrapText(cleanTitle(name), W - 180, `bold ${tFS}px ${FF}`).slice(0, 2)
+    ctx.fillStyle = '#fff'; ctx.font = `bold ${tFS}px ${FF}`
+    let ty = (cat ? 130 : 100) + tFS
+    for (const l of tl) { ctx.fillText(l, W / 2, ty); ty += tFS + 4 }
+    ctx.fillStyle = accent; ctx.beginPath(); ctx.roundRect(W / 2 - 70, ty + 6, 140, 6, 3); ctx.fill()
+    ctx.textAlign = 'left'
+    // 2x2 icon chips, centred with margins
+    const pw = 476, ph = 80, gapx = 20, gapy = 16
+    const gridW = pw * 2 + gapx, gx = Math.round((W - gridW) / 2), gy = H - BARH - 50 - (ph * 2 + gapy)
+    for (let i = 0; i < Math.min(bs.length, 4); i++) {
+      const col = i % 2, row = Math.floor(i / 2)
+      chip(gx + col * (pw + gapx), gy + row * (ph + gapy), pw, ph, bs[i])
+    }
     drawBottomBar()
   }
 
@@ -663,6 +618,11 @@ async function renderAllLayouts(
     // showcase backdrop (blurred scene or scene cover)
     compositeInputs.push({ input: showcaseBg, top: 0, left: showLeft })
     // crisp cut-out product floating with air (only when available)
+    if (productResized) compositeInputs.push({ input: productResized, top: prodTop, left: prodLeft })
+  }
+  if ((layout === 'radial' || layout === 'bold' || layout === 'poster') && showcaseBg) {
+    // full-bleed blurred scene + centred cut-out product, text overlay on top
+    compositeInputs.push({ input: showcaseBg, top: 0, left: 0 })
     if (productResized) compositeInputs.push({ input: productResized, top: prodTop, left: prodLeft })
   }
   compositeInputs.push({ input: textOverlay, top: 0, left: 0 })
@@ -822,14 +782,16 @@ export async function POST(req: NextRequest) {
     // ── PHOTO MODE ────────────────────────────────────────────────────────────
     else {
       const STYLES: Record<string, string> = {
-        model:    'Keep this exact person and clothing completely unchanged. Change only background to urban city street. Preserve EVERY detail.',
-        store:    'Keep this exact clothing completely unchanged. Show on premium hanger in boutique. Preserve EVERY detail.',
-        flatlay:  'Keep this exact clothing completely unchanged. Show ONLY clothing top-down on white marble. Preserve EVERY detail.',
-        catalog:  'Keep this exact clothing and person completely unchanged. Pure white studio background. Preserve EVERY detail.',
-        outdoor:  'Keep this exact person and clothing completely unchanged. Outdoor nature mountains, golden hour. Preserve EVERY detail.',
-        dark:     'Keep this exact person and clothing completely unchanged. Dark moody studio, dramatic rim lighting. Preserve EVERY detail.',
-        lifestyle:'Keep this exact person and clothing completely unchanged. Warm lifestyle interior, bokeh. Preserve EVERY detail.',
+        model:    'Show this exact product being worn or used by a natural, photorealistic full-body human model in a real lifestyle setting. Keep the product itself completely unchanged - same colours, shape, textures, logos. Full body visible, realistic anatomy, professional fashion photography.',
+        store:    'Place this exact product on a clean modern retail display stand or shelf in a boutique. Keep the product completely unchanged.',
+        flatlay:  'Strict top-down flat-lay photo of ONLY this exact product, camera pointing straight down at a 90-degree overhead angle, product lying flat on a clean surface. Keep the product completely unchanged.',
+        catalog:  'This exact product alone, centred on a seamless pure white studio background, soft even ecommerce lighting. Keep the product completely unchanged.',
+        outdoor:  'Show this exact product in an outdoor nature setting, mountains, golden hour light. Keep the product completely unchanged.',
+        dark:     'Show this exact product in a dark moody studio with dramatic rim lighting. Keep the product completely unchanged.',
+        lifestyle:'Show this exact product in a warm lifestyle interior with soft bokeh. Keep the product completely unchanged.',
       }
+      // styles where a human/hanger must NOT appear
+      const NO_PEOPLE = new Set(['store', 'flatlay', 'catalog'])
       const VARS = ['', 'slightly different angle', 'alternative lighting', 'different atmosphere']
 
       if (displayStyle === 'catalog' && !REPLICATE) {
@@ -849,9 +811,11 @@ export async function POST(req: NextRequest) {
         for (let i = 0; i < qty; i++) {
           try {
             const base = STYLES[displayStyle] || STYLES.catalog
-            let prompt = wishEn ? `${wishEn}. ${base}` : base
+            let prompt = base
+            if (NO_PEOPLE.has(displayStyle)) prompt += ' Absolutely no humans, no model, no mannequin, no hands, no clothing hanger — the product is the only subject.'
+            if (wishEn) prompt += ` Background and lighting hints: ${wishEn}.`
             if (i > 0) prompt += `. ${VARS[i]}`
-            const url = await runFlux(photoUrls[i % photoUrls.length], prompt.slice(0, 600), REPLICATE)
+            const url = await runFlux(photoUrls[i % photoUrls.length], prompt.slice(0, 800), REPLICATE)
             if (url) results.push(await saveUrl(supabase, url, user.id, 'studio'))
           } catch (e) { console.error(e) }
         }

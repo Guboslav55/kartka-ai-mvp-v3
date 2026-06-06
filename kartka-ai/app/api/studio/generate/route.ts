@@ -202,9 +202,10 @@ async function renderAllLayouts(
       fd.append('image_file', new Blob([productBuf], { type: m?.[1] || 'image/jpeg' }), 'p.jpg')
       fd.append('size', 'auto')
       const r = await fetch('https://api.remove.bg/v1.0/removebg', { method: 'POST', headers: { 'X-Api-Key': rmbgKey }, body: fd })
-      if (r.ok) productBuf = Buffer.from(await r.arrayBuffer())
-    } catch {}
-  }
+      if (r.ok) { productBuf = Buffer.from(await r.arrayBuffer()); console.log('rmbg: ok ✅') }
+      else console.error('rmbg: FAIL status', r.status)
+    } catch (e: any) { console.error('rmbg: error', e?.message) }
+  } else { console.error('rmbg: NO KEY (REMOVE_BG_API_KEY missing)') }
 
   // ── 2. Background: Flux scene → blurred photo → solid dark ───────────────
   let bgFull: Buffer
@@ -274,12 +275,13 @@ async function renderAllLayouts(
     showW = W; showH = H - BARH; showLeft = 0
     let hasAlpha = false
     try { hasAlpha = !!(await sharp(productBuf).metadata()).hasAlpha } catch {}
-    const blurAmt = layout === 'bold' ? 9 : 16
-    const bright = layout === 'bold' ? 0.78 : 0.88
-    showcaseBg = fluxScene
-      ? await sharp(fluxScene).resize(W, H - BARH, { fit: 'cover', position: 'centre' }).blur(blurAmt).modulate({ brightness: bright }).jpeg({ quality: 88 }).toBuffer()
-      : await sharp({ create: { width: W, height: H - BARH, channels: 3, background: { r: 14, g: 14, b: 16 } } }).jpeg().toBuffer()
     if (hasAlpha) {
+      // crisp cut-out on a softly blurred scene backdrop
+      const blurAmt = layout === 'bold' ? 9 : 16
+      const bright = layout === 'bold' ? 0.78 : 0.88
+      showcaseBg = fluxScene
+        ? await sharp(fluxScene).resize(W, H - BARH, { fit: 'cover', position: 'centre' }).blur(blurAmt).modulate({ brightness: bright }).jpeg({ quality: 88 }).toBuffer()
+        : await sharp({ create: { width: W, height: H - BARH, channels: 3, background: { r: 14, g: 14, b: 16 } } }).jpeg().toBuffer()
       let cutBuf = productBuf
       try { cutBuf = await sharp(productBuf).trim({ threshold: 12 }).toBuffer() } catch {}
       let boxW = 560, boxH = 560, cx = W / 2, cy = Math.round((H - BARH) * 0.54)
@@ -291,6 +293,11 @@ async function renderAllLayouts(
       prodW = boxW; prodH = boxH
       prodLeft = Math.round(cx - boxW / 2)
       prodTop = Math.round(cy - boxH / 2)
+    } else {
+      // no cut-out available → show the scene itself CRISP (never an all-blur mush)
+      const src = fluxScene || productBuf
+      showcaseBg = await sharp(src).resize(W, H - BARH, { fit: 'cover', position: 'centre' }).jpeg({ quality: 92 }).toBuffer()
+      productResized = null
     }
   }
 

@@ -503,15 +503,25 @@ async function renderAllLayouts(
     for (const line of titleLines) { ctx.fillText(line, W / 2, ty); ty += titleFS + 4 }
     ctx.fillStyle = accent; ctx.beginPath(); ctx.roundRect(W / 2 - 90, ty + 6, 180, 6, 3); ctx.fill()
     ctx.textAlign = 'left'
-    // Four callout chips around the centred product, with connector lines
+    // Four callout chips around the centred product, each pointing to a
+    // different region of the product (no central X).
     const pw = 384, ph = 78, cx = W / 2, cyP = Math.round((H - BARH) * 0.54)
+    const ox = 200, oy = 230  // spread of target points around product centre
     const pos: [number, number][] = [[40, H * 0.30], [W - 40 - pw, H * 0.30], [40, H * 0.66], [W - 40 - pw, H * 0.66]]
+    const tgt: [number, number][] = [[cx - ox, cyP - oy], [cx + ox, cyP - oy], [cx - ox, cyP + oy], [cx + ox, cyP + oy]]
     for (let i = 0; i < Math.min(bs.length, 4); i++) {
       const px = pos[i][0], py = pos[i][1]
       const sx = px < W / 2 ? px + pw : px, sy = py + ph / 2
-      ctx.strokeStyle = hexAlpha(accent, 0.55); ctx.lineWidth = 2
-      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(cx, cyP); ctx.stroke()
-      ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(cx, cyP, 5, 0, Math.PI * 2); ctx.fill()
+      const tx = tgt[i][0], ty = tgt[i][1]
+      ctx.strokeStyle = hexAlpha(accent, 0.7); ctx.lineWidth = 2.5
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(tx, ty); ctx.stroke()
+      // arrowhead at the product end
+      const ang = Math.atan2(ty - sy, tx - sx), ah = 13
+      ctx.fillStyle = accent; ctx.beginPath()
+      ctx.moveTo(tx, ty)
+      ctx.lineTo(tx - ah * Math.cos(ang - 0.42), ty - ah * Math.sin(ang - 0.42))
+      ctx.lineTo(tx - ah * Math.cos(ang + 0.42), ty - ah * Math.sin(ang + 0.42))
+      ctx.closePath(); ctx.fill()
       chip(px, py, pw, ph, bs[i])
     }
     drawBottomBar()

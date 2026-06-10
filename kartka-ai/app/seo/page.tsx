@@ -19,6 +19,7 @@ export default function SeoPage() {
   const [result, setResult] = useState<any>(null)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState<string|null>(null)
+  const [analyzing, setAnalyzing] = useState(false)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -60,6 +61,36 @@ export default function SeoPage() {
     setTimeout(() => setCopied(null), 2000)
   }
 
+  async function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setAnalyzing(true); setError('')
+    try {
+      const b64 = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader()
+        r.onload = () => resolve(r.result as string)
+        r.onerror = reject
+        r.readAsDataURL(file)
+      })
+      const res = await fetch('/api/analyze-product', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ imageBase64: b64, lang }),
+      })
+      const d = await res.json()
+      if (d.productName) setTitle(d.productName)
+      if (Array.isArray(d.bullets) && d.bullets.length) {
+        setBullets(d.bullets.join('\n'))
+        if (!keywords.trim()) setKeywords([d.category, ...d.bullets].filter(Boolean).join(', '))
+      }
+      if (!d.productName && (!d.bullets || !d.bullets.length)) setError('Не вдалося розпізнати фото — спробуй інше')
+    } catch (err: any) {
+      setError('Не вдалося обробити фото')
+    }
+    setAnalyzing(false)
+    e.target.value = ''
+  }
+
   const PLATFORMS = [
     { value: 'prom', label: 'Prom.ua' },
     { value: 'rozetka', label: 'Rozetka' },
@@ -84,6 +115,14 @@ export default function SeoPage() {
         {/* Input */}
         <div className="space-y-4">
           <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-5 space-y-4">
+            <div>
+              <label className="text-white/60 text-xs font-bold uppercase mb-2 block">Фото товару — AI заповнить поля</label>
+              <label className={`flex items-center justify-center gap-2 w-full border border-dashed rounded-xl py-4 cursor-pointer text-sm transition-all ${analyzing ? 'border-gold/50 text-gold' : 'border-white/20 text-white/50 hover:border-gold/50 hover:text-white/70'}`}>
+                <input type="file" accept="image/*" onChange={onPhoto} disabled={analyzing} className="hidden" />
+                {analyzing ? '⏳ Аналізую фото…' : '📷 Завантажити фото товару'}
+              </label>
+              <p className="text-white/30 text-[11px] mt-1.5">AI заповнить назву, переваги та ключі. Безкоштовно — зорі лише за генерацію.</p>
+            </div>
             <div>
               <label className="text-white/60 text-xs font-bold uppercase mb-2 block">Поточна назва товару *</label>
               <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Наприклад: Футболка POMSTA"

@@ -156,6 +156,19 @@ export default function SeoPage() {
                 </div>
               ) : null)}
 
+              {result.fullDescription && (
+                <div className="bg-white/[0.04] border border-gold/30 rounded-2xl p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-gold text-xs font-bold uppercase">Опис товару (готовий до вставки)</span>
+                    <button onClick={() => copy(result.fullDescription, 'fulldesc')}
+                      className={`text-xs px-2 py-1 rounded-lg border transition-all ${copied === 'fulldesc' ? 'bg-green-600 text-white border-green-600' : 'border-white/15 text-white/40 hover:border-white/30'}`}>
+                      {copied === 'fulldesc' ? '✓ Скопійовано' : '📋 Копіювати'}
+                    </button>
+                  </div>
+                  <p className="text-white/90 text-sm whitespace-pre-line leading-relaxed">{result.fullDescription}</p>
+                </div>
+              )}
+
               {result.searchKeywords?.length > 0 && (
                 <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-4">
                   <div className="flex items-center justify-between mb-2">

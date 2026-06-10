@@ -36,28 +36,34 @@ export async function POST(req: NextRequest) {
     model: 'gpt-4o',
     messages: [{
       role: 'user',
-      content: `You are an SEO expert for Ukrainian e-commerce. Write in ${langHint}.
+      content: `You are a senior SEO copywriter for Ukrainian e-commerce. Write ALL text in ${langHint}, natural and fluent (never machine-translated, never English mixed in).
 Platform: ${platformMap[platform] || platformMap.prom}
 
-Current product info:
+Product:
 - Title: ${title}
-- Description: ${description?.slice(0, 200) || ''}
-- Key features: ${bullets.slice(0, 3).join(', ')}
-- Current keywords: ${keywords.slice(0, 5).join(', ')}
+- Notes/description: ${description?.slice(0, 400) || '—'}
+- Key features: ${bullets.slice(0, 6).join(', ') || '—'}
+- Seed keywords: ${keywords.slice(0, 8).join(', ') || '—'}
 
-Generate optimized SEO content. Return ONLY valid JSON:
+STRICT RULES:
+- Be SPECIFIC and concrete. NEVER use empty filler such as "висока якість", "ергономічний дизайн", "сучасний дизайн", "найкращий вибір", "ідеальне рішення". Replace any filler with a concrete benefit, material, feature or use-case.
+- Keywords = real search queries Ukrainian buyers actually type: include product type, synonyms, brand/model if any, use-case, and buying-intent words (напр. "купити"). No duplicates, no single over-generic words.
+- "fullDescription" = a ready-to-paste product description, 600-900 characters, in ${langHint}. Structure: 1) короткий чіпляючий вступ; 2) 3-5 конкретних переваг, природно вплетені ключові слова (без спаму); 3) кому підходить / сценарій використання; 4) коротке завершення. Short paragraphs, plain text only — NO markdown, NO emoji, NO bullet symbols.
+
+Return ONLY valid JSON:
 {
-  "seoTitle": "optimized SEO title for ${platform}",
-  "metaDescription": "155 chars meta description",
+  "seoTitle": "SEO title, max 70 chars, main keyword near the start",
+  "metaDescription": "150-160 chars, compelling, contains main keyword",
   "h1": "H1 heading",
-  "searchKeywords": ["keyword1","keyword2","keyword3","keyword4","keyword5","keyword6","keyword7","keyword8"],
-  "longTailKeywords": ["long tail 1","long tail 2","long tail 3"],
-  "priceSuggestion": "price positioning note",
-  "categoryPath": "suggested category > subcategory",
+  "fullDescription": "600-900 character selling description in ${langHint}",
+  "searchKeywords": ["8 realistic search keywords"],
+  "longTailKeywords": ["long tail phrase 1","long tail phrase 2","long tail phrase 3"],
+  "priceSuggestion": "short price positioning note",
+  "categoryPath": "category > subcategory",
   "tags": ["tag1","tag2","tag3","tag4","tag5"]
 }`
     }],
-    max_tokens: 800,
+    max_tokens: 1300,
     response_format: { type: 'json_object' },
   })
 

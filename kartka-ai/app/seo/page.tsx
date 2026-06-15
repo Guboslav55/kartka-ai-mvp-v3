@@ -177,67 +177,98 @@ export default function SeoPage() {
         <div className="space-y-4">
           {result ? (
             <>
-              {[
-                { key: 'seoTitle', label: 'SEO Заголовок', value: result.seoTitle },
-                { key: 'metaDescription', label: 'Meta Description', value: result.metaDescription },
-                { key: 'h1', label: 'H1 Заголовок', value: result.h1 },
-                { key: 'categoryPath', label: 'Категорія', value: result.categoryPath },
-              ].map(item => item.value ? (
-                <div key={item.key} className="bg-white/[0.04] border border-white/10 rounded-2xl p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-white/50 text-xs font-bold uppercase">{item.label}</span>
-                    <button onClick={() => copy(item.value, item.key)}
-                      className={`text-xs px-2 py-1 rounded-lg border transition-all ${copied === item.key ? 'bg-green-600 text-white border-green-600' : 'border-white/15 text-white/40 hover:border-white/30'}`}>
-                      {copied === item.key ? '✓' : '📋'}
-                    </button>
-                  </div>
-                  <p className="text-white text-sm">{item.value}</p>
-                </div>
-              ) : null)}
-
-              {result.fullDescription && (
-                <div className="bg-white/[0.04] border border-gold/30 rounded-2xl p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-gold text-xs font-bold uppercase">Опис товару (готовий до вставки)</span>
-                    <button onClick={() => copy(result.fullDescription, 'fulldesc')}
-                      className={`text-xs px-2 py-1 rounded-lg border transition-all ${copied === 'fulldesc' ? 'bg-green-600 text-white border-green-600' : 'border-white/15 text-white/40 hover:border-white/30'}`}>
-                      {copied === 'fulldesc' ? '✓ Скопійовано' : '📋 Копіювати'}
-                    </button>
-                  </div>
-                  <p className="text-white/90 text-sm whitespace-pre-line leading-relaxed">{result.fullDescription}</p>
+              {(result.categoryPath || result.priceSuggestion) && (
+                <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-4 space-y-2">
+                  {result.categoryPath && <div className="flex justify-between gap-3 text-sm"><span className="text-white/40 shrink-0">Категорія</span><span className="text-white/80 text-right">{result.categoryPath}</span></div>}
+                  {result.priceSuggestion && <div className="flex justify-between gap-3 text-sm"><span className="text-white/40 shrink-0">Ціна</span><span className="text-white/70 text-right">{result.priceSuggestion}</span></div>}
                 </div>
               )}
 
-              {result.searchKeywords?.length > 0 && (
+              {(Array.isArray(result.blocks) && result.blocks.length ? result.blocks : [result]).map((b: any, bi: number) => (
+                <div key={bi} className="space-y-4">
+                  {(Array.isArray(result.blocks) && result.blocks.length > 1) && (
+                    <div className="flex items-center gap-2 pt-2">
+                      <span className="bg-gold text-black text-xs font-black px-3 py-1 rounded-full">{({uk:'🇺🇦 Українською',ru:'🇷🇺 Російською',en:'🇬🇧 English'} as any)[b.lang] || b.lang}</span>
+                      <div className="flex-1 h-px bg-white/10" />
+                    </div>
+                  )}
+
+                  {[
+                    { key: 'seoTitle', label: 'SEO Заголовок', value: b.seoTitle },
+                    { key: 'metaDescription', label: 'Meta Description', value: b.metaDescription },
+                    { key: 'h1', label: 'H1 Заголовок', value: b.h1 },
+                  ].map(item => item.value ? (
+                    <div key={item.key} className="bg-white/[0.04] border border-white/10 rounded-2xl p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-white/50 text-xs font-bold uppercase">{item.label}</span>
+                        <button onClick={() => copy(item.value, bi+'-'+item.key)}
+                          className={`text-xs px-2 py-1 rounded-lg border transition-all ${copied === bi+'-'+item.key ? 'bg-green-600 text-white border-green-600' : 'border-white/15 text-white/40 hover:border-white/30'}`}>
+                          {copied === bi+'-'+item.key ? '✓' : '📋'}
+                        </button>
+                      </div>
+                      <p className="text-white text-sm">{item.value}</p>
+                    </div>
+                  ) : null)}
+
+                  {[
+                    { key: 'premium', label: 'Опис — Преміум (стриманий)', value: b.descriptionPremium || b.fullDescription },
+                    { key: 'active', label: 'Опис — Активний продаж', value: b.descriptionActive },
+                  ].map(item => item.value ? (
+                    <div key={item.key} className="bg-white/[0.04] border border-gold/30 rounded-2xl p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-gold text-xs font-bold uppercase">{item.label}</span>
+                        <button onClick={() => copy(item.value, bi+'-'+item.key)}
+                          className={`text-xs px-2 py-1 rounded-lg border transition-all ${copied === bi+'-'+item.key ? 'bg-green-600 text-white border-green-600' : 'border-white/15 text-white/40 hover:border-white/30'}`}>
+                          {copied === bi+'-'+item.key ? '✓ Скопійовано' : '📋 Копіювати'}
+                        </button>
+                      </div>
+                      <p className="text-white/90 text-sm whitespace-pre-line leading-relaxed">{item.value}</p>
+                    </div>
+                  ) : null)}
+
+                  {b.searchKeywords?.length > 0 && (
+                    <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-white/50 text-xs font-bold uppercase">Ключові слова</span>
+                        <button onClick={() => copy(b.searchKeywords.join(', '), bi+'-kw')}
+                          className={`text-xs px-2 py-1 rounded-lg border transition-all ${copied === bi+'-kw' ? 'bg-green-600 text-white border-green-600' : 'border-white/15 text-white/40'}`}>
+                          {copied === bi+'-kw' ? '✓' : '📋'}
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {b.searchKeywords.map((kw: string, i: number) => (
+                          <button key={i} onClick={() => copy(kw, bi+'-kw'+i)}
+                            className="bg-white/8 text-white/70 text-xs px-2.5 py-1 rounded-full hover:bg-white/15 cursor-copy">{kw}</button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {b.longTailKeywords?.length > 0 && (
+                    <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-4">
+                      <span className="text-white/50 text-xs font-bold uppercase block mb-2">Long-tail запити</span>
+                      <ul className="space-y-1">
+                        {b.longTailKeywords.map((kw: string, i: number) => (
+                          <li key={i} className="flex items-center gap-2">
+                            <span className="text-gold text-xs">→</span>
+                            <span className="text-white/70 text-xs">{kw}</span>
+                            <button onClick={() => copy(kw, bi+'-lt'+i)} className="ml-auto text-white/25 hover:text-white/60 text-xs">📋</button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {result.tags?.length > 0 && (
                 <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-white/50 text-xs font-bold uppercase">Ключові слова</span>
-                    <button onClick={() => copy(result.searchKeywords.join(', '), 'keywords')}
-                      className={`text-xs px-2 py-1 rounded-lg border transition-all ${copied === 'keywords' ? 'bg-green-600 text-white border-green-600' : 'border-white/15 text-white/40'}`}>
-                      {copied === 'keywords' ? '✓' : '📋'}
-                    </button>
-                  </div>
+                  <span className="text-white/50 text-xs font-bold uppercase block mb-2">Теги</span>
                   <div className="flex flex-wrap gap-1.5">
-                    {result.searchKeywords.map((kw: string, i: number) => (
-                      <button key={i} onClick={() => copy(kw, `kw${i}`)}
-                        className="bg-white/8 text-white/70 text-xs px-2.5 py-1 rounded-full hover:bg-white/15 cursor-copy">{kw}</button>
+                    {result.tags.map((t: string, i: number) => (
+                      <span key={i} className="bg-white/8 text-white/60 text-xs px-2.5 py-1 rounded-full">{t}</span>
                     ))}
                   </div>
-                </div>
-              )}
-
-              {result.longTailKeywords?.length > 0 && (
-                <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-4">
-                  <span className="text-white/50 text-xs font-bold uppercase block mb-2">Long-tail запити</span>
-                  <ul className="space-y-1">
-                    {result.longTailKeywords.map((kw: string, i: number) => (
-                      <li key={i} className="flex items-center gap-2">
-                        <span className="text-gold text-xs">→</span>
-                        <span className="text-white/70 text-xs">{kw}</span>
-                        <button onClick={() => copy(kw, `lt${i}`)} className="ml-auto text-white/25 hover:text-white/60 text-xs">📋</button>
-                      </li>
-                    ))}
-                  </ul>
                 </div>
               )}
             </>

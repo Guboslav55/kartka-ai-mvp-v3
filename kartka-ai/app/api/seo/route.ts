@@ -24,46 +24,62 @@ export async function POST(req: NextRequest) {
   const { title, description, bullets = [], keywords = [], platform = 'prom', lang = 'uk' } = await req.json()
   if (!title) return NextResponse.json({ error: 'Потрібна назва товару' }, { status: 400 })
 
-  const langHint = lang === 'uk' ? 'Ukrainian' : lang === 'ru' ? 'Russian' : 'English'
-  const platformMap: Record<string, string> = {
-    prom: 'Prom.ua (Ukrainian B2B/B2C marketplace, title max 80 chars)',
-    rozetka: 'Rozetka (largest Ukrainian retailer, SEO-focused)',
-    olx: 'OLX Ukraine (classified ads, casual tone)',
-    google: 'Google Shopping (product title and description)',
+  const langNames: Record<string,string> = { uk: 'Ukrainian', ru: 'Russian', en: 'English' }
+  const reqLangCodes = platform === 'prom' ? ['uk', 'ru'] : [lang]
+
+  const PLATFORM_RULES: Record<string, string> = {
+    prom: 'Prom.ua marketplace. SEO title up to 80 characters with the main keyword first; include key attributes (type, material, colour). Buyers search in BOTH Ukrainian and Russian.',
+    rozetka: 'Rozetka — the most SEO-heavy Ukrainian retailer. Long descriptive title: brand + model + product type + key attribute. Description must be the most thorough and attribute-rich; weave keywords densely but naturally.',
+    olx: 'OLX classifieds — person-to-person ads. Keep everything SHORT, simple and conversational (e.g. "В наявності", "Відправка щодня Новою Поштою", "Стан новий"). Minimal marketing. Plain short title, no keyword stuffing. Focus on item, condition and availability.',
+    google: 'Google Shopping product FEED. Title MUST be: Brand + Product type + key attributes (gender, colour, material), max 70 characters, NO marketing or salesy words. Descriptions factual and dry, concrete attributes only, no emotional selling.',
   }
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4o',
     messages: [{
       role: 'user',
-      content: `You are a senior SEO copywriter for Ukrainian e-commerce. Write ALL text in ${langHint}, natural and fluent (never machine-translated, never English mixed in).
-Platform: ${platformMap[platform] || platformMap.prom}
+      content: `You are a senior e-commerce copywriter and SEO specialist for the Ukrainian market.
+Platform: ${platform} — ${PLATFORM_RULES[platform] || PLATFORM_RULES.prom}
 
 Product:
 - Title: ${title}
-- Notes/description: ${description?.slice(0, 400) || '—'}
-- Key features: ${bullets.slice(0, 6).join(', ') || '—'}
+- Notes: ${description?.slice(0, 400) || '—'}
+- Features: ${bullets.slice(0, 6).join(', ') || '—'}
 - Seed keywords: ${keywords.slice(0, 8).join(', ') || '—'}
 
-STRICT RULES:
-- Be SPECIFIC and concrete. NEVER use empty filler such as "висока якість", "ергономічний дизайн", "сучасний дизайн", "найкращий вибір", "ідеальне рішення". Replace any filler with a concrete benefit, material, feature or use-case.
-- Keywords = real search queries Ukrainian buyers actually type: include product type, synonyms, brand/model if any, use-case, and buying-intent words (напр. "купити"). No duplicates, no single over-generic words.
-- "fullDescription" = a ready-to-paste product description, 600-900 characters, in ${langHint}. Structure: 1) короткий чіпляючий вступ; 2) 3-5 конкретних переваг, природно вплетені ключові слова (без спаму); 3) кому підходить / сценарій використання; 4) коротке завершення. Short paragraphs, plain text only — NO markdown, NO emoji, NO bullet symbols.
+Produce a COMPLETE localized block for EACH of these languages, in this exact order: ${reqLangCodes.join(', ')}.
+Each block must include TWO selling description variants:
+- "descriptionPremium": restrained premium tone. Confident, driven by concrete benefits and facts, no pressure, no clichés. 500-800 characters.
+- "descriptionActive": active selling. Open with a strong hook addressing the buyer's desire or pain; speak in buyer-benefit language (e.g. "не промокнеш під дощем" instead of "водостійка тканина"); answer one likely objection; finish with a soft call to action. 500-800 characters.
 
-Return ONLY valid JSON:
+STRICT RULES:
+- Each block fully in its target language, natural and fluent — NEVER machine-translated, never mixed languages.
+- FORBIDDEN empty filler: "висока якість", "ергономічний дизайн", "сучасний дизайн", "найкращий вибір", "ідеальне рішення". Replace with concrete benefits, materials, use-cases.
+- Descriptions: plain text only, NO markdown, NO emoji, NO bullet symbols; short paragraphs.
+- Keywords: real buyer search queries (synonyms, type, brand/model, use-case, intent words like "купити"); no duplicates.
+- Strictly respect the platform rules above (title length, tone, dryness).
+
+Return ONLY valid JSON with this shape:
 {
-  "seoTitle": "SEO title, max 70 chars, main keyword near the start",
-  "metaDescription": "150-160 chars, compelling, contains main keyword",
-  "h1": "H1 heading",
-  "fullDescription": "600-900 character selling description in ${langHint}",
-  "searchKeywords": ["8 realistic search keywords"],
-  "longTailKeywords": ["long tail phrase 1","long tail phrase 2","long tail phrase 3"],
-  "priceSuggestion": "short price positioning note",
   "categoryPath": "category > subcategory",
-  "tags": ["tag1","tag2","tag3","tag4","tag5"]
-}`
+  "priceSuggestion": "short price positioning note",
+  "tags": ["tag1","tag2","tag3","tag4","tag5"],
+  "blocks": [
+    {
+      "lang": "${reqLangCodes[0]}",
+      "seoTitle": "...",
+      "metaDescription": "150-160 chars",
+      "h1": "...",
+      "descriptionPremium": "...",
+      "descriptionActive": "...",
+      "searchKeywords": ["8 keywords"],
+      "longTailKeywords": ["lt1","lt2","lt3"]
+    }
+  ]
+}
+Return EXACTLY ${reqLangCodes.length} block(s), one per language, in this order: ${reqLangCodes.join(', ')}. Each block fully written in its own language.`
     }],
-    max_tokens: 1300,
+    max_tokens: 3000,
     response_format: { type: 'json_object' },
   })
 

@@ -93,7 +93,13 @@ export default function ProductsPage() {
       });
       const d = await res.json();
       if (d.error) { setError('Не вдалося згенерувати: ' + d.error); }
-      else setForm(f => f ? { ...f, name: d.name || f.name, description: d.description || f.description } : f);
+      else setForm(f => f ? {
+        ...f,
+        name: d.name || f.name,
+        description: d.description || f.description,
+        category: d.category || f.category,
+        sku: f.sku || ('KAI-' + Date.now().toString(36).slice(-5).toUpperCase()),
+      } : f);
     } catch {
       setError('Помилка генерації');
     }

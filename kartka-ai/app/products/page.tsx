@@ -151,9 +151,9 @@ export default function ProductsPage() {
             <p className="text-white/40 text-sm">Фото зі студії + назва, опис і ціна — в одному місці. Далі — експорт на маркетплейс.</p>
           </div>
           {!form && (
-            <button onClick={startNew} className="bg-gold text-black font-bold px-4 py-2 rounded-xl hover:brightness-110 shrink-0">
+            <Link href="/products/create" className="bg-gold text-black font-bold px-4 py-2 rounded-xl hover:brightness-110 shrink-0">
               + Створити
-            </button>
+            </Link>
           )}
         </div>
 
@@ -254,7 +254,7 @@ export default function ProductsPage() {
             <div className="text-4xl mb-3">📦</div>
             <p className="text-white/50 mb-1">Поки немає товарів</p>
             <p className="text-white/30 text-sm mb-4">Створи перший товар — обери фото зі студії, згенеруй опис, постав ціну.</p>
-            <button onClick={startNew} className="bg-gold text-black font-bold px-4 py-2 rounded-xl hover:brightness-110">+ Створити товар</button>
+            <Link href="/products/create" className="inline-block bg-gold text-black font-bold px-4 py-2 rounded-xl hover:brightness-110">+ Створити товар</Link>
           </div>
         ) : (
           <div className="space-y-2">

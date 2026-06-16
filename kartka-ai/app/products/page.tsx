@@ -25,24 +25,31 @@ export default function ProductsPage() {
   const router = useRouter();
   const supabase = createClient();
   const [uid, setUid] = useState<string | null>(null);
+  const [token, setToken] = useState<string>('');
   const [products, setProducts] = useState<any[]>([]);
-  const [cards, setCards] = useState<any[]>([]);
+  const [gallery, setGallery] = useState<{ url: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<Product | null>(null);
   const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) { router.push('/auth'); return; }
       setUid(user.id);
+      setToken(session?.access_token || '');
       await reload(user.id);
-      const { data: savedCards } = await supabase
-        .from('cards').select('id,image_url,title,description,created_at')
-        .eq('user_id', user.id).order('created_at', { ascending: false }).limit(30);
-      if (savedCards) setCards(savedCards);
+      // gallery = real Studio generations (studio_results.urls), newest first
+      const { data: sr } = await supabase
+        .from('studio_results').select('product_name,urls,created_at')
+        .eq('user_id', user.id).order('created_at', { ascending: false }).limit(40);
+      const flat: { url: string; name: string }[] = [];
+      for (const r of sr || []) for (const u of (r.urls || [])) flat.push({ url: u, name: r.product_name || '' });
+      setGallery(flat);
       setLoading(false);
     })();
   }, []);
@@ -55,14 +62,9 @@ export default function ProductsPage() {
   }
 
   function startNew() { setError(''); setForm({ ...EMPTY }); }
-  function startFromCard(card: any) {
+  function startFromImage(img: { url: string; name: string }) {
     setError('');
-    setForm({
-      ...EMPTY,
-      name: card.title || '',
-      description: card.description || '',
-      image_urls: card.image_url ? [card.image_url] : [],
-    });
+    setForm({ ...EMPTY, name: img.name || '', image_urls: [img.url] });
   }
   function startEdit(p: any) {
     setError('');
@@ -78,6 +80,24 @@ export default function ProductsPage() {
     if (!form) return;
     const has = form.image_urls.includes(url);
     setForm({ ...form, image_urls: has ? form.image_urls.filter(u => u !== url) : [...form.image_urls, url] });
+  }
+
+  async function generateText() {
+    if (!form || !form.image_urls.length) { setError('Спершу обери фото товару'); return; }
+    setGenerating(true); setError('');
+    try {
+      const res = await fetch('/api/product-assist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ imageUrl: form.image_urls[0] }),
+      });
+      const d = await res.json();
+      if (d.error) { setError('Не вдалося згенерувати: ' + d.error); }
+      else setForm(f => f ? { ...f, name: d.name || f.name, description: d.description || f.description } : f);
+    } catch {
+      setError('Помилка генерації');
+    }
+    setGenerating(false);
   }
 
   async function save() {
@@ -122,7 +142,7 @@ export default function ProductsPage() {
           <div>
             <Link href="/dashboard" className="text-white/40 text-sm hover:text-white/70">← Кабінет</Link>
             <h1 className="text-2xl font-black mt-1">Мої товари</h1>
-            <p className="text-white/40 text-sm">Єдиний товар: фото + опис + ціна. Далі — експорт на маркетплейс.</p>
+            <p className="text-white/40 text-sm">Фото зі студії + назва, опис і ціна — в одному місці. Далі — експорт на маркетплейс.</p>
           </div>
           {!form && (
             <button onClick={startNew} className="bg-gold text-black font-bold px-4 py-2 rounded-xl hover:brightness-110 shrink-0">
@@ -138,20 +158,31 @@ export default function ProductsPage() {
               <button onClick={() => setForm(null)} className="text-white/40 hover:text-white/80 text-xl">×</button>
             </div>
 
-            {cards.length > 0 && (
-              <div>
-                <label className="text-white/60 text-xs font-bold uppercase mb-2 block">Фото з твоїх карток (обери одне або кілька)</label>
-                <div className="flex gap-2 overflow-x-auto pb-1">
-                  {cards.filter(c => c.image_url).map(c => (
-                    <button key={c.id} onClick={() => toggleImage(c.image_url)}
-                      className={`shrink-0 rounded-lg overflow-hidden border-2 transition-all ${form.image_urls.includes(c.image_url) ? 'border-gold' : 'border-transparent opacity-70 hover:opacity-100'}`}>
-                      <img src={c.image_url} alt="" className="w-16 h-16 object-cover" />
-                    </button>
-                  ))}
+            <div>
+              <label className="text-white/60 text-xs font-bold uppercase mb-2 block">Фото зі студії (обери одне або кілька)</label>
+              {gallery.length === 0 ? (
+                <div className="text-white/30 text-sm bg-white/[0.03] border border-white/8 rounded-xl px-3 py-4">
+                  Поки немає згенерованих карток. <Link href="/studio" className="text-gold/80 hover:text-gold">Згенерувати у Студії →</Link>
                 </div>
-                <p className="text-white/30 text-[11px] mt-1">Обрано: {form.image_urls.length}</p>
-              </div>
-            )}
+              ) : (
+                <>
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {gallery.map((g, i) => (
+                      <button key={i} onClick={() => toggleImage(g.url)}
+                        className={`shrink-0 rounded-lg overflow-hidden border-2 transition-all ${form.image_urls.includes(g.url) ? 'border-gold' : 'border-transparent opacity-70 hover:opacity-100'}`}>
+                        <img src={g.url} alt="" className="w-16 h-16 object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-white/30 text-[11px] mt-1">Обрано: {form.image_urls.length}</p>
+                </>
+              )}
+            </div>
+
+            <button onClick={generateText} disabled={generating || !form.image_urls.length}
+              className={`w-full rounded-xl py-3 text-sm font-bold border transition-all ${form.image_urls.length && !generating ? 'border-gold/50 text-gold hover:bg-gold/10' : 'border-white/10 text-white/30'}`}>
+              {generating ? '✨ Генерую назву та опис…' : '✨ Згенерувати назву і опис за фото'}
+            </button>
 
             <div>
               <label className="text-white/60 text-xs font-bold uppercase mb-1.5 block">Назва товару *</label>
@@ -163,8 +194,7 @@ export default function ProductsPage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-white/60 text-xs font-bold uppercase mb-1.5 block">Ціна (грн) *</label>
-                <input value={form.price} onChange={e => setForm({ ...form, price: e.target.value })}
-                  inputMode="decimal"
+                <input value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} inputMode="decimal"
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm focus:border-gold/50 outline-none"
                   placeholder="1499" />
               </div>
@@ -194,11 +224,9 @@ export default function ProductsPage() {
 
             <div>
               <label className="text-white/60 text-xs font-bold uppercase mb-1.5 block">Опис товару</label>
-              <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
-                rows={5}
+              <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={6}
                 className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm focus:border-gold/50 outline-none resize-y"
-                placeholder="Встав опис із SEO-генератора або напиши свій…" />
-              <Link href="/seo" className="text-gold/70 text-[11px] hover:text-gold">→ Згенерувати опис у SEO-інструменті</Link>
+                placeholder="Натисни «Згенерувати назву і опис за фото» або напиши свій…" />
             </div>
 
             {error && <p className="text-red-400 text-sm">{error}</p>}
@@ -219,21 +247,8 @@ export default function ProductsPage() {
           <div className="bg-white/[0.03] border border-white/8 rounded-2xl p-10 text-center">
             <div className="text-4xl mb-3">📦</div>
             <p className="text-white/50 mb-1">Поки немає товарів</p>
-            <p className="text-white/30 text-sm mb-4">Створи перший товар — фото з картки, ціна та опис в одному місці.</p>
+            <p className="text-white/30 text-sm mb-4">Створи перший товар — обери фото зі студії, згенеруй опис, постав ціну.</p>
             <button onClick={startNew} className="bg-gold text-black font-bold px-4 py-2 rounded-xl hover:brightness-110">+ Створити товар</button>
-            {cards.length > 0 && (
-              <div className="mt-6 text-left">
-                <p className="text-white/40 text-xs font-bold uppercase mb-2">…або почни з готової картки</p>
-                <div className="flex gap-2 overflow-x-auto pb-1">
-                  {cards.filter(c => c.image_url).slice(0, 10).map(c => (
-                    <button key={c.id} onClick={() => startFromCard(c)}
-                      className="shrink-0 rounded-lg overflow-hidden border border-white/10 hover:border-gold/50">
-                      <img src={c.image_url} alt="" className="w-16 h-16 object-cover" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         ) : (
           <div className="space-y-2">

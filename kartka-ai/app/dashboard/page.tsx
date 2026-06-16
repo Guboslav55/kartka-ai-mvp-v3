@@ -81,8 +81,8 @@ export default function DashboardPage() {
     <div className="min-h-screen px-4 sm:px-6 py-8 max-w-4xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
-        <Link href="/" className="font-display font-black text-xl text-gold">
-          Картка<span className="text-white">АІ</span>
+        <Link href="/" className="font-display font-black text-xl">
+          <span className="text-gradient">Картка</span><span className="text-white">АІ</span>
         </Link>
         <div className="flex items-center gap-3">
           {/* Зорі в хедері */}
@@ -104,6 +104,17 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Hero CTA — unified flow */}
+      <Link href="/products/create" className="btn-shine block rounded-2xl p-6 mb-6 bg-gradient-to-r from-gold/20 via-coral/10 to-violet/15 border border-gold/30 lift">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="font-display font-black text-xl mb-1">✨ Створити товар</div>
+            <div className="text-white/55 text-sm">Фото → картинка, назва, опис і ціна за один крок</div>
+          </div>
+          <span className="bg-gradient-to-r from-gold to-gold-light text-black font-bold px-5 py-2.5 rounded-xl text-sm shrink-0 whitespace-nowrap">Почати →</span>
+        </div>
+      </Link>
+
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
         {[
@@ -112,7 +123,7 @@ export default function DashboardPage() {
           { label: 'Всього створено', value: String(user?.cards_total ?? 0), cls: 'text-white' },
           { label: 'Збережено', value: String(cards.length), cls: 'text-white' },
         ].map(s => (
-          <div key={s.label} className="bg-white/[0.04] border border-white/8 rounded-2xl p-4 sm:p-5">
+          <div key={s.label} className="glass rounded-2xl p-4 sm:p-5">
             <div className={`font-display font-black text-2xl mb-1 ${s.cls}`}>{s.value}</div>
             <div className="text-white/35 text-xs leading-tight">{s.label}</div>
           </div>
@@ -155,7 +166,7 @@ export default function DashboardPage() {
           </div>
         </Link>
         <Link href="/projects"
-          className="bg-white/[0.04] border border-white/10 rounded-2xl p-6 hover:border-white/20 transition-all hover:-translate-y-1 group">
+          className="glass rounded-2xl p-6 hover:border-white/20 transition-all hover:-translate-y-1 group">
           <div className="text-3xl mb-3">📁</div>
           <div className="font-display font-bold text-lg mb-1">Проекти</div>
           <div className="text-white/40 text-sm">Організуй картки по групах і платформах</div>
@@ -164,7 +175,7 @@ export default function DashboardPage() {
           </div>
         </Link>
         <Link href="/gallery"
-          className="bg-white/[0.04] border border-white/10 rounded-2xl p-6 hover:border-white/20 transition-all hover:-translate-y-1 group">
+          className="glass rounded-2xl p-6 hover:border-white/20 transition-all hover:-translate-y-1 group">
           <div className="text-3xl mb-3">🖼️</div>
           <div className="font-display font-bold text-lg mb-1">Галерея</div>
           <div className="text-white/40 text-sm">Всі згенеровані зображення зі студії</div>
@@ -262,7 +273,7 @@ export default function DashboardPage() {
       </div>
 
       {cards.length === 0 ? (
-        <div className="bg-white/[0.03] border border-white/8 rounded-2xl p-12 text-center">
+        <div className="glass rounded-2xl p-12 text-center">
           <div className="text-4xl mb-4">📭</div>
           <p className="text-white/40 mb-5 text-sm">Ще немає жодної картки</p>
           <Link href="/generate" className="inline-block bg-gold text-black px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-gold-light transition-colors">
@@ -273,7 +284,7 @@ export default function DashboardPage() {
         <div className="space-y-2">
           {cards.map(card => (
             <Link key={card.id} href={`/card/${card.id}`}
-              className="bg-white/[0.03] border border-white/8 rounded-xl px-4 py-4 flex items-start gap-3 hover:border-gold/30 hover:bg-white/[0.05] transition-all group block">
+              className="glass rounded-xl px-4 py-4 flex items-start gap-3 hover:border-gold/30 hover:bg-white/[0.05] transition-all group block">
               {card.image_url
                 ? <img src={card.image_url} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" />
                 : <div className="w-12 h-12 rounded-lg bg-white/5 flex items-center justify-center shrink-0 text-lg">📦</div>

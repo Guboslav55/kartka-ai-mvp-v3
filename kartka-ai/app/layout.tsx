@@ -20,8 +20,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;700;900&family=Golos+Text:wght@400;500;600&display=swap" rel="stylesheet" />
       </head>
-      <body className="bg-[#0a0a0a] text-[#f5f2eb] font-sans antialiased">
-        {children}
+      <body className="bg-[#08080b] text-[#f5f2eb] font-sans antialiased">
+        <div className="aurora" aria-hidden="true">
+          <div className="blob b1" /><div className="blob b2" /><div className="blob b3" />
+        </div>
+        <div className="relative z-10">{children}</div>
       </body>
     </html>
   );

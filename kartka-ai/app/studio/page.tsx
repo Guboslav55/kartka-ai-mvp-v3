@@ -660,7 +660,7 @@ export default function StudioPage() {
               </div>
             )}
             {mode === 'photo' && photos.length > 0 && (
-              <span className="text-white/40 text-xs">{photos.length} фото → {photos.length} результат(ів) • 4⭐ кожне</span>
+              <span className="text-white/40 text-xs">{photos.length} фото → до {photos.length} результатів • 4⭐ за кожне (бирки/етикетки пропускаються)</span>
             )}
             {!canGenerate && photos.length === 0 && <span className="text-white/30 text-xs">↑ Завантажте фото товару</span>}
             {!canGenerate && photos.length > 0 && !productName && <span className="text-white/30 text-xs">↑ Введіть назву товару</span>}

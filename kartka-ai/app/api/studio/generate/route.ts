@@ -686,7 +686,7 @@ async function runFlux(imageUrl: string, prompt: string, token: string, aspectRa
     const pred = await fetch('https://api.replicate.com/v1/models/black-forest-labs/flux-kontext-pro/predictions', {
       method: 'POST',
       headers: { Authorization: `Token ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ input: { input_image: imageUrl, prompt, aspect_ratio: aspectRatio, output_format: 'jpg', output_quality: 90, safety_tolerance: 2 } })
+      body: JSON.stringify({ input: { input_image: imageUrl, prompt, aspect_ratio: aspectRatio, output_format: 'jpg', output_quality: 95, safety_tolerance: 2 } })
     })
     if (!pred.ok) return null
     const { id } = await pred.json()
@@ -735,7 +735,7 @@ export async function POST(req: NextRequest) {
       mode = 'photo', displayStyle = 'catalog',
       cardPreset = 'urban', cardLayout = 'split', creativity = 0.5,
       productPhoto, productPhotos, productPhotoUrl,
-      productName = '', category = '', wishes = '', count = 1, bullets = [], format = '2:3'
+      productName = '', category = '', wishes = '', count = 1, bullets = [], format = '2:3', photoStyle = 'commercial'
     } = await req.json()
 
     if (!productName.trim()) return NextResponse.json({ error: 'Введіть назву товару' }, { status: 400 })
@@ -802,13 +802,13 @@ export async function POST(req: NextRequest) {
     // ── PHOTO MODE ────────────────────────────────────────────────────────────
     else {
       const STYLES: Record<string, string> = {
-        model:    'Show this exact product being worn or used by a natural, photorealistic full-body human model in a real lifestyle setting. Keep the product itself completely unchanged - same colours, shape, textures, logos. Full body visible, realistic anatomy, professional fashion photography.',
-        store:    'Place this exact product on a clean modern retail display stand or shelf in a boutique. Keep the product completely unchanged.',
-        flatlay:  'Strict top-down flat-lay photo of ONLY this exact product, camera pointing straight down at a 90-degree overhead angle, product lying flat on a clean surface. Keep the product completely unchanged.',
-        catalog:  'This exact product alone, centred on a seamless pure white studio background, soft even ecommerce lighting. Keep the product completely unchanged.',
-        outdoor:  'Show this exact product in an outdoor nature setting, mountains, golden hour light. Keep the product completely unchanged.',
-        dark:     'Show this exact product in a dark moody studio with dramatic rim lighting. Keep the product completely unchanged.',
-        lifestyle:'Show this exact product in a warm lifestyle interior with soft bokeh. Keep the product completely unchanged.',
+        model:    'A photorealistic full-body human model naturally wearing or using this EXACT product in a real lifestyle setting. The product must remain 100% identical — same colours, shape, fabric, textures, prints and logos on every visible side. Realistic anatomy and proportions, natural flattering pose, professional fashion editorial photography, shallow depth of field, soft natural light.',
+        store:    'This EXACT product presented on a clean modern retail display stand or shelf in a stylish boutique. Product remains 100% identical. Tasteful staging, soft retail lighting, shallow depth of field.',
+        flatlay:  'Strict top-down flat-lay of ONLY this EXACT product, camera pointing straight down at a 90-degree overhead angle, product lying flat and neatly arranged on a clean styled surface. Product remains 100% identical. Even soft daylight, subtle realistic shadows.',
+        catalog:  'This EXACT product alone, perfectly centred on a seamless studio background with a soft gradient and a subtle ground shadow, clean even e-commerce lighting. Product remains 100% identical.',
+        outdoor:  'This EXACT product in a real outdoor setting with natural golden-hour light and soft background bokeh. Product remains 100% identical.',
+        dark:     'This EXACT product in a moody dark studio with dramatic rim lighting and soft reflections. Product remains 100% identical.',
+        lifestyle:'This EXACT product in a warm lifestyle interior with natural window light and soft bokeh. Product remains 100% identical.',
       }
       // styles where a human/hanger must NOT appear
       const NO_PEOPLE = new Set(['store', 'flatlay', 'catalog'])
@@ -828,13 +828,19 @@ export async function POST(req: NextRequest) {
         for (const p of allPhotos) { const u = await uploadPhoto(supabase, p, user.id, 'replicate-input'); if (u) photoUrls.push(u) }
         if (!photoUrls.length) return NextResponse.json({ error: 'Помилка завантаження фото' }, { status: 500 })
 
+        const STYLE_TONE = photoStyle === 'home'
+          ? 'Overall look: natural casual lifestyle, soft natural daylight, authentic relatable everyday atmosphere.'
+          : 'Overall look: premium commercial e-commerce photography, clean studio-grade lighting, crisp polished high-end result.'
+        const QUALITY = 'Ultra-realistic, sharp focus, fine detail, true-to-life colours, natural soft shadows and reflections, high resolution. No added text, no watermark, no extra objects, do not distort or alter the product in any way.'
         for (let i = 0; i < photoUrls.length; i++) {
           try {
             const base = STYLES[displayStyle] || STYLES.catalog
             let prompt = base
             if (NO_PEOPLE.has(displayStyle)) prompt += ' Absolutely no humans, no model, no mannequin, no hands, no clothing hanger — the product is the only subject.'
-            if (wishEn) prompt += ` Background and lighting hints: ${wishEn}.`
-            const url = await runFlux(photoUrls[i], prompt.slice(0, 800), REPLICATE, aspect)
+            prompt += ' ' + STYLE_TONE
+            if (wishEn) prompt += ` Scene and background: ${wishEn}.`
+            prompt += ' ' + QUALITY
+            const url = await runFlux(photoUrls[i], prompt.slice(0, 1200), REPLICATE, aspect)
             if (url) results.push(await saveUrl(supabase, url, user.id, 'studio'))
           } catch (e) { console.error(e) }
         }

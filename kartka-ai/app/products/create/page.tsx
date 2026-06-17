@@ -16,7 +16,7 @@ export default function CreateProductPage() {
   const [error, setError] = useState('');
   const [done, setDone] = useState(false);
 
-  const [imageUrl, setImageUrl] = useState('');
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [shortName, setShortName] = useState('');
   const [seoName, setSeoName] = useState('');
   const [category, setCategory] = useState('');
@@ -37,18 +37,22 @@ export default function CreateProductPage() {
       const flat: { url: string; name: string }[] = [];
       for (const r of sr || []) for (const u of (r.urls || [])) flat.push({ url: u, name: r.product_name || '' });
       setGallery(flat);
+      try {
+        const batch = JSON.parse(localStorage.getItem('studio_batch') || '[]');
+        if (Array.isArray(batch) && batch.length) { setImageUrls(batch); localStorage.removeItem('studio_batch'); }
+      } catch {}
       setLoading(false);
     })();
   }, []);
 
   async function generate() {
-    if (!imageUrl) { setError('Спершу обери фото товару'); return; }
+    if (!imageUrls.length) { setError('Спершу обери фото товару'); return; }
     setGenerating(true); setError(''); setDone(false);
     try {
       const res = await fetch('/api/product-assist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ imageUrl }),
+        body: JSON.stringify({ imageUrl: imageUrls[0] }),
       });
       const d = await res.json();
       if (d.error) { setError('Не вдалося згенерувати: ' + d.error); }
@@ -66,7 +70,7 @@ export default function CreateProductPage() {
 
   async function save() {
     if (!uid) return;
-    if (!imageUrl) { setError('Обери фото'); return; }
+    if (!imageUrls.length) { setError('Обери фото'); return; }
     if (!shortName.trim()) { setError('Потрібна назва (натисни «Згенерувати товар»)'); return; }
     if (!price || isNaN(parseFloat(price))) { setError('Встав ціну'); return; }
     setSaving(true); setError('');
@@ -79,7 +83,7 @@ export default function CreateProductPage() {
       currency: 'UAH',
       category: category.trim(),
       available, sku: sku.trim(),
-      image_urls: [imageUrl],
+      image_urls: imageUrls,
     });
     setSaving(false);
     if (e) { setError('Помилка збереження: ' + e.message); return; }
@@ -104,20 +108,27 @@ export default function CreateProductPage() {
             Поки немає згенерованих карток. <Link href="/studio" className="text-gold hover:underline">Зроби картку у Студії →</Link>
           </div>
         ) : (
-          <div className="flex gap-2 overflow-x-auto pb-2 mb-6">
-            {gallery.map((g, i) => (
-              <button key={i} onClick={() => { setImageUrl(g.url); if (!shortName) setShortName(g.name); }}
-                className={`shrink-0 rounded-xl overflow-hidden border-2 transition-all ${imageUrl === g.url ? 'border-gold' : 'border-transparent opacity-60 hover:opacity-100'}`}>
-                <img src={g.url} alt="" className="w-20 h-20 object-cover" />
-              </button>
-            ))}
+          <div className="mb-6">
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              {gallery.map((g, i) => {
+                const sel = imageUrls.indexOf(g.url);
+                return (
+                  <button key={i} onClick={() => { setImageUrls(prev => prev.includes(g.url) ? prev.filter(u => u !== g.url) : [...prev, g.url]); if (!shortName) setShortName(g.name); }}
+                    className={`relative shrink-0 rounded-xl overflow-hidden border-2 transition-all ${sel >= 0 ? 'border-gold' : 'border-transparent opacity-60 hover:opacity-100'}`}>
+                    <img src={g.url} alt="" className="w-20 h-20 object-cover" />
+                    {sel >= 0 && <span className="absolute top-1 right-1 w-5 h-5 rounded-full bg-gold text-black text-[11px] font-bold flex items-center justify-center">{sel + 1}</span>}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-white/35 text-[11px] mt-1.5">Обрано: {imageUrls.length} — усі фото підуть в один товар</p>
           </div>
         )}
 
         {/* STEP 2 */}
         <div className="flex items-center gap-2 mb-3">{num(2)}<span className="font-semibold text-sm">Одна кнопка робить усе</span></div>
-        <button onClick={generate} disabled={generating || !imageUrl}
-          className={`w-full rounded-xl py-3.5 font-bold mb-6 transition-all ${imageUrl && !generating ? 'bg-gold text-black hover:brightness-110' : 'bg-white/5 text-white/30 border border-white/10'}`}>
+        <button onClick={generate} disabled={generating || !imageUrls.length}
+          className={`w-full rounded-xl py-3.5 font-bold mb-6 transition-all ${imageUrls.length && !generating ? 'bg-gold text-black hover:brightness-110' : 'bg-white/5 text-white/30 border border-white/10'}`}>
           {generating ? '✨ Генерую назву, опис, категорію…' : '✨ Згенерувати товар'}
         </button>
 
@@ -125,10 +136,11 @@ export default function CreateProductPage() {
         <div className="flex items-center gap-2 mb-3">{num(3)}<span className="font-semibold text-sm">Перевір і постав ціну</span></div>
         <div className="glass rounded-2xl p-5 space-y-4">
           <div className="flex gap-4">
-            <div className="shrink-0">
-              {imageUrl
-                ? <img src={imageUrl} alt="" className="w-28 h-36 rounded-xl object-cover border border-white/10" />
+            <div className="shrink-0 relative">
+              {imageUrls[0]
+                ? <img src={imageUrls[0]} alt="" className="w-28 h-36 rounded-xl object-cover border border-white/10" />
                 : <div className="w-28 h-36 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/20 text-3xl">📦</div>}
+              {imageUrls.length > 1 && <span className="absolute bottom-1 right-1 bg-black/70 text-white text-[11px] px-2 py-0.5 rounded-full">+{imageUrls.length - 1}</span>}
             </div>
             <div className="flex-1 min-w-0 space-y-3">
               <div>

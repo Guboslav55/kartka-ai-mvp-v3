@@ -485,6 +485,7 @@ export default function StudioPage() {
                           </button>
                         ))}
                       </div>
+                      <p className="text-white/30 text-[10px] mt-1.5">Для товару найкраще 1:1 або 3:4 / 9:16. 16:9 робить товар дрібним — лого гірше читається.</p>
                     </div>
                   </div>
                 )}
@@ -587,6 +588,7 @@ export default function StudioPage() {
                           </button>
                         ))}
                       </div>
+                      <p className="text-white/30 text-[10px] mt-1.5">Для товару найкраще 1:1 або 3:4 / 9:16. 16:9 робить товар дрібним — лого гірше читається.</p>
                     </div>
                   </div>
                 )}

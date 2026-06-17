@@ -241,7 +241,8 @@ export default function StudioPage() {
     return () => window.removeEventListener('stars-updated', h)
   }, [])
 
-  const totalCost = mode === 'photo' ? COST_MAP[mode] * Math.max(1, photos.length) : COST_MAP[mode] * count
+  const usablePhotos = Math.max(1, photos.length - irrelevant.length)
+  const totalCost = mode === 'photo' ? COST_MAP[mode] * usablePhotos : COST_MAP[mode] * count
   // Auto-analyze: fires when first photo added, or when switching to card mode
   React.useEffect(() => {
     if (photos.length === 1 && token && !analyzing) {
@@ -709,7 +710,7 @@ export default function StudioPage() {
               </div>
             )}
             {mode === 'photo' && photos.length > 0 && (
-              <span className="text-white/40 text-xs">{photos.length} фото → до {photos.length} результатів • 4⭐ за кожне (бирки/етикетки пропускаються)</span>
+              <span className="text-white/40 text-xs">{usablePhotos} фото → {usablePhotos} результат(ів) • 4⭐ за кожне{irrelevant.length > 0 ? ` · ${irrelevant.length} пропущено (бирки/упаковка/інше)` : ''}</span>
             )}
             {!canGenerate && photos.length === 0 && <span className="text-white/30 text-xs">↑ Завантажте фото товару</span>}
             {!canGenerate && photos.length > 0 && !productName && <span className="text-white/30 text-xs">↑ Введіть назву товару</span>}

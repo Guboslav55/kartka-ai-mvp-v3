@@ -86,21 +86,21 @@ export default function CreateProductPage() {
     router.push('/products');
   }
 
-  if (loading) return <div className="min-h-screen bg-[#0a0a0c] flex items-center justify-center text-white/40">Завантаження…</div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-white/40">Завантаження…</div>;
 
   const num = (n: number) => <span className="w-6 h-6 rounded-full bg-gold/20 text-gold text-xs font-bold flex items-center justify-center shrink-0">{n}</span>;
 
   return (
-    <div className="min-h-screen bg-[#0a0a0c] text-white">
+    <div className="min-h-screen text-white">
       <div className="max-w-2xl mx-auto px-4 py-8">
         <Link href="/products" className="text-white/40 text-sm hover:text-white/70">← Мої товари</Link>
-        <h1 className="text-2xl font-black mt-1 mb-1">Створити товар</h1>
+        <h1 className="font-display text-2xl font-black mt-1 mb-1">Створити <span className="text-gradient">товар</span></h1>
         <p className="text-white/40 text-sm mb-6">Обери фото → одна кнопка зробить назву, опис, категорію. Ти ставиш ціну.</p>
 
         {/* STEP 1 */}
         <div className="flex items-center gap-2 mb-3">{num(1)}<span className="font-semibold text-sm">Фото товару</span></div>
         {gallery.length === 0 ? (
-          <div className="text-white/40 text-sm bg-white/[0.03] border border-white/8 rounded-xl px-4 py-5 mb-6">
+          <div className="text-white/40 text-sm glass rounded-xl px-4 py-5 mb-6">
             Поки немає згенерованих карток. <Link href="/studio" className="text-gold hover:underline">Зроби картку у Студії →</Link>
           </div>
         ) : (
@@ -123,7 +123,7 @@ export default function CreateProductPage() {
 
         {/* STEP 3 */}
         <div className="flex items-center gap-2 mb-3">{num(3)}<span className="font-semibold text-sm">Перевір і постав ціну</span></div>
-        <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-5 space-y-4">
+        <div className="glass rounded-2xl p-5 space-y-4">
           <div className="flex gap-4">
             <div className="shrink-0">
               {imageUrl
@@ -188,7 +188,7 @@ export default function CreateProductPage() {
 
           <div className="flex gap-2">
             <button onClick={save} disabled={saving}
-              className="flex-1 bg-gold text-black font-bold py-3 rounded-xl hover:brightness-110 disabled:opacity-50">
+              className="btn-shine flex-1 bg-gradient-to-r from-gold to-gold-light text-black font-bold py-3 rounded-xl hover:brightness-110 disabled:opacity-50">
               {saving ? 'Зберігаю…' : '✓ Зберегти товар'}
             </button>
             <Link href="/studio" className="px-4 py-3 rounded-xl border border-white/15 text-white/60 hover:border-white/30 text-sm flex items-center">

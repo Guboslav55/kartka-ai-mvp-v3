@@ -139,15 +139,15 @@ export default function ProductsPage() {
     await reload(uid);
   }
 
-  if (loading) return <div className="min-h-screen bg-[#0a0a0c] flex items-center justify-center text-white/40">Завантаження…</div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-white/40">Завантаження…</div>;
 
   return (
-    <div className="min-h-screen bg-[#0a0a0c] text-white">
+    <div className="min-h-screen text-white">
       <div className="max-w-3xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
             <Link href="/dashboard" className="text-white/40 text-sm hover:text-white/70">← Кабінет</Link>
-            <h1 className="text-2xl font-black mt-1">Мої товари</h1>
+            <h1 className="font-display text-2xl font-black mt-1">Мої <span className="text-gradient">товари</span></h1>
             <p className="text-white/40 text-sm">Фото зі студії + назва, опис і ціна — в одному місці. Далі — експорт на маркетплейс.</p>
           </div>
           {!form && (
@@ -158,7 +158,7 @@ export default function ProductsPage() {
         </div>
 
         {form && (
-          <div className="bg-white/[0.04] border border-gold/30 rounded-2xl p-5 mb-6 space-y-4">
+          <div className="glass border border-gold/30 rounded-2xl p-5 mb-6 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="font-bold text-lg">{form.id ? 'Редагувати товар' : 'Новий товар'}</h2>
               <button onClick={() => setForm(null)} className="text-white/40 hover:text-white/80 text-xl">×</button>
@@ -167,7 +167,7 @@ export default function ProductsPage() {
             <div>
               <label className="text-white/60 text-xs font-bold uppercase mb-2 block">Фото зі студії (обери одне або кілька)</label>
               {gallery.length === 0 ? (
-                <div className="text-white/30 text-sm bg-white/[0.03] border border-white/8 rounded-xl px-3 py-4">
+                <div className="text-white/30 text-sm glass rounded-xl px-3 py-4">
                   Поки немає згенерованих карток. <Link href="/studio" className="text-gold/80 hover:text-gold">Згенерувати у Студії →</Link>
                 </div>
               ) : (
@@ -250,7 +250,7 @@ export default function ProductsPage() {
         )}
 
         {products.length === 0 && !form ? (
-          <div className="bg-white/[0.03] border border-white/8 rounded-2xl p-10 text-center">
+          <div className="glass rounded-2xl p-10 text-center">
             <div className="text-4xl mb-3">📦</div>
             <p className="text-white/50 mb-1">Поки немає товарів</p>
             <p className="text-white/30 text-sm mb-4">Створи перший товар — обери фото зі студії, згенеруй опис, постав ціну.</p>
@@ -259,7 +259,7 @@ export default function ProductsPage() {
         ) : (
           <div className="space-y-2">
             {products.map(p => (
-              <div key={p.id} className="bg-white/[0.03] border border-white/8 rounded-xl px-4 py-3 flex items-center gap-3 hover:border-gold/30 transition-all">
+              <div key={p.id} className="glass lift rounded-xl px-4 py-3 flex items-center gap-3 hover:border-gold/30">
                 {p.image_urls?.[0]
                   ? <img src={p.image_urls[0]} alt="" className="w-14 h-14 rounded-lg object-cover shrink-0" />
                   : <div className="w-14 h-14 rounded-lg bg-white/5 flex items-center justify-center shrink-0 text-lg">📦</div>}

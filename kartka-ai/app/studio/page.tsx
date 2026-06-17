@@ -19,7 +19,7 @@ const DISPLAY_STYLES: { value: DisplayStyle; label: string; desc: string; emoji:
 ]
 
 const FORMATS: Format[] = ['9:16', '3:4', '1:1', '4:3', '16:9']
-const MAX_PHOTOS = 4
+const MAX_PHOTOS = 10
 const COST_MAP: Record<Mode, number> = { photo: 4, card: 4, video: 16 }
 const CATEGORIES = ['Одяг та взуття', 'Тактичне спорядження', 'Електроніка', 'Дім та сад', "Краса та здоров'я", 'Спорт', 'Авто та мото', 'Іграшки', 'Їжа та напої', 'Інше']
 
@@ -225,7 +225,7 @@ export default function StudioPage() {
     return () => window.removeEventListener('stars-updated', h)
   }, [])
 
-  const totalCost = COST_MAP[mode] * count
+  const totalCost = mode === 'photo' ? COST_MAP[mode] * Math.max(1, photos.length) : COST_MAP[mode] * count
   // Auto-analyze: fires when first photo added, or when switching to card mode
   React.useEffect(() => {
     if (photos.length === 1 && token && !analyzing) {
@@ -629,7 +629,13 @@ export default function StudioPage() {
                 {error.includes('зорь') && <Link href="/pricing" className="bg-gold text-black px-4 py-1.5 rounded-lg font-bold text-sm">Поповнити ⭐</Link>}
               </div>
             )}
-            <ResultGrid results={results} loading={loading} loadingCount={count} />
+            <ResultGrid results={results} loading={loading} loadingCount={mode === 'photo' ? Math.max(1, photos.length) : count} />
+            {results.length > 0 && (
+              <button onClick={() => { try { localStorage.setItem('studio_batch', JSON.stringify(results)) } catch {} ; window.location.href = '/products/create' }}
+                className="btn-shine mt-4 self-start bg-gradient-to-r from-gold to-gold-light text-black font-bold px-5 py-2.5 rounded-xl hover:brightness-110">
+                ✨ Зберегти все як товар →
+              </button>
+            )}
           </div>
 
           {/* Generate button */}
@@ -642,15 +648,20 @@ export default function StudioPage() {
                 ⭐ {totalCost}
               </span>
             </button>
-            <div className="flex items-center gap-2">
-              <span className="text-white/40 text-xs">Кількість:</span>
-              {[1,2,3,4].map(n => (
-                <button key={n} onClick={() => setCount(n)}
-                  className={`w-7 h-7 rounded-lg text-xs font-bold transition-all ${count===n ? 'bg-white text-black' : 'bg-white/8 text-white/50 hover:bg-white/15'}`}>
-                  {n}
-                </button>
-              ))}
-            </div>
+            {mode !== 'photo' && (
+              <div className="flex items-center gap-2">
+                <span className="text-white/40 text-xs">Кількість:</span>
+                {[1,2,3,4].map(n => (
+                  <button key={n} onClick={() => setCount(n)}
+                    className={`w-7 h-7 rounded-lg text-xs font-bold transition-all ${count===n ? 'bg-white text-black' : 'bg-white/8 text-white/50 hover:bg-white/15'}`}>
+                    {n}
+                  </button>
+                ))}
+              </div>
+            )}
+            {mode === 'photo' && photos.length > 0 && (
+              <span className="text-white/40 text-xs">{photos.length} фото → {photos.length} результат(ів) • 4⭐ кожне</span>
+            )}
             {!canGenerate && photos.length === 0 && <span className="text-white/30 text-xs">↑ Завантажте фото товару</span>}
             {!canGenerate && photos.length > 0 && !productName && <span className="text-white/30 text-xs">↑ Введіть назву товару</span>}
             {!canGenerate && photos.length > 0 && productName && starsBalance < totalCost && (

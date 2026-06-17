@@ -340,10 +340,10 @@ export default function StudioPage() {
   if (!ready) return <div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin"/></div>
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#0F0F1A]">
+    <div className="min-h-screen flex flex-col bg-[#08080b]">
       {/* Header */}
       <header className="border-b border-white/8 px-6 py-3 flex items-center justify-between shrink-0">
-        <Link href="/" className="font-display font-black text-lg text-gold">Картка<span className="text-white">АІ</span></Link>
+        <Link href="/" className="font-display font-black text-lg"><span className="text-gradient">Картка</span><span className="text-white">АІ</span></Link>
         <div className="flex items-center gap-3">
           <Link href="/pricing" className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium border transition-all ${starsBalance < 10 ? 'bg-red-500/20 text-red-300 border-red-500/30' : 'bg-white/10 text-white border-white/15 hover:border-gold/40'}`}>
             ⭐ {starsBalance}
@@ -536,7 +536,7 @@ export default function StudioPage() {
                   </div>
                   {/* Text Preview */}
                   {productName.trim() && bullets.some(b=>b.trim()) && (
-                    <div className="bg-white/[0.03] border border-white/8 rounded-xl p-3 mb-3">
+                    <div className="glass rounded-xl p-3 mb-3">
                       <span className="text-white/30 text-xs uppercase font-bold block mb-2">Превью тексту</span>
                       <p className="text-white/80 text-xs font-bold mb-1.5 truncate">{productName.toUpperCase()}</p>
                       {bullets.filter(Boolean).slice(0,5).map((b,i) => (
@@ -635,7 +635,7 @@ export default function StudioPage() {
           {/* Generate button */}
           <div className="border-t border-white/8 px-4 md:px-8 py-3 md:py-4 flex flex-wrap items-center gap-3 shrink-0">
             <button onClick={generate} disabled={!canGenerate}
-              className={`flex items-center gap-3 px-6 py-3 rounded-xl font-bold text-base transition-all ${canGenerate ? 'bg-gradient-to-r from-gold to-gold-light text-black hover:opacity-90 shadow-[0_4px_20px_rgba(200,168,75,0.3)]' : 'bg-white/10 text-white/30 cursor-not-allowed'}`}>
+              className={`btn-shine flex items-center gap-3 px-6 py-3 rounded-xl font-bold text-base transition-all ${canGenerate ? 'bg-gradient-to-r from-gold to-gold-light text-black hover:opacity-90 shadow-[0_6px_24px_rgba(255,210,63,0.4)]' : 'bg-white/10 text-white/30 cursor-not-allowed'}`}>
               {loading ? <span className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin"/> : '✦'}
               Згенерувати
               <span className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-sm ${canGenerate ? 'bg-black/20' : 'bg-white/5'}`}>

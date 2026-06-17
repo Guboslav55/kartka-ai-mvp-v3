@@ -720,16 +720,20 @@ async function makeCatalog(b64: string, rmbgKey?: string): Promise<Buffer> {
 
 
 // ─── Main Handler ─────────────────────────────────────────────────────────────
-// Screens reference photos: keep real product shots, drop tags/labels/packaging/size-charts.
-async function classifyPhotos(urls: string[]): Promise<boolean[]> {
+// Screens reference photos: keep real product shots (drop tags/labels), and flag which are
+// suitable to place on a model (large, clear, front-ish — not flat-laid/tiny on busy background).
+async function classifyPhotos(urls: string[]): Promise<{ keep: boolean; wearable: boolean }[]> {
   try {
-    const content: any[] = [{ type: 'text', text: `You are screening product reference photos. For EACH of the ${urls.length} images, in order, decide keep=true if it clearly shows the ACTUAL wearable product/item that should appear in a product photo. Set keep=false if the image mainly shows a hang tag, paper label, size chart, barcode, sticker, receipt, packaging, or does NOT clearly show the product itself. Return ONLY JSON {"keep":[booleans]} with exactly ${urls.length} values in the same order.` }]
+    const content: any[] = [{ type: 'text', text: `Screen product reference photos. For EACH of the ${urls.length} images, in order, return two booleans:
+- "keep": true if it shows the ACTUAL product/item; false if it is mainly a hang tag, paper label, size chart, barcode, sticker, receipt or packaging.
+- "wearable": true ONLY if the item is shown LARGE, clearly and roughly front-facing so it could realistically be placed on a model (e.g. flat front view, on a hanger, or already worn). false if the item is laid flat and small, photographed far away, at an odd angle, partially out of frame, or on a busy/cluttered background.
+Return ONLY JSON {"items":[{"keep":bool,"wearable":bool}, ...]} with exactly ${urls.length} entries in the same order.` }]
     for (const u of urls) content.push({ type: 'image_url', image_url: { url: u, detail: 'low' } })
-    const r = await openai.chat.completions.create({ model: 'gpt-4o-mini', max_tokens: 300, response_format: { type: 'json_object' }, messages: [{ role: 'user', content }] })
-    const arr = JSON.parse(r.choices[0]?.message?.content || '{}').keep
-    if (Array.isArray(arr) && arr.length === urls.length) return arr.map((x: any) => x !== false)
+    const r = await openai.chat.completions.create({ model: 'gpt-4o-mini', max_tokens: 500, response_format: { type: 'json_object' }, messages: [{ role: 'user', content }] })
+    const arr = JSON.parse(r.choices[0]?.message?.content || '{}').items
+    if (Array.isArray(arr) && arr.length === urls.length) return arr.map((x: any) => ({ keep: x?.keep !== false, wearable: x?.wearable !== false }))
   } catch (e) { console.error('classifyPhotos:', e) }
-  return urls.map(() => true)
+  return urls.map(() => ({ keep: true, wearable: true }))
 }
 
 export async function POST(req: NextRequest) {
@@ -814,7 +818,7 @@ export async function POST(req: NextRequest) {
     // ── PHOTO MODE ────────────────────────────────────────────────────────────
     else {
       const STYLES: Record<string, string> = {
-        model:    'A photorealistic full-body human model naturally wearing or using this EXACT product in a real lifestyle setting. The product must remain 100% identical — same colours, shape, fabric, textures, prints and logos on every visible side. Realistic anatomy and proportions, natural flattering pose, professional fashion editorial photography, shallow depth of field, soft natural light.',
+        model:    'A photorealistic full-body human model naturally WEARING this EXACT garment on the body at life size, as a real worn item filling the torso. CRITICAL: do NOT paste, print or place the garment as a small picture/graphic onto other clothing; the model wears the actual item, not an image of it. The product must remain 100% identical — same colours, shape, fabric, textures, prints and logos on every visible side. Realistic anatomy and proportions, natural flattering pose, professional fashion editorial photography, shallow depth of field, soft natural light.',
         store:    'This EXACT product presented on a clean modern retail display stand or shelf in a stylish boutique. Product remains 100% identical. Tasteful staging, soft retail lighting, shallow depth of field.',
         flatlay:  'Strict top-down flat-lay of ONLY this EXACT product, camera pointing straight down at a 90-degree overhead angle, product lying flat and neatly arranged on a clean styled surface. Product remains 100% identical. Even soft daylight, subtle realistic shadows.',
         catalog:  'This EXACT product alone, perfectly centred on a seamless studio background with a soft gradient and a subtle ground shadow, clean even e-commerce lighting. Product remains 100% identical.',
@@ -840,13 +844,14 @@ export async function POST(req: NextRequest) {
         for (const p of allPhotos) { const u = await uploadPhoto(supabase, p, user.id, 'replicate-input'); if (u) photoUrls.push(u) }
         if (!photoUrls.length) return NextResponse.json({ error: 'Помилка завантаження фото' }, { status: 500 })
 
-        // Drop tag/label/packaging photos so we never generate garbage from them
+        // Drop tag/label photos (all modes); for model mode also drop shots unsuitable for try-on
         let usableUrls = photoUrls
         try {
-          const keep = await classifyPhotos(photoUrls)
-          const filtered = photoUrls.filter((_, i) => keep[i])
+          const cls = await classifyPhotos(photoUrls)
+          const isModel = displayStyle === 'model'
+          const filtered = photoUrls.filter((_, i) => cls[i].keep && (!isModel || cls[i].wearable))
           if (filtered.length) usableUrls = filtered
-          console.log(`classify: ${photoUrls.length} photos -> ${usableUrls.length} usable`)
+          console.log(`classify: ${photoUrls.length} photos -> ${usableUrls.length} usable (model=${isModel})`)
         } catch (e) { console.error('classify error:', e) }
 
         const STYLE_TONE = photoStyle === 'home'
@@ -861,6 +866,7 @@ export async function POST(req: NextRequest) {
             prompt += ' ' + STYLE_TONE
             if (wishEn) prompt += ` Scene and background: ${wishEn}.`
             prompt += ' ' + QUALITY
+            if (aspect === '16:9' || aspect === '4:3') prompt += ' Compose as a close upper-body / waist-up shot so the product and all its logos and text appear large, sharp and clearly legible — do not show the product small in a wide empty frame.'
             const url = await runFlux(usableUrls[i], prompt.slice(0, 1200), REPLICATE, aspect)
             if (url) results.push(await saveUrl(supabase, url, user.id, 'studio'))
           } catch (e) { console.error(e) }

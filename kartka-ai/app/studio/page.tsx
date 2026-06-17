@@ -24,8 +24,8 @@ const COST_MAP: Record<Mode, number> = { photo: 4, card: 4, video: 16 }
 const CATEGORIES = ['Одяг та взуття', 'Тактичне спорядження', 'Електроніка', 'Дім та сад', "Краса та здоров'я", 'Спорт', 'Авто та мото', 'Іграшки', 'Їжа та напої', 'Інше']
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
-function PhotoUploader({ photos, onAdd, onRemove, onClear }: {
-  photos: string[]; onAdd: (b64: string) => void; onRemove: (i: number) => void; onClear: () => void
+function PhotoUploader({ photos, onAdd, onRemove, onClear, irrelevant = [] }: {
+  photos: string[]; onAdd: (b64: string) => void; onRemove: (i: number) => void; onClear: () => void; irrelevant?: string[]
 }) {
   const ref = useRef<HTMLInputElement>(null)
   async function compress(file: File): Promise<string> {
@@ -57,12 +57,23 @@ function PhotoUploader({ photos, onAdd, onRemove, onClear }: {
     <div>
       <input ref={ref} type="file" accept="image/*" multiple className="hidden" onChange={handleFile} />
       <div className="flex flex-wrap gap-2 mb-2">
-        {photos.map((p, i) => (
+        {photos.map((p, i) => {
+          const bad = irrelevant.includes(p)
+          return (
           <div key={i} className="relative group">
-            <img src={p} alt="" className="w-16 h-16 object-cover rounded-xl border border-white/15" />
-            <button onClick={() => onRemove(i)} className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">×</button>
+            <img src={p} alt="" className={`w-16 h-16 object-cover rounded-xl border ${bad ? 'border-red-500' : 'border-white/15'}`} />
+            {bad && (
+              <div onClick={() => onRemove(i)} title="Не відноситься до товару — натисніть, щоб прибрати"
+                className="absolute inset-0 rounded-xl bg-red-600/65 flex items-center justify-center cursor-pointer">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round">
+                  <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
+                </svg>
+              </div>
+            )}
+            <button onClick={() => onRemove(i)} className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10">×</button>
           </div>
-        ))}
+          )
+        })}
         {photos.length < MAX_PHOTOS && (
           <button onClick={() => ref.current?.click()} className="w-16 h-16 border-2 border-dashed border-white/20 rounded-xl flex flex-col items-center justify-center text-white/40 hover:border-gold/50 hover:text-gold transition-all gap-1">
             <span className="text-xl leading-none">+</span>
@@ -74,6 +85,9 @@ function PhotoUploader({ photos, onAdd, onRemove, onClear }: {
         <span>До {MAX_PHOTOS} фото товару з різних сторін</span>
         {photos.length > 0 && <button onClick={onClear} className="hover:text-red-400 transition-colors">{photos.length} з {MAX_PHOTOS} · очистити</button>}
       </div>
+      {irrelevant.length > 0 && (
+        <p className="text-red-400/90 text-xs mt-1.5">⚠ {irrelevant.length} фото не відноситься до товару — приберіть зайве</p>
+      )}
     </div>
   )
 }
@@ -204,6 +218,8 @@ export default function StudioPage() {
   const [progress, setProgress] = useState(0)
   const [progressMsg, setProgressMsg] = useState('')
   const [analyzing, setAnalyzing] = useState(false)
+  const [irrelevant, setIrrelevant] = useState<string[]>([])
+  const [checking, setChecking] = useState(false)
   const [results, setResults] = useState<string[]>([])
   const [error, setError] = useState('')
 
@@ -247,6 +263,17 @@ export default function StudioPage() {
     }
   }, [mode])
 
+  // Коли є 2+ фото — перевіряємо, чи всі вони про той самий товар (з debounce)
+  React.useEffect(() => {
+    if (photos.length < 2 || !token) { setIrrelevant([]); return }
+    const t = setTimeout(() => {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.access_token) checkPhotos(photos, session.access_token, productName)
+      })
+    }, 1000)
+    return () => clearTimeout(t)
+  }, [photos, token])
+
   async function analyzePhoto(photo: string, tok: string) {
     if (!photo || !tok || analyzing) return
     setAnalyzing(true)
@@ -269,6 +296,25 @@ export default function StudioPage() {
       }
     } catch (e) { console.warn('analyze error:', e) }
     setAnalyzing(false)
+  }
+
+  // Перевіряє всі фото і помічає ті, що не відносяться до товару
+  async function checkPhotos(pics: string[], tok: string, name: string) {
+    if (!Array.isArray(pics) || pics.length < 2 || !tok) { setIrrelevant([]); return }
+    setChecking(true)
+    try {
+      const res = await fetch('/api/check-product-photos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
+        body: JSON.stringify({ photos: pics, productName: name }),
+      })
+      if (res.ok) {
+        const d = await res.json()
+        const bad: number[] = Array.isArray(d.irrelevant) ? d.irrelevant : []
+        setIrrelevant(bad.map(i => pics[i]).filter(Boolean))
+      }
+    } catch (e) { console.warn('checkPhotos error:', e) }
+    setChecking(false)
   }
 
   const canGenerate = photos.length > 0 && productName.trim() && starsBalance >= totalCost && !loading && mode !== 'video'
@@ -364,6 +410,7 @@ export default function StudioPage() {
             </div>
             <PhotoUploader
               photos={photos}
+              irrelevant={irrelevant}
               onAdd={b64 => {
               setPhotos(p => {
                 const next = [...p, b64].slice(0, MAX_PHOTOS)

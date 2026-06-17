@@ -681,12 +681,12 @@ async function saveUrl(supabase: any, url: string, uid: string, folder: string):
   } catch { return url }
 }
 
-async function runFlux(imageUrl: string, prompt: string, token: string): Promise<string | null> {
+async function runFlux(imageUrl: string, prompt: string, token: string, aspectRatio: string = '2:3'): Promise<string | null> {
   try {
     const pred = await fetch('https://api.replicate.com/v1/models/black-forest-labs/flux-kontext-pro/predictions', {
       method: 'POST',
       headers: { Authorization: `Token ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ input: { input_image: imageUrl, prompt, aspect_ratio: '2:3', output_format: 'jpg', output_quality: 90, safety_tolerance: 2 } })
+      body: JSON.stringify({ input: { input_image: imageUrl, prompt, aspect_ratio: aspectRatio, output_format: 'jpg', output_quality: 90, safety_tolerance: 2 } })
     })
     if (!pred.ok) return null
     const { id } = await pred.json()
@@ -735,7 +735,7 @@ export async function POST(req: NextRequest) {
       mode = 'photo', displayStyle = 'catalog',
       cardPreset = 'urban', cardLayout = 'split', creativity = 0.5,
       productPhoto, productPhotos, productPhotoUrl,
-      productName = '', category = '', wishes = '', count = 1, bullets = []
+      productName = '', category = '', wishes = '', count = 1, bullets = [], format = '2:3'
     } = await req.json()
 
     if (!productName.trim()) return NextResponse.json({ error: 'Введіть назву товару' }, { status: 400 })
@@ -745,11 +745,14 @@ export async function POST(req: NextRequest) {
       try { const r = await fetch(productPhotoUrl); const buf = Buffer.from(await r.arrayBuffer()); allPhotos.push(`data:${r.headers.get('content-type')||'image/jpeg'};base64,${buf.toString('base64')}`) } catch {}
     }
     if (!allPhotos.length) return NextResponse.json({ error: 'Завантажте фото товару' }, { status: 400 })
+    const VALID_AR = ['9:16','3:4','1:1','4:3','16:9','2:3','3:2']
+    const aspect = VALID_AR.includes(format) ? format : '2:3'
 
-    const qty = Math.min(Math.max(1, count), 4)
+    const qty = Math.min(Math.max(1, count), 10)
     const { data: profile } = await supabase.from('users').select('stars_balance').eq('id', user.id).single()
     const balance = profile?.stars_balance ?? 0
-    if (balance < COST * qty) return NextResponse.json({ error: `Недостатньо зорь (${COST*qty} ⭐)`, needStars: true, balance }, { status: 402 })
+    const expected = mode === 'card' ? qty : allPhotos.length
+    if (balance < COST * expected) return NextResponse.json({ error: `Недостатньо зорь (${COST*expected} ⭐)`, needStars: true, balance }, { status: 402 })
 
     const REPLICATE = process.env.REPLICATE_API_TOKEN
     const RMBG = process.env.REMOVE_BG_API_KEY
@@ -812,8 +815,8 @@ export async function POST(req: NextRequest) {
       const VARS = ['', 'slightly different angle', 'alternative lighting', 'different atmosphere']
 
       if (displayStyle === 'catalog' && !REPLICATE) {
-        for (let i = 0; i < qty; i++) {
-          try { const buf = await makeCatalog(allPhotos[i % allPhotos.length], RMBG); results.push(await saveBuf(supabase, buf, user.id, 'studio')) }
+        for (let i = 0; i < allPhotos.length; i++) {
+          try { const buf = await makeCatalog(allPhotos[i], RMBG); results.push(await saveBuf(supabase, buf, user.id, 'studio')) }
           catch (e) { console.error(e) }
         }
       } else if (REPLICATE) {
@@ -825,14 +828,13 @@ export async function POST(req: NextRequest) {
         for (const p of allPhotos) { const u = await uploadPhoto(supabase, p, user.id, 'replicate-input'); if (u) photoUrls.push(u) }
         if (!photoUrls.length) return NextResponse.json({ error: 'Помилка завантаження фото' }, { status: 500 })
 
-        for (let i = 0; i < qty; i++) {
+        for (let i = 0; i < photoUrls.length; i++) {
           try {
             const base = STYLES[displayStyle] || STYLES.catalog
             let prompt = base
             if (NO_PEOPLE.has(displayStyle)) prompt += ' Absolutely no humans, no model, no mannequin, no hands, no clothing hanger — the product is the only subject.'
             if (wishEn) prompt += ` Background and lighting hints: ${wishEn}.`
-            if (i > 0) prompt += `. ${VARS[i]}`
-            const url = await runFlux(photoUrls[i % photoUrls.length], prompt.slice(0, 800), REPLICATE)
+            const url = await runFlux(photoUrls[i], prompt.slice(0, 800), REPLICATE, aspect)
             if (url) results.push(await saveUrl(supabase, url, user.id, 'studio'))
           } catch (e) { console.error(e) }
         }

@@ -720,6 +720,18 @@ async function makeCatalog(b64: string, rmbgKey?: string): Promise<Buffer> {
 
 
 // ─── Main Handler ─────────────────────────────────────────────────────────────
+// Screens reference photos: keep real product shots, drop tags/labels/packaging/size-charts.
+async function classifyPhotos(urls: string[]): Promise<boolean[]> {
+  try {
+    const content: any[] = [{ type: 'text', text: `You are screening product reference photos. For EACH of the ${urls.length} images, in order, decide keep=true if it clearly shows the ACTUAL wearable product/item that should appear in a product photo. Set keep=false if the image mainly shows a hang tag, paper label, size chart, barcode, sticker, receipt, packaging, or does NOT clearly show the product itself. Return ONLY JSON {"keep":[booleans]} with exactly ${urls.length} values in the same order.` }]
+    for (const u of urls) content.push({ type: 'image_url', image_url: { url: u, detail: 'low' } })
+    const r = await openai.chat.completions.create({ model: 'gpt-4o-mini', max_tokens: 300, response_format: { type: 'json_object' }, messages: [{ role: 'user', content }] })
+    const arr = JSON.parse(r.choices[0]?.message?.content || '{}').keep
+    if (Array.isArray(arr) && arr.length === urls.length) return arr.map((x: any) => x !== false)
+  } catch (e) { console.error('classifyPhotos:', e) }
+  return urls.map(() => true)
+}
+
 export async function POST(req: NextRequest) {
   try {
     const token = req.headers.get('authorization')?.replace('Bearer ', '')
@@ -828,11 +840,20 @@ export async function POST(req: NextRequest) {
         for (const p of allPhotos) { const u = await uploadPhoto(supabase, p, user.id, 'replicate-input'); if (u) photoUrls.push(u) }
         if (!photoUrls.length) return NextResponse.json({ error: 'Помилка завантаження фото' }, { status: 500 })
 
+        // Drop tag/label/packaging photos so we never generate garbage from them
+        let usableUrls = photoUrls
+        try {
+          const keep = await classifyPhotos(photoUrls)
+          const filtered = photoUrls.filter((_, i) => keep[i])
+          if (filtered.length) usableUrls = filtered
+          console.log(`classify: ${photoUrls.length} photos -> ${usableUrls.length} usable`)
+        } catch (e) { console.error('classify error:', e) }
+
         const STYLE_TONE = photoStyle === 'home'
           ? 'Overall look: natural casual lifestyle, soft natural daylight, authentic relatable everyday atmosphere.'
           : 'Overall look: premium commercial e-commerce photography, clean studio-grade lighting, crisp polished high-end result.'
-        const QUALITY = 'Ultra-realistic, sharp focus, fine detail, true-to-life colours, natural soft shadows and reflections, high resolution. No added text, no watermark, no extra objects, do not distort or alter the product in any way.'
-        for (let i = 0; i < photoUrls.length; i++) {
+        const QUALITY = 'Ultra-realistic, sharp focus, fine detail, true-to-life colours, natural soft shadows and reflections, high resolution. CRITICAL: preserve every brand logo, swoosh, printed text, stripe, zipper, hood, pocket and fabric texture EXACTLY as in the reference — never redraw, simplify, move or remove them. No added text, no watermark, no extra objects, do not alter the product in any way.'
+        for (let i = 0; i < usableUrls.length; i++) {
           try {
             const base = STYLES[displayStyle] || STYLES.catalog
             let prompt = base
@@ -840,7 +861,7 @@ export async function POST(req: NextRequest) {
             prompt += ' ' + STYLE_TONE
             if (wishEn) prompt += ` Scene and background: ${wishEn}.`
             prompt += ' ' + QUALITY
-            const url = await runFlux(photoUrls[i], prompt.slice(0, 1200), REPLICATE, aspect)
+            const url = await runFlux(usableUrls[i], prompt.slice(0, 1200), REPLICATE, aspect)
             if (url) results.push(await saveUrl(supabase, url, user.id, 'studio'))
           } catch (e) { console.error(e) }
         }

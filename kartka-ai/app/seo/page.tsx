@@ -102,7 +102,7 @@ export default function SeoPage() {
     <div className="min-h-screen px-4 sm:px-6 py-8 max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="font-display font-black text-2xl">🔎 SEO Генерація</h1>
+          <h1 className="font-display font-black text-2xl">🔎 <span className="text-gradient">SEO</span> Генерація</h1>
           <p className="text-white/40 text-sm mt-1">Оптимізовані заголовки та ключові слова для маркетплейсів</p>
         </div>
         <div className="flex items-center gap-3">
@@ -114,7 +114,7 @@ export default function SeoPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Input */}
         <div className="space-y-4">
-          <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-5 space-y-4">
+          <div className="glass rounded-2xl p-5 space-y-4">
             <div>
               <label className="text-white/60 text-xs font-bold uppercase mb-2 block">Фото товару — AI заповнить поля</label>
               <label className={`flex items-center justify-center gap-2 w-full border border-dashed rounded-xl py-4 cursor-pointer text-sm transition-all ${analyzing ? 'border-gold/50 text-gold' : 'border-white/20 text-white/50 hover:border-gold/50 hover:text-white/70'}`}>
@@ -140,7 +140,7 @@ export default function SeoPage() {
             </div>
           </div>
 
-          <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-5 space-y-4">
+          <div className="glass rounded-2xl p-5 space-y-4">
             <div>
               <label className="text-white/60 text-xs font-bold uppercase mb-2 block">Платформа</label>
               <div className="grid grid-cols-2 gap-2">
@@ -168,7 +168,7 @@ export default function SeoPage() {
           {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-red-300 text-sm">{error}</div>}
 
           <button onClick={generate} disabled={!title.trim() || loading || starsBalance < 2}
-            className={`w-full py-4 rounded-2xl font-bold transition-all ${!title.trim() || loading ? 'bg-white/8 text-white/30 cursor-not-allowed' : 'bg-gradient-to-r from-gold to-gold-light text-black hover:opacity-90'}`}>
+            className={`btn-shine w-full py-4 rounded-2xl font-bold transition-all ${!title.trim() || loading ? 'bg-white/8 text-white/30 cursor-not-allowed' : 'bg-gradient-to-r from-gold to-gold-light text-black hover:opacity-90'}`}>
             {loading ? 'Генерую SEO...' : '🔎 Згенерувати SEO • 2 ⭐'}
           </button>
         </div>
@@ -178,7 +178,7 @@ export default function SeoPage() {
           {result ? (
             <>
               {(result.categoryPath || result.priceSuggestion) && (
-                <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-4 space-y-2">
+                <div className="glass rounded-2xl p-4 space-y-2">
                   {result.categoryPath && <div className="flex justify-between gap-3 text-sm"><span className="text-white/40 shrink-0">Категорія</span><span className="text-white/80 text-right">{result.categoryPath}</span></div>}
                   {result.priceSuggestion && <div className="flex justify-between gap-3 text-sm"><span className="text-white/40 shrink-0">Ціна</span><span className="text-white/70 text-right">{result.priceSuggestion}</span></div>}
                 </div>
@@ -198,7 +198,7 @@ export default function SeoPage() {
                     { key: 'metaDescription', label: 'Meta Description', value: b.metaDescription },
                     { key: 'h1', label: 'H1 Заголовок', value: b.h1 },
                   ].map(item => item.value ? (
-                    <div key={item.key} className="bg-white/[0.04] border border-white/10 rounded-2xl p-4">
+                    <div key={item.key} className="glass rounded-2xl p-4">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-white/50 text-xs font-bold uppercase">{item.label}</span>
                         <button onClick={() => copy(item.value, bi+'-'+item.key)}
@@ -227,7 +227,7 @@ export default function SeoPage() {
                   ) : null)}
 
                   {b.searchKeywords?.length > 0 && (
-                    <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-4">
+                    <div className="glass rounded-2xl p-4">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-white/50 text-xs font-bold uppercase">Ключові слова</span>
                         <button onClick={() => copy(b.searchKeywords.join(', '), bi+'-kw')}
@@ -245,7 +245,7 @@ export default function SeoPage() {
                   )}
 
                   {b.longTailKeywords?.length > 0 && (
-                    <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-4">
+                    <div className="glass rounded-2xl p-4">
                       <span className="text-white/50 text-xs font-bold uppercase block mb-2">Long-tail запити</span>
                       <ul className="space-y-1">
                         {b.longTailKeywords.map((kw: string, i: number) => (
@@ -262,7 +262,7 @@ export default function SeoPage() {
               ))}
 
               {result.tags?.length > 0 && (
-                <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-4">
+                <div className="glass rounded-2xl p-4">
                   <span className="text-white/50 text-xs font-bold uppercase block mb-2">Теги</span>
                   <div className="flex flex-wrap gap-1.5">
                     {result.tags.map((t: string, i: number) => (
@@ -273,7 +273,7 @@ export default function SeoPage() {
               )}
             </>
           ) : (
-            <div className="bg-white/[0.03] border border-white/8 rounded-2xl p-16 text-center flex-1 min-h-64 flex flex-col items-center justify-center">
+            <div className="glass rounded-2xl p-16 text-center flex-1 min-h-64 flex flex-col items-center justify-center">
               <div className="text-4xl mb-3">🔎</div>
               <p className="text-white/40 text-sm">Введи назву товару і натисни "Згенерувати"</p>
               <p className="text-white/25 text-xs mt-2">Отримаєш SEO заголовок, meta, H1, ключові слова</p>

@@ -52,7 +52,7 @@ export default function CreateProductPage() {
       const res = await fetch('/api/product-assist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ imageUrl: imageUrls[0] }),
+        body: JSON.stringify({ imageUrls }),
       });
       const d = await res.json();
       if (d.error) { setError('Не вдалося згенерувати: ' + d.error); }

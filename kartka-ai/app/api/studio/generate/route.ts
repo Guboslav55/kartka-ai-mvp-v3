@@ -862,10 +862,10 @@ export async function POST(req: NextRequest) {
           try {
             const base = STYLES[displayStyle] || STYLES.catalog
             let prompt = base
-            prompt += ' CRITICAL: keep the product identical to the reference. Reproduce every brand logo, Nike swoosh and printed wordmark EXACTLY — sharp, undistorted and clearly legible, with the "NIKE" lettering spelled and shaped correctly, never blurred, warped or turned into random characters. Do NOT invent or add features: no hood drawstrings, cords, laces or toggles, no extra zippers, buttons, pockets, straps or seams that are not visibly present in the reference, and do not remove any zipper or closure that is present. If the hood has no drawstring, keep it without one.'
+            prompt += ' CRITICAL: keep the product 100% identical to the reference photo — the SAME colour (do NOT recolour, tint, lighten, darken or apply any pastel/warm/cool colour cast to the product itself; if the reference garment is black it must stay black), the same shape, fabric, proportions and design. Reproduce every brand logo, Nike swoosh and printed wordmark EXACTLY — sharp, undistorted and clearly legible, with the "NIKE" lettering spelled and shaped correctly, never blurred, warped or turned into random characters. Do NOT invent or add features: no hood drawstrings, cords, laces or toggles, no extra zippers, buttons, pockets, straps or seams that are not visibly present in the reference, and do not remove any zipper or closure that is present. If the hood has no drawstring, keep it without one.'
             if (NO_PEOPLE.has(displayStyle)) prompt += ' Absolutely no humans, no model, no mannequin, no hands, no clothing hanger — the product is the only subject.'
             prompt += ' ' + STYLE_TONE
-            if (wishEn) prompt += ` Scene and background: ${wishEn}.`
+            if (wishEn) prompt += ` Apply the following ONLY to the background, location, scene and lighting mood — it must NOT change the product's own colour, design, materials or details: ${wishEn}.`
             prompt += ' ' + QUALITY
             if (aspect === '16:9' || aspect === '4:3') prompt += ' Compose as a close upper-body / waist-up shot so the product and all its logos and text appear large, sharp and clearly legible — do not show the product small in a wide empty frame.'
             const url = await runFlux(usableUrls[i], prompt.slice(0, 1500), REPLICATE, aspect)

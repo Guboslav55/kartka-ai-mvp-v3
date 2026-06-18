@@ -353,6 +353,9 @@ export default function StudioPage() {
 
   async function generate(append = false) {
     if (!canGenerate) return
+    // Send only photos the user sees as valid: drop red-flagged (all modes) and amber (model mode)
+    const usableList = photos.filter(p => !irrelevant.includes(p) && !(modelMode && notForModel.includes(p)))
+    const sendPhotos = usableList.length ? usableList : photos
     setLoading(true); setError('')
     if (!append) setResults([])
     setProgress(0); setProgressMsg('Аналізую фото товару...')
@@ -378,7 +381,7 @@ export default function StudioPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          mode, productPhoto: photos[0], productPhotos: photos, productName, category, displayStyle, cardPreset, cardLayout, creativity,
+          mode, productPhoto: sendPhotos[0], productPhotos: sendPhotos, productName, category, displayStyle, cardPreset, cardLayout, creativity,
           wishes, photoStyle, cardStyle, bullets: bullets.filter(Boolean),
           format, count,
         }),

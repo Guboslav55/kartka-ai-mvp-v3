@@ -24,8 +24,8 @@ const COST_MAP: Record<Mode, number> = { photo: 4, card: 4, video: 16 }
 const CATEGORIES = ['Одяг та взуття', 'Тактичне спорядження', 'Електроніка', 'Дім та сад', "Краса та здоров'я", 'Спорт', 'Авто та мото', 'Іграшки', 'Їжа та напої', 'Інше']
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
-function PhotoUploader({ photos, onAdd, onRemove, onClear, irrelevant = [] }: {
-  photos: string[]; onAdd: (b64: string) => void; onRemove: (i: number) => void; onClear: () => void; irrelevant?: string[]
+function PhotoUploader({ photos, onAdd, onRemove, onClear, irrelevant = [], notForModel = [], modelMode = false }: {
+  photos: string[]; onAdd: (b64: string) => void; onRemove: (i: number) => void; onClear: () => void; irrelevant?: string[]; notForModel?: string[]; modelMode?: boolean
 }) {
   const ref = useRef<HTMLInputElement>(null)
   async function compress(file: File): Promise<string> {
@@ -59,14 +59,23 @@ function PhotoUploader({ photos, onAdd, onRemove, onClear, irrelevant = [] }: {
       <div className="flex flex-wrap gap-2 mb-2">
         {photos.map((p, i) => {
           const bad = irrelevant.includes(p)
+          const amber = !bad && modelMode && notForModel.includes(p)
           return (
           <div key={i} className="relative group">
-            <img src={p} alt="" className={`w-16 h-16 object-cover rounded-xl border ${bad ? 'border-red-500' : 'border-white/15'}`} />
+            <img src={p} alt="" className={`w-16 h-16 object-cover rounded-xl border ${bad ? 'border-red-500' : amber ? 'border-amber-500' : 'border-white/15'}`} />
             {bad && (
               <div onClick={() => onRemove(i)} title="Не відноситься до товару — натисніть, щоб прибрати"
                 className="absolute inset-0 rounded-xl bg-red-600/65 flex items-center justify-center cursor-pointer">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round">
                   <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
+                </svg>
+              </div>
+            )}
+            {amber && (
+              <div title="Не піде на модель — потрібен вид анфас. У режимі «На моделі» це фото пропускається (інші режими його використають)."
+                className="absolute inset-0 rounded-xl bg-amber-500/45 flex items-center justify-center">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
+                  <circle cx="12" cy="12" r="9" /><line x1="6" y1="6" x2="18" y2="18" strokeLinecap="round" />
                 </svg>
               </div>
             )}
@@ -87,6 +96,9 @@ function PhotoUploader({ photos, onAdd, onRemove, onClear, irrelevant = [] }: {
       </div>
       {irrelevant.length > 0 && (
         <p className="text-red-400/90 text-xs mt-1.5">⚠ {irrelevant.length} фото не відноситься до товару — приберіть зайве</p>
+      )}
+      {modelMode && notForModel.filter(p => !irrelevant.includes(p) && photos.includes(p)).length > 0 && (
+        <p className="text-amber-400/90 text-xs mt-1">ℹ {notForModel.filter(p => !irrelevant.includes(p) && photos.includes(p)).length} фото не піде на модель (потрібен вид анфас) — у режимі «На моделі» пропускається</p>
       )}
     </div>
   )
@@ -219,6 +231,7 @@ export default function StudioPage() {
   const [progressMsg, setProgressMsg] = useState('')
   const [analyzing, setAnalyzing] = useState(false)
   const [irrelevant, setIrrelevant] = useState<string[]>([])
+  const [notForModel, setNotForModel] = useState<string[]>([])
   const [checking, setChecking] = useState(false)
   const [results, setResults] = useState<string[]>([])
   const [error, setError] = useState('')
@@ -241,7 +254,9 @@ export default function StudioPage() {
     return () => window.removeEventListener('stars-updated', h)
   }, [])
 
-  const usablePhotos = Math.max(1, photos.length - irrelevant.length)
+  const modelMode = displayStyle === 'model'
+  const skippedCount = photos.filter(p => irrelevant.includes(p) || (modelMode && notForModel.includes(p))).length
+  const usablePhotos = Math.max(1, photos.length - skippedCount)
   const totalCost = mode === 'photo' ? COST_MAP[mode] * usablePhotos : COST_MAP[mode] * count
   // Auto-analyze: fires when first photo added, or when switching to card mode
   React.useEffect(() => {
@@ -266,7 +281,7 @@ export default function StudioPage() {
 
   // Коли є 2+ фото — перевіряємо, чи всі вони про той самий товар (з debounce)
   React.useEffect(() => {
-    if (photos.length < 2 || !token) { setIrrelevant([]); return }
+    if (photos.length < 2 || !token) { setIrrelevant([]); setNotForModel([]); return }
     const t = setTimeout(() => {
       supabase.auth.getSession().then(({ data: { session } }) => {
         if (session?.access_token) checkPhotos(photos, session.access_token, productName)
@@ -301,7 +316,7 @@ export default function StudioPage() {
 
   // Перевіряє всі фото і помічає ті, що не відносяться до товару
   async function checkPhotos(pics: string[], tok: string, name: string) {
-    if (!Array.isArray(pics) || pics.length < 2 || !tok) { setIrrelevant([]); return }
+    if (!Array.isArray(pics) || pics.length < 2 || !tok) { setIrrelevant([]); setNotForModel([]); return }
     setChecking(true)
     try {
       const res = await fetch('/api/check-product-photos', {
@@ -312,7 +327,9 @@ export default function StudioPage() {
       if (res.ok) {
         const d = await res.json()
         const bad: number[] = Array.isArray(d.irrelevant) ? d.irrelevant : []
+        const nfm: number[] = Array.isArray(d.notForModel) ? d.notForModel : []
         setIrrelevant(bad.map(i => pics[i]).filter(Boolean))
+        setNotForModel(nfm.map(i => pics[i]).filter(Boolean))
       }
     } catch (e) { console.warn('checkPhotos error:', e) }
     setChecking(false)
@@ -412,6 +429,8 @@ export default function StudioPage() {
             <PhotoUploader
               photos={photos}
               irrelevant={irrelevant}
+              notForModel={notForModel}
+              modelMode={modelMode}
               onAdd={b64 => {
               setPhotos(p => {
                 const next = [...p, b64].slice(0, MAX_PHOTOS)
@@ -710,7 +729,7 @@ export default function StudioPage() {
               </div>
             )}
             {mode === 'photo' && photos.length > 0 && (
-              <span className="text-white/40 text-xs">{usablePhotos} фото → {usablePhotos} результат(ів) • 4⭐ за кожне{irrelevant.length > 0 ? ` · ${irrelevant.length} пропущено (бирки/упаковка/інше)` : ''}</span>
+              <span className="text-white/40 text-xs">{usablePhotos} фото → {usablePhotos} результат(ів) • 4⭐ за кожне{skippedCount > 0 ? ` · ${skippedCount} пропущено` : ''}</span>
             )}
             {!canGenerate && photos.length === 0 && <span className="text-white/30 text-xs">↑ Завантажте фото товару</span>}
             {!canGenerate && photos.length > 0 && !productName && <span className="text-white/30 text-xs">↑ Введіть назву товару</span>}

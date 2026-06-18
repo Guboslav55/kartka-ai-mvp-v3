@@ -862,7 +862,7 @@ export async function POST(req: NextRequest) {
           try {
             const base = STYLES[displayStyle] || STYLES.catalog
             let prompt = base
-            prompt += ' Reproduce the garment EXACTLY as in the reference photo — do NOT invent or add any feature: no hood drawstrings, cords, laces or toggles, no extra zippers, buttons, pockets, straps or seams that are not visibly present in the reference, and do not remove any zipper or closure that is present. If the hood has no drawstring, keep it without one.'
+            prompt += ' CRITICAL: keep the product identical to the reference. Reproduce every brand logo, Nike swoosh and printed wordmark EXACTLY — sharp, undistorted and clearly legible, with the "NIKE" lettering spelled and shaped correctly, never blurred, warped or turned into random characters. Do NOT invent or add features: no hood drawstrings, cords, laces or toggles, no extra zippers, buttons, pockets, straps or seams that are not visibly present in the reference, and do not remove any zipper or closure that is present. If the hood has no drawstring, keep it without one.'
             if (NO_PEOPLE.has(displayStyle)) prompt += ' Absolutely no humans, no model, no mannequin, no hands, no clothing hanger — the product is the only subject.'
             prompt += ' ' + STYLE_TONE
             if (wishEn) prompt += ` Scene and background: ${wishEn}.`

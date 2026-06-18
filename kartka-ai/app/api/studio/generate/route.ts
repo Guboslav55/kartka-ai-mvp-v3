@@ -725,10 +725,10 @@ async function makeCatalog(b64: string, rmbgKey?: string): Promise<Buffer> {
 async function classifyPhotos(urls: string[]): Promise<{ keep: boolean; wearable: boolean }[]> {
   try {
     const content: any[] = [{ type: 'text', text: `Screen product reference photos. For EACH of the ${urls.length} images, in order, return two booleans:
-- "keep": true if it shows the ACTUAL product/item; false if it is mainly a hang tag, paper label, size chart, barcode, sticker, receipt or packaging.
-- "wearable": true ONLY if the item is shown LARGE, clearly and roughly front-facing so it could realistically be placed on a model (e.g. flat front view, on a hanger, or already worn). false if the item is laid flat and small, photographed far away, at an odd angle, partially out of frame, or on a busy/cluttered background.
+- "keep": true for ANY photo that shows the actual product itself — front, BACK, side, inside, hood, sleeve, collar, a close-up detail, folded, on a hanger, flat-laid or worn. false ONLY when the photo's MAIN subject is NOT the product itself: a hang tag, paper label, size/care chart, barcode, sticker, receipt, box/poly-bag packaging, or a completely unrelated object. When unsure, keep:true.
+- "wearable": true ONLY if the item is shown LARGE, clearly and roughly FRONT-facing so it could be placed on a model (flat front view, on a hanger, or already worn). false for a BACK view, side view, far/small shot, odd angle, or partially out of frame. A back view is keep:true, wearable:false (NOT keep:false).
 Return ONLY JSON {"items":[{"keep":bool,"wearable":bool}, ...]} with exactly ${urls.length} entries in the same order.` }]
-    for (const u of urls) content.push({ type: 'image_url', image_url: { url: u, detail: 'low' } })
+    for (const u of urls) content.push({ type: 'image_url', image_url: { url: u, detail: 'high' } })
     const r = await openai.chat.completions.create({ model: 'gpt-4o-mini', max_tokens: 500, response_format: { type: 'json_object' }, messages: [{ role: 'user', content }] })
     const arr = JSON.parse(r.choices[0]?.message?.content || '{}').items
     if (Array.isArray(arr) && arr.length === urls.length) return arr.map((x: any) => ({ keep: x?.keep !== false, wearable: x?.wearable !== false }))

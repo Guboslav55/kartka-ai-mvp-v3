@@ -351,9 +351,10 @@ export default function StudioPage() {
     setAiIdeaLoading(false)
   }
 
-  async function generate() {
+  async function generate(append = false) {
     if (!canGenerate) return
-    setLoading(true); setError(''); setResults([])
+    setLoading(true); setError('')
+    if (!append) setResults([])
     setProgress(0); setProgressMsg('Аналізую фото товару...')
 
     // Simulate progress stages
@@ -387,7 +388,7 @@ export default function StudioPage() {
         setError(d.error || 'Помилка')
         if (d.needStars) setStarsBalance(d.balance ?? 0)
       } else {
-        setResults(d.results || [])
+        setResults(prev => append ? [...prev, ...(d.results || [])] : (d.results || []))
         if (typeof d.newBalance === 'number') {
           setStarsBalance(d.newBalance)
           window.dispatchEvent(new CustomEvent('stars-updated', { detail: { newBalance: d.newBalance } }))
@@ -698,12 +699,20 @@ export default function StudioPage() {
                 {error.includes('зорь') && <Link href="/pricing" className="bg-gold text-black px-4 py-1.5 rounded-lg font-bold text-sm">Поповнити ⭐</Link>}
               </div>
             )}
-            <ResultGrid results={results} loading={loading} loadingCount={mode === 'photo' ? Math.max(1, photos.length) : count} />
+            <ResultGrid results={results} loading={loading} loadingCount={mode === 'photo' ? usablePhotos : count} />
             {results.length > 0 && (
-              <button onClick={() => { try { localStorage.setItem('studio_batch', JSON.stringify(results)) } catch {} ; window.location.href = '/products/create' }}
-                className="btn-shine mt-4 self-start bg-gradient-to-r from-gold to-gold-light text-black font-bold px-5 py-2.5 rounded-xl hover:brightness-110">
-                ✨ Зберегти все як товар →
-              </button>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <button onClick={() => generate(true)} disabled={!canGenerate}
+                  className={`self-start font-bold px-5 py-2.5 rounded-xl border transition-all flex items-center gap-2 ${canGenerate ? 'border-gold/50 text-gold hover:bg-gold/10' : 'border-white/10 text-white/30 cursor-not-allowed'}`}>
+                  {loading ? <span className="w-4 h-4 border-2 border-gold/40 border-t-gold rounded-full animate-spin"/> : '✨'}
+                  Ще варіант
+                  <span className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-xs ${canGenerate ? 'bg-gold/15' : 'bg-white/5'}`}>⭐ {totalCost}</span>
+                </button>
+                <button onClick={() => { try { localStorage.setItem('studio_batch', JSON.stringify(results)) } catch {} ; window.location.href = '/products/create' }}
+                  className="btn-shine self-start bg-gradient-to-r from-gold to-gold-light text-black font-bold px-5 py-2.5 rounded-xl hover:brightness-110">
+                  ✨ Зберегти все як товар →
+                </button>
+              </div>
             )}
           </div>
 

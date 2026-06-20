@@ -848,10 +848,10 @@ export async function POST(req: NextRequest) {
         let usableUrls = photoUrls
         try {
           const cls = await classifyPhotos(photoUrls)
-          const isModel = displayStyle === 'model'
-          const filtered = photoUrls.filter((_, i) => cls[i].keep && (!isModel || cls[i].wearable))
+          const needsFront = displayStyle === 'model' || displayStyle === 'flatlay'
+          const filtered = photoUrls.filter((_, i) => cls[i].keep && (!needsFront || cls[i].wearable))
           if (filtered.length) usableUrls = filtered
-          console.log(`classify: ${photoUrls.length} photos -> ${usableUrls.length} usable (model=${isModel})`)
+          console.log(`classify: ${photoUrls.length} photos -> ${usableUrls.length} usable (front=${needsFront})`)
         } catch (e) { console.error('classify error:', e) }
 
         const STYLE_TONE = photoStyle === 'home'

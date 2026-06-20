@@ -438,6 +438,44 @@ export default function StudioV2() {
   const slide4Ref = React.useRef<HTMLElement>(null)
   const [tx, setTx] = React.useState(0)
   const [vh, setVh] = React.useState(0)
+  const [pShort, setPShort] = React.useState(''); const [pSeo, setPSeo] = React.useState('')
+  const [pCat, setPCat] = React.useState(''); const [pSku, setPSku] = React.useState('')
+  const [pAvail, setPAvail] = React.useState(true); const [pPrice, setPPrice] = React.useState('')
+  const [pDesc, setPDesc] = React.useState(''); const [pGen, setPGen] = React.useState(false)
+  const [pSave, setPSave] = React.useState(false); const [pErr, setPErr] = React.useState('')
+  async function generateProduct() {
+    if (!results.length) { setPErr('Немає фото'); return }
+    setPGen(true); setPErr('')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/product-assist', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` }, body: JSON.stringify({ imageUrls: results }) })
+      const d = await res.json()
+      if (d.error) setPErr('Не вдалося: ' + d.error)
+      else { setPShort(d.shortName || ''); setPSeo(d.seoName || ''); setPCat(d.category || ''); setPDesc(d.description || ''); if (!pSku) setPSku('KAI-' + Date.now().toString(36).slice(-5).toUpperCase()) }
+    } catch { setPErr('Помилка генерації') }
+    setPGen(false)
+  }
+  async function saveProduct() {
+    if (!results.length) { setPErr('Немає фото'); return }
+    if (!pShort.trim()) { setPErr('Потрібна назва — натисни «Згенерувати товар»'); return }
+    if (!pPrice || isNaN(parseFloat(pPrice))) { setPErr('Встав ціну'); return }
+    setPSave(true); setPErr('')
+    const { data: { session } } = await supabase.auth.getSession()
+    const uid = session?.user?.id
+    if (!uid) { setPErr('Сесія закінчилась'); setPSave(false); return }
+    const { error: e } = await supabase.from('products').insert({
+      user_id: uid, name: pShort.trim(), seo_name: pSeo.trim(), description: pDesc.trim(),
+      price: parseFloat(pPrice), currency: 'UAH', category: pCat.trim(), available: pAvail, sku: pSku.trim(), image_urls: results,
+    })
+    setPSave(false)
+    if (e) { setPErr('Помилка збереження: ' + e.message); return }
+    window.location.href = '/products'
+  }
+  function openProductStep() {
+    setPShort(v => v || productName)
+    setPCat(v => v || category)
+    setStep(4)
+  }
   const measure = React.useCallback(() => {
     const vp = vpRef.current
     const active = (step === 1 ? slide1Ref : step === 2 ? slide2Ref : step === 3 ? slide3Ref : slide4Ref).current
@@ -542,6 +580,14 @@ export default function StudioV2() {
         #s2 .note:hover{background:rgba(232,162,58,.18)}
         @keyframes s2pop{0%{transform:scale(.5);opacity:0}60%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
         #s2 .saveddot{width:64px;height:64px;border-radius:50%;margin:0 auto;display:grid;place-items:center;background:linear-gradient(135deg,var(--gold),var(--gold2));box-shadow:0 10px 30px -8px rgba(232,178,74,.6);animation:s2pop .5s cubic-bezier(.2,.8,.3,1.4)}
+        #s2 .pf-thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:2px}
+        #s2 .pf-th{width:58px;height:74px;object-fit:cover;border-radius:10px;border:1px solid var(--line2)}
+        #s2 .pf-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px}
+        #s2 .pf-field label{display:block;font-size:10.5px;color:var(--mut);text-transform:uppercase;font-weight:700;letter-spacing:.02em;margin-bottom:6px}
+        #s2 .pf-field input,#s2 .pf-field textarea{width:100%;background:var(--glass);border:1px solid var(--line);border-radius:11px;padding:11px 13px;color:#F4F3F8;font-size:13.5px;font-family:inherit;outline:none;resize:vertical}
+        #s2 .pf-field input:focus,#s2 .pf-field textarea:focus{border-color:rgba(232,178,74,.5)}
+        #s2 .pf-avail{width:100%;border-radius:11px;padding:11px;font-size:13.5px;font-weight:600;font-family:inherit;cursor:pointer;border:1px solid var(--line);background:var(--glass);color:var(--mut)}
+        #s2 .pf-avail.on{background:rgba(34,197,94,.18);border-color:rgba(34,197,94,.4);color:#4ade80}
       `}</style>
 
       <div className="aurora"><span></span><span></span><span></span></div>
@@ -678,18 +724,31 @@ export default function StudioV2() {
                   <button className="back" onClick={() => goStep(2)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M19 12H5M11 6l-6 6 6 6"/></svg> Змінити</button>
                   <button className="more" disabled={!canGenerate} onClick={() => generate(true)}>✦ Ще варіант <span className="c">⭐ {totalCost}</span></button>
                   {results.length > 0 && (
-                    <button className="save" onClick={() => { try { localStorage.setItem('studio_batch', JSON.stringify(results)) } catch {} ; setStep(4); setTimeout(() => { window.location.href = '/products/create' }, 850) }}>Зберегти все як товар →</button>
+                    <button className="save" onClick={openProductStep}>Зберегти все як товар →</button>
                   )}
                 </div>
               </div>
             </section>
             <section className={`slide ${step===4?'active':''}`} ref={slide4Ref}>
-              <div className="card" style={{textAlign:'center',padding:'48px 26px'}}>
-                <div className="saveddot">
-                  <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#1a1206" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+              <div className="card">
+                <div className="h">Зберегти як товар</div>
+                <div className="sub">Одна кнопка зробить назву, опис і категорію. Ти ставиш ціну.</div>
+                <div className="pf-thumbs">{results.map((u, i) => <img key={i} src={u} alt="" className="pf-th" />)}</div>
+                <button className="next" disabled={pGen} onClick={generateProduct} style={{marginTop:14}}>{pGen ? 'Генерую назву, опис, категорію…' : '✦ Згенерувати товар'}</button>
+                <div className="pf-grid">
+                  <div className="pf-field" style={{gridColumn:'1 / -1'}}><label>Коротка назва (для картки)</label><input value={pShort} onChange={e => setPShort(e.target.value)} placeholder="Куртка тактична олива" /></div>
+                  <div className="pf-field" style={{gridColumn:'1 / -1'}}><label>SEO-назва (Prom/Rozetka)</label><input value={pSeo} onChange={e => setPSeo(e.target.value)} placeholder="Куртка тактична чоловіча олива з капюшоном" /></div>
+                  <div className="pf-field"><label>Категорія</label><input value={pCat} onChange={e => setPCat(e.target.value)} placeholder="Одяг та взуття > Куртки" /></div>
+                  <div className="pf-field"><label>Артикул</label><input value={pSku} onChange={e => setPSku(e.target.value)} placeholder="KAI-7F3Q2" /></div>
+                  <div className="pf-field"><label>Ціна, грн *</label><input value={pPrice} onChange={e => setPPrice(e.target.value)} inputMode="decimal" placeholder="2500" /></div>
+                  <div className="pf-field"><label>Наявність</label><button className={`pf-avail ${pAvail ? 'on' : ''}`} onClick={() => setPAvail(!pAvail)}>{pAvail ? '✓ В наявності' : 'Немає'}</button></div>
+                  <div className="pf-field" style={{gridColumn:'1 / -1'}}><label>Опис</label><textarea value={pDesc} onChange={e => setPDesc(e.target.value)} rows={5} placeholder="Зʼявиться після «Згенерувати товар» — або напиши свій" /></div>
                 </div>
-                <div className="h" style={{marginTop:18}}>Зберігаємо ваш товар…</div>
-                <div className="sub" style={{marginBottom:0}}>Переходимо до картки товару</div>
+                {pErr && <div className="errbox" style={{marginTop:14,marginBottom:0}}>{pErr}</div>}
+                <div className="nav">
+                  <button className="back" onClick={() => setStep(3)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M19 12H5M11 6l-6 6 6 6"/></svg> Назад</button>
+                  <button className="save" disabled={pSave} onClick={saveProduct}>{pSave ? 'Зберігаю…' : '✓ Зберегти товар'}</button>
+                </div>
               </div>
             </section>
           </div>

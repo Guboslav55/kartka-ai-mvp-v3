@@ -24,8 +24,8 @@ const COST_MAP: Record<Mode, number> = { photo: 4, card: 4, video: 16 }
 const CATEGORIES = ['Одяг та взуття', 'Тактичне спорядження', 'Електроніка', 'Дім та сад', "Краса та здоров'я", 'Спорт', 'Авто та мото', 'Іграшки', 'Їжа та напої', 'Інше']
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
-function PhotoUploader({ photos, onAdd, onRemove, onClear, irrelevant = [], notForModel = [], modelMode = false }: {
-  photos: string[]; onAdd: (b64: string) => void; onRemove: (i: number) => void; onClear: () => void; irrelevant?: string[]; notForModel?: string[]; modelMode?: boolean
+function PhotoUploader({ photos, onAdd, onRemove, onClear, irrelevant = [], notForModel = [], frontMode = false }: {
+  photos: string[]; onAdd: (b64: string) => void; onRemove: (i: number) => void; onClear: () => void; irrelevant?: string[]; notForModel?: string[]; frontMode?: boolean
 }) {
   const ref = useRef<HTMLInputElement>(null)
   async function compress(file: File): Promise<string> {
@@ -59,7 +59,7 @@ function PhotoUploader({ photos, onAdd, onRemove, onClear, irrelevant = [], notF
       <div className="flex flex-wrap gap-2 mb-2">
         {photos.map((p, i) => {
           const bad = irrelevant.includes(p)
-          const amber = !bad && modelMode && notForModel.includes(p)
+          const amber = !bad && frontMode && notForModel.includes(p)
           return (
           <div key={i} className="relative group">
             <img src={p} alt="" className={`w-16 h-16 object-cover rounded-xl border ${bad ? 'border-red-500' : amber ? 'border-amber-500' : 'border-white/15'}`} />
@@ -72,7 +72,7 @@ function PhotoUploader({ photos, onAdd, onRemove, onClear, irrelevant = [], notF
               </div>
             )}
             {amber && (
-              <div title="Не піде на модель — потрібен вид анфас. У режимі «На моделі» це фото пропускається (інші режими його використають)."
+              <div title="Потрібен вид анфас. У режимах «На моделі» та «Раскладка зверху» це фото пропускається (інші режими його використають)."
                 className="absolute inset-0 rounded-xl bg-amber-500/45 flex items-center justify-center">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
                   <circle cx="12" cy="12" r="9" /><line x1="6" y1="6" x2="18" y2="18" strokeLinecap="round" />
@@ -97,8 +97,8 @@ function PhotoUploader({ photos, onAdd, onRemove, onClear, irrelevant = [], notF
       {irrelevant.length > 0 && (
         <p className="text-red-400/90 text-xs mt-1.5">⚠ {irrelevant.length} фото не відноситься до товару — приберіть зайве</p>
       )}
-      {modelMode && notForModel.filter(p => !irrelevant.includes(p) && photos.includes(p)).length > 0 && (
-        <p className="text-amber-400/90 text-xs mt-1">ℹ {notForModel.filter(p => !irrelevant.includes(p) && photos.includes(p)).length} фото не піде на модель (потрібен вид анфас) — у режимі «На моделі» пропускається</p>
+      {frontMode && notForModel.filter(p => !irrelevant.includes(p) && photos.includes(p)).length > 0 && (
+        <p className="text-amber-400/90 text-xs mt-1">ℹ {notForModel.filter(p => !irrelevant.includes(p) && photos.includes(p)).length} фото не піде у цей режим (потрібен вид анфас) — у «На моделі» та «Раскладка зверху» пропускається</p>
       )}
     </div>
   )
@@ -254,8 +254,8 @@ export default function StudioPage() {
     return () => window.removeEventListener('stars-updated', h)
   }, [])
 
-  const modelMode = displayStyle === 'model'
-  const skippedCount = photos.filter(p => irrelevant.includes(p) || (modelMode && notForModel.includes(p))).length
+  const frontMode = displayStyle === 'model' || displayStyle === 'flatlay'
+  const skippedCount = photos.filter(p => irrelevant.includes(p) || (frontMode && notForModel.includes(p))).length
   const usablePhotos = Math.max(1, photos.length - skippedCount)
   const totalCost = mode === 'photo' ? COST_MAP[mode] * usablePhotos : COST_MAP[mode] * count
   // Auto-analyze: fires when first photo added, or when switching to card mode
@@ -354,7 +354,7 @@ export default function StudioPage() {
   async function generate(append = false) {
     if (!canGenerate) return
     // Send only photos the user sees as valid: drop red-flagged (all modes) and amber (model mode)
-    const usableList = photos.filter(p => !irrelevant.includes(p) && !(modelMode && notForModel.includes(p)))
+    const usableList = photos.filter(p => !irrelevant.includes(p) && !(frontMode && notForModel.includes(p)))
     const sendPhotos = usableList.length ? usableList : photos
     setLoading(true); setError('')
     if (!append) setResults([])
@@ -434,7 +434,7 @@ export default function StudioPage() {
               photos={photos}
               irrelevant={irrelevant}
               notForModel={notForModel}
-              modelMode={modelMode}
+              frontMode={frontMode}
               onAdd={b64 => {
               setPhotos(p => {
                 const next = [...p, b64].slice(0, MAX_PHOTOS)

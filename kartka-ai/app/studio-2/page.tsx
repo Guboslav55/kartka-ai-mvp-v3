@@ -145,7 +145,7 @@ function ResultGrid({ results, loading, loadingCount }: { results: string[]; loa
   return (
     <div className="flex flex-col gap-3 h-full">
       {/* Main image */}
-      <div className="relative rounded-3xl overflow-hidden border border-white/10" style={{maxHeight: "calc(100vh - 220px)", background:'radial-gradient(120% 90% at 50% 0%, #15141d, #0a0a10)'}}>
+      <div className="relative rounded-3xl overflow-hidden border border-white/10" style={{maxHeight: "calc(100vh - 360px)", background:'radial-gradient(120% 90% at 50% 0%, #15141d, #0a0a10)'}}>
         {current ? (
           <>
             <img src={current} alt="" className="w-full object-contain" style={{maxHeight: "calc(100vh - 240px)"}} />
@@ -447,9 +447,10 @@ export default function StudioV2() {
   React.useLayoutEffect(() => { measure() }, [measure, photos.length, results.length, displayStyle, wishes, error, loading, irrelevant, notForModel, productName, category, aiIdeaLoading])
   React.useEffect(() => {
     const ro = new ResizeObserver(() => measure())
-    if (trackRef.current) ro.observe(trackRef.current)
+    ;[slide1Ref, slide2Ref, slide3Ref].forEach(r => { if (r.current) ro.observe(r.current) })
     window.addEventListener('resize', measure)
-    return () => { ro.disconnect(); window.removeEventListener('resize', measure) }
+    const t = setTimeout(measure, 350)
+    return () => { ro.disconnect(); window.removeEventListener('resize', measure); clearTimeout(t) }
   }, [measure])
 
   if (!ready) return <div className="min-h-screen flex items-center justify-center bg-[#08080c]"><div className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin"/></div>

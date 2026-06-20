@@ -435,11 +435,12 @@ export default function StudioV2() {
   const slide1Ref = React.useRef<HTMLElement>(null)
   const slide2Ref = React.useRef<HTMLElement>(null)
   const slide3Ref = React.useRef<HTMLElement>(null)
+  const slide4Ref = React.useRef<HTMLElement>(null)
   const [tx, setTx] = React.useState(0)
   const [vh, setVh] = React.useState(0)
   const measure = React.useCallback(() => {
     const vp = vpRef.current
-    const active = (step === 1 ? slide1Ref : step === 2 ? slide2Ref : slide3Ref).current
+    const active = (step === 1 ? slide1Ref : step === 2 ? slide2Ref : step === 3 ? slide3Ref : slide4Ref).current
     if (!vp || !active) return
     setTx((vp.clientWidth - active.offsetWidth) / 2 - active.offsetLeft)
     setVh(active.offsetHeight)
@@ -447,7 +448,7 @@ export default function StudioV2() {
   React.useLayoutEffect(() => { measure() }, [measure, photos.length, results.length, displayStyle, wishes, error, loading, irrelevant, notForModel, productName, category, aiIdeaLoading])
   React.useEffect(() => {
     const ro = new ResizeObserver(() => measure())
-    ;[slide1Ref, slide2Ref, slide3Ref].forEach(r => { if (r.current) ro.observe(r.current) })
+    ;[slide1Ref, slide2Ref, slide3Ref, slide4Ref].forEach(r => { if (r.current) ro.observe(r.current) })
     window.addEventListener('resize', measure)
     const t = setTimeout(measure, 350)
     return () => { ro.disconnect(); window.removeEventListener('resize', measure); clearTimeout(t) }
@@ -539,6 +540,8 @@ export default function StudioV2() {
         #s2 .slide.active .card{pointer-events:auto}
         #s2 .note{margin-bottom:18px;background:rgba(232,162,58,.12);border:1px solid rgba(232,162,58,.35);color:#E8A23A;border-radius:12px;padding:11px 14px;font-size:12.5px;cursor:pointer;transition:.2s}
         #s2 .note:hover{background:rgba(232,162,58,.18)}
+        @keyframes s2pop{0%{transform:scale(.5);opacity:0}60%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
+        #s2 .saveddot{width:64px;height:64px;border-radius:50%;margin:0 auto;display:grid;place-items:center;background:linear-gradient(135deg,var(--gold),var(--gold2));box-shadow:0 10px 30px -8px rgba(232,178,74,.6);animation:s2pop .5s cubic-bezier(.2,.8,.3,1.4)}
       `}</style>
 
       <div className="aurora"><span></span><span></span><span></span></div>
@@ -556,7 +559,7 @@ export default function StudioV2() {
           <div className={`bar ${step>1?'fill':''}`}><i></i></div>
           <button className={`stepbtn ${step===2?'active':''} ${step>2?'done':''}`} onClick={() => goStep(2)}><span className="dot">2</span><span className="lbl">Як показати</span></button>
           <div className={`bar ${step>2?'fill':''}`}><i></i></div>
-          <button className={`stepbtn ${step===3?'active':''}`} onClick={() => goStep(3)}><span className="dot">3</span><span className="lbl">Результат</span></button>
+          <button className={`stepbtn ${step===3?'active':''} ${step>3?'done':''}`} onClick={() => goStep(3)}><span className="dot">3</span><span className="lbl">Результат</span></button>
         </div>
 
         <div className="stage">
@@ -675,9 +678,18 @@ export default function StudioV2() {
                   <button className="back" onClick={() => goStep(2)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M19 12H5M11 6l-6 6 6 6"/></svg> Змінити</button>
                   <button className="more" disabled={!canGenerate} onClick={() => generate(true)}>✦ Ще варіант <span className="c">⭐ {totalCost}</span></button>
                   {results.length > 0 && (
-                    <button className="save" onClick={() => { try { localStorage.setItem('studio_batch', JSON.stringify(results)) } catch {} ; window.location.href = '/products/create' }}>Зберегти все як товар →</button>
+                    <button className="save" onClick={() => { try { localStorage.setItem('studio_batch', JSON.stringify(results)) } catch {} ; setStep(4); setTimeout(() => { window.location.href = '/products/create' }, 850) }}>Зберегти все як товар →</button>
                   )}
                 </div>
+              </div>
+            </section>
+            <section className={`slide ${step===4?'active':''}`} ref={slide4Ref}>
+              <div className="card" style={{textAlign:'center',padding:'48px 26px'}}>
+                <div className="saveddot">
+                  <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#1a1206" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+                </div>
+                <div className="h" style={{marginTop:18}}>Зберігаємо ваш товар…</div>
+                <div className="sub" style={{marginBottom:0}}>Переходимо до картки товару</div>
               </div>
             </section>
           </div>

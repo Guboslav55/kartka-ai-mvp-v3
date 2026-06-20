@@ -209,7 +209,7 @@ export default function StudioPage() {
 
   // Step 2 — Generation settings
   const [mode, setMode] = useState<Mode>('photo')
-  const [displayStyle, setDisplayStyle] = useState<DisplayStyle>('catalog')
+  const [displayStyle, setDisplayStyle] = useState<DisplayStyle | ''>('')
   const [wishes, setWishes] = useState('')
   const [photoStyle, setPhotoStyle] = useState<PhotoStyle>('commercial')
   const [cardStyle, setCardStyle] = useState<CardStyle>('classic')
@@ -335,7 +335,7 @@ export default function StudioPage() {
     setChecking(false)
   }
 
-  const canGenerate = photos.length > 0 && productName.trim() && starsBalance >= totalCost && !loading && mode !== 'video'
+  const canGenerate = photos.length > 0 && productName.trim() && starsBalance >= totalCost && !loading && mode !== 'video' && (mode !== 'photo' || !!displayStyle)
 
   async function getAiIdea(type: 'random' | 'detailed') {
     setAiIdeaLoading(true); setShowAiMenu(false)
@@ -493,7 +493,7 @@ export default function StudioPage() {
                 <p className="text-white/40 text-xs mb-3">Як показати товар?</p>
                 <div className="space-y-2 mb-4">
                   {DISPLAY_STYLES.map(s => (
-                    <button key={s.value} onClick={() => setDisplayStyle(s.value)}
+                    <button key={s.value} onClick={() => { if (s.value !== displayStyle) setWishes(''); setDisplayStyle(s.value) }}
                       className={`w-full flex items-center gap-3 p-2.5 rounded-xl border text-left transition-all ${displayStyle===s.value ? 'border-gold/50 bg-gold/8' : 'border-white/8 hover:border-white/20'}`}>
                       <span className="text-2xl">{s.emoji}</span>
                       <div>
@@ -510,20 +510,24 @@ export default function StudioPage() {
                     <label className="text-white/60 text-xs">Побажання</label>
                     <div className="relative">
                       <div className="flex items-center gap-1.5">
-                        <a href="/studio/style-test" className="text-xs text-gold hover:text-gold-light transition-colors border border-gold/30 px-2 py-1 rounded-lg">
-                          🎯 Пройти тест
-                        </a>
-                        <button onClick={() => getAiIdea('random')} disabled={aiIdeaLoading}
-                          className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+                        {displayStyle ? (
+                          <a href="/studio/style-test" className="text-xs text-gold hover:text-gold-light transition-colors border border-gold/30 px-2 py-1 rounded-lg">
+                            🎯 Пройти тест
+                          </a>
+                        ) : (
+                          <span className="text-xs text-white/25 border border-white/10 px-2 py-1 rounded-lg cursor-not-allowed">🎯 Пройти тест</span>
+                        )}
+                        <button onClick={() => getAiIdea('random')} disabled={aiIdeaLoading || !displayStyle}
+                          className={`flex items-center gap-1 text-xs transition-colors ${displayStyle ? 'text-indigo-400 hover:text-indigo-300' : 'text-white/25 cursor-not-allowed'}`}>
                           {aiIdeaLoading ? <span className="w-3 h-3 border border-indigo-400 border-t-transparent rounded-full animate-spin"/> : '✨'} Ідея
                         </button>
                       </div>
                     </div>
                   </div>
-                  <textarea value={wishes} onChange={e => setWishes(e.target.value)} rows={3}
-                    placeholder="Наприклад: м'який світло, мінімалізм, нейтральний фон."
+                  <textarea value={wishes} onChange={e => setWishes(e.target.value)} rows={3} disabled={!displayStyle}
+                    placeholder={displayStyle ? "Наприклад: м'який світло, мінімалізм, нейтральний фон." : 'Спочатку оберіть, як показати товар ↑'}
                     maxLength={2000}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-xs placeholder-white/20 focus:outline-none focus:border-indigo-500/50 resize-none"/>
+                    className={`w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-xs placeholder-white/20 focus:outline-none focus:border-indigo-500/50 resize-none ${!displayStyle ? 'opacity-50 cursor-not-allowed' : ''}`}/>
                   <div className="text-right text-white/25 text-xs">{wishes.length}/2000</div>
                 </div>
 

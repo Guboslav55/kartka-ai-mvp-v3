@@ -6,24 +6,22 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 export async function POST(req: NextRequest) {
   const { productName, category, displayStyle, mode = 'random' } = await req.json()
 
-  const styleMap: Record<string, string> = {
-    model:   'на моделі в міському середовищі',
-    store:   'на вішаку або підставці як у магазині',
-    flatlay: 'раскладка зверху на поверхні',
-    catalog: 'студійна фотографія на білому фоні',
+  // Сцена-підказка під кожен режим показу (тільки про фон/світло/контекст, не про товар)
+  const STYLE_GUIDE: Record<string, string> = {
+    model:   'Фото на людині-моделі. Запропонуй доречну локацію та контекст носіння (напр. міська вулиця, світлий лофт, кав\'ярня, парк), настрій і позу моделі, час доби й напрям світла. Акцент на тому, як річ виглядає в реальному житті.',
+    store:   'Фото на вішаку або підставці, як у магазині. Запропонуй стиль бутіка чи вітрини: тип дисплея (рейл, стійка, полиця), інтер\'єр і матеріали магазину, приємне ретейл-освітлення, акуратний реквізит.',
+    flatlay: 'Розкладка строго зверху (вид під 90°). Опиши поверхню (її фактуру й матеріал), доречний реквізит навколо, м\'яке рівне світло й делікатні тіні. Композиція пласка та охайна.',
+    catalog: 'Студійний каталог. Опиши чистий безшовний фон з м\'яким градієнтом, рівне e-commerce освітлення й ненав\'язливу тінь під товаром. Мінімалізм, нічого зайвого.',
   }
-  const styleNote = styleMap[displayStyle] || ''
+  const guide = STYLE_GUIDE[displayStyle as string] || STYLE_GUIDE.catalog
+  const sentences = mode === 'detailed' ? '4-6 речень' : '2-3 речення'
 
-  const prompt = mode === 'random'
-    ? `Generate a creative photography wish/requirement for a product photo.
-Product: "${productName || 'товар'}", Category: "${category || 'одяг'}", Display: ${styleNote}
-Write in Ukrainian, 2-4 sentences describing: lighting, mood, composition, color palette, atmosphere.
-Examples of good wishes: "М'яке бічне освітлення, мінімалістичний фон, акцент на текстурі тканини"
-Be specific and creative. Return ONLY the wish text, no explanations.`
-    : `You are a creative photography director. Generate a detailed scene description for a product photo.
-Product: "${productName || 'товар'}", Category: "${category || 'одяг'}", Style: ${styleNote}
-Write in Ukrainian, 4-6 sentences. Describe: environment, lighting, mood, color palette, camera angle, composition details.
-Make it vivid and professional. Return ONLY the description.`
+  const prompt = `Ти креативний фотодиректор. Напиши українською коротке "побажання" до фотографії товару — ${sentences}.
+Товар: "${productName || 'товар'}", Категорія: "${category || 'одяг'}".
+Режим показу: ${guide}
+
+ВАЖЛИВО: опиши ЛИШЕ фон, оточення, локацію, освітлення, настрій і композицію кадру. НЕ описуй сам товар — його колір, матеріал, форму чи дизайн (товар має залишитися точно таким, як на вихідному фото). НЕ згадуй кольори одягу/виробу і не пропонуй пастельних чи тонованих ефектів на самому товарі — будь-які кольори стосуються лише фону та світла.
+Поверни ТІЛЬКИ текст побажання, без пояснень і лапок.`
 
   try {
     const res = await openai.chat.completions.create({

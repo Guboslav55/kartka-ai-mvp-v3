@@ -421,9 +421,9 @@ export default function StudioPage() {
     <div className="min-h-screen flex flex-col bg-[#08080b] relative overflow-x-hidden">
       <style>{`@keyframes stDrift{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(40px,30px) scale(1.08)}66%{transform:translate(-30px,20px) scale(.95)}}@keyframes stUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}.st-aurora span{position:absolute;border-radius:9999px;filter:blur(90px);animation:stDrift 22s ease-in-out infinite}.st-up{opacity:0;animation:stUp .6s cubic-bezier(.2,.7,.3,1) forwards}`}</style>
       <div className="st-aurora pointer-events-none fixed inset-0 z-0 overflow-hidden">
-        <span style={{width:560,height:560,background:'#8B7FE8',opacity:.18,top:-180,left:-120}}/>
-        <span style={{width:480,height:480,background:'#E8B24A',opacity:.12,bottom:-160,right:'8%',animationDelay:'-7s'}}/>
-        <span style={{width:420,height:420,background:'#5BD6E8',opacity:.09,top:'30%',right:-140,animationDelay:'-13s'}}/>
+        <span style={{width:620,height:620,background:'#8B7FE8',opacity:.30,top:-200,left:-140}}/>
+        <span style={{width:520,height:520,background:'#E8B24A',opacity:.22,bottom:-180,right:'6%',animationDelay:'-7s'}}/>
+        <span style={{width:460,height:460,background:'#5BD6E8',opacity:.16,top:'28%',right:-160,animationDelay:'-13s'}}/>
       </div>
       {/* Header */}
       <header className="relative z-10 border-b border-white/8 px-6 py-3 flex items-center justify-between shrink-0 backdrop-blur-md bg-[#08080b]/70">
@@ -438,10 +438,10 @@ export default function StudioPage() {
 
       <div className="relative z-10 flex flex-1 overflow-hidden flex-col md:flex-row">
         {/* ── Left Panel ── */}
-        <div className="w-full md:w-[340px] border-b md:border-b-0 md:border-r border-white/8 overflow-y-auto p-4 md:p-5 space-y-5 md:space-y-6 md:shrink-0 max-h-[55vh] md:max-h-none">
+        <div className="w-full md:w-[340px] border-b md:border-b-0 md:border-r border-white/8 overflow-y-auto p-4 md:p-5 space-y-4 md:shrink-0 max-h-[55vh] md:max-h-none">
 
           {/* Step 01 — Product */}
-          <div>
+          <div className="st-up rounded-3xl border border-white/10 bg-white/[0.03] backdrop-blur-sm p-4" style={{animationDelay:'.05s'}}>
             <div className="flex items-center gap-2.5 mb-3">
               <span className="w-6 h-6 rounded-lg grid place-items-center text-xs font-bold text-gold-light bg-gold/12 border border-gold/30">1</span>
               <span className="text-white font-semibold text-sm">Ваш товар</span>
@@ -489,10 +489,9 @@ export default function StudioPage() {
             </div>
           </div>
 
-          <div className="h-px bg-white/8"/>
 
           {/* Step 02 — Settings */}
-          <div>
+          <div className="st-up rounded-3xl border border-white/10 bg-white/[0.03] backdrop-blur-sm p-4" style={{animationDelay:'.15s'}}>
             <div className="flex items-center gap-2.5 mb-3">
               <span className="w-6 h-6 rounded-lg grid place-items-center text-xs font-bold text-gold-light bg-gold/12 border border-gold/30">2</span>
               <span className="text-white font-semibold text-sm">Як показати</span>
@@ -700,7 +699,7 @@ export default function StudioPage() {
         </div>
 
         {/* ── Results Panel ── */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="st-up flex-1 flex flex-col overflow-hidden" style={{animationDelay:'.2s'}}>
           <div className="flex items-center gap-2.5 px-8 py-4 border-b border-white/8 shrink-0">
             <span className="w-6 h-6 rounded-lg grid place-items-center text-xs font-bold text-gold-light bg-gold/12 border border-gold/30">3</span>
             <span className="text-white/70 text-sm font-medium">Результат</span>
@@ -718,7 +717,7 @@ export default function StudioPage() {
             )}
           </div>
 
-          <div className="flex-1 overflow-hidden p-3 md:p-5 flex flex-col">
+          <div className="flex-1 overflow-hidden p-4 md:p-6 flex flex-col">
             {error && (
               <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-red-300 text-sm flex flex-wrap items-center justify-between gap-2">
                 <span>{error}</span>
@@ -743,9 +742,9 @@ export default function StudioPage() {
           </div>
 
           {/* Generate button */}
-          <div className="border-t border-white/8 px-4 md:px-8 py-3 md:py-4 flex flex-wrap items-center gap-3 shrink-0">
+          <div className="border-t border-white/8 px-4 md:px-8 py-3 md:py-4 flex flex-wrap items-center gap-3 shrink-0 backdrop-blur-md bg-[#08080b]/60">
             <button onClick={generate} disabled={!canGenerate}
-              className={`btn-shine flex items-center gap-3 px-6 py-3 rounded-xl font-bold text-base transition-all ${canGenerate ? 'bg-gradient-to-r from-gold to-gold-light text-black hover:opacity-90 shadow-[0_6px_24px_rgba(255,210,63,0.4)]' : 'bg-white/10 text-white/30 cursor-not-allowed'}`}>
+              className={`btn-shine flex items-center gap-3 px-7 py-3.5 rounded-2xl font-extrabold text-base transition-all ${canGenerate ? 'bg-gradient-to-r from-gold to-gold-light text-black hover:brightness-110 hover:-translate-y-0.5 shadow-[0_10px_30px_-8px_rgba(232,178,74,0.6)]' : 'bg-white/10 text-white/30 cursor-not-allowed'}`}>
               {loading ? <span className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin"/> : '✦'}
               Згенерувати
               <span className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-sm ${canGenerate ? 'bg-black/20' : 'bg-white/5'}`}>

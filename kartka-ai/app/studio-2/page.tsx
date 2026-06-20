@@ -430,6 +430,28 @@ export default function StudioV2() {
     generate(false)
   }
 
+  const vpRef = React.useRef<HTMLDivElement>(null)
+  const trackRef = React.useRef<HTMLDivElement>(null)
+  const slide1Ref = React.useRef<HTMLElement>(null)
+  const slide2Ref = React.useRef<HTMLElement>(null)
+  const slide3Ref = React.useRef<HTMLElement>(null)
+  const [tx, setTx] = React.useState(0)
+  const [vh, setVh] = React.useState(0)
+  const measure = React.useCallback(() => {
+    const vp = vpRef.current
+    const active = (step === 1 ? slide1Ref : step === 2 ? slide2Ref : slide3Ref).current
+    if (!vp || !active) return
+    setTx((vp.clientWidth - active.offsetWidth) / 2 - active.offsetLeft)
+    setVh(active.offsetHeight)
+  }, [step])
+  React.useLayoutEffect(() => { measure() }, [measure, photos.length, results.length, displayStyle, wishes, error, loading, irrelevant, notForModel, productName, category, aiIdeaLoading])
+  React.useEffect(() => {
+    const ro = new ResizeObserver(() => measure())
+    if (trackRef.current) ro.observe(trackRef.current)
+    window.addEventListener('resize', measure)
+    return () => { ro.disconnect(); window.removeEventListener('resize', measure) }
+  }, [measure])
+
   if (!ready) return <div className="min-h-screen flex items-center justify-center bg-[#08080c]"><div className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin"/></div>
 
   return (
@@ -508,6 +530,14 @@ export default function StudioV2() {
         #s2 .save{flex:1;height:50px;border:none;border-radius:14px;background:linear-gradient(95deg,var(--gold),var(--gold2));color:#1a1206;font-size:15px;font-weight:800;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:.2s}
         #s2 .save:hover{filter:brightness(1.06);transform:translateY(-1px)}
         #s2 .errbox{background:rgba(226,75,74,.12);border:1px solid rgba(226,75,74,.35);color:#f0938f;border-radius:12px;padding:12px 14px;font-size:13px;margin-bottom:16px}
+        #s2 .vp{overflow:hidden;width:100%;transition:height .5s cubic-bezier(.22,.7,.25,1)}
+        #s2 .track{position:relative;display:flex;gap:30px;align-items:flex-start;transition:transform .55s cubic-bezier(.22,.7,.25,1);will-change:transform}
+        #s2 .slide{flex:0 0 760px;max-width:88vw;opacity:.3;transform:scale(.93);filter:blur(1px);transition:opacity .5s,transform .5s,filter .5s;cursor:pointer}
+        #s2 .slide.active{opacity:1;transform:scale(1);filter:none;cursor:default}
+        #s2 .slide .card{pointer-events:none}
+        #s2 .slide.active .card{pointer-events:auto}
+        #s2 .note{margin-bottom:18px;background:rgba(232,162,58,.12);border:1px solid rgba(232,162,58,.35);color:#E8A23A;border-radius:12px;padding:11px 14px;font-size:12.5px;cursor:pointer;transition:.2s}
+        #s2 .note:hover{background:rgba(232,162,58,.18)}
       `}</style>
 
       <div className="aurora"><span></span><span></span><span></span></div>
@@ -529,9 +559,9 @@ export default function StudioV2() {
         </div>
 
         <div className="stage">
-
-          {step === 1 && (
-            <section className="panel">
+          <div className="vp" ref={vpRef} style={{height: vh ? vh : undefined}}>
+          <div className="track" ref={trackRef} style={{transform:`translateX(${tx}px)`}}>
+            <section className={`slide ${step===1?'active':''}`} ref={slide1Ref} onClick={() => { if (step!==1) goStep(1) }}>
               <div className="card">
                 <div className="h">Завантажте фото товару</div>
                 <div className="sub">Чим більше ракурсів — тим краще результат. До {MAX_PHOTOS} фото.</div>
@@ -577,13 +607,13 @@ export default function StudioV2() {
                 {!step1ok && <div className="hint">{photos.length === 0 ? 'Додайте хоча б одне фото товару' : 'Введіть назву товару'}</div>}
               </div>
             </section>
-          )}
-
-          {step === 2 && (
-            <section className="panel">
+            <section className={`slide ${step===2?'active':''}`} ref={slide2Ref} onClick={() => { if (step!==2) goStep(2) }}>
               <div className="card">
                 <div className="h">Як показати товар</div>
                 <div className="sub">Оберіть сцену — від цього залежить, як виглядатиме фото.</div>
+                {frontMode && notForModel.filter(p => !irrelevant.includes(p) && photos.includes(p)).length > 0 && (
+                  <div className="note" onClick={() => goStep(1)}>ℹ {notForModel.filter(p => !irrelevant.includes(p) && photos.includes(p)).length} фото не піде у цей режим (потрібен вид анфас) — натисніть, щоб переглянути на кроці «Фото»</div>
+                )}
                 <div className="modes">
                   {DISPLAY_STYLES.map(s => {
                     const on = displayStyle === s.value
@@ -632,10 +662,7 @@ export default function StudioV2() {
                 </div>
               </div>
             </section>
-          )}
-
-          {step === 3 && (
-            <section className="panel">
+            <section className={`slide ${step===3?'active':''}`} ref={slide3Ref} onClick={() => { if (step!==3) goStep(3) }}>
               <div className="card">
                 <div className="h">{loading ? 'Генеруємо…' : 'Готово — ваші фото'}</div>
                 <div className="sub">{loading ? (progressMsg || 'Зачекайте кілька секунд') : 'Гортайте варіанти, додайте ще або збережіть усі як товар.'}</div>
@@ -652,8 +679,8 @@ export default function StudioV2() {
                 </div>
               </div>
             </section>
-          )}
-
+          </div>
+          </div>
         </div>
       </div>
     </div>

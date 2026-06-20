@@ -56,6 +56,13 @@ function PhotoUploader({ photos, onAdd, onRemove, onClear, irrelevant = [], notF
   return (
     <div>
       <input ref={ref} type="file" accept="image/*" multiple className="hidden" onChange={handleFile} />
+      {photos.length === 0 && (
+        <button onClick={() => ref.current?.click()} className="w-full mb-3 rounded-2xl border-[1.5px] border-dashed border-white/15 bg-white/[0.03] py-5 px-4 text-center hover:border-gold/50 hover:bg-gold/5 transition-all group">
+          <div className="text-white/40 group-hover:text-gold-light text-2xl mb-1">⬆</div>
+          <div className="text-white text-[13px] font-semibold">Перетягніть або оберіть фото</div>
+          <div className="text-white/30 text-[11px] mt-0.5">до 10 фото товару з різних сторін</div>
+        </button>
+      )}
       <div className="flex flex-wrap gap-2 mb-2">
         {photos.map((p, i) => {
           const bad = irrelevant.includes(p)
@@ -124,9 +131,12 @@ function ResultGrid({ results, loading, loadingCount }: { results: string[]; loa
   React.useEffect(() => { if (results.length > 0) setActive(results.length - 1) }, [results.length])
 
   if (!loading && results.length === 0) return (
-    <div className="flex-1 flex items-center justify-center flex-col gap-3">
-      <div className="text-4xl opacity-20">📸</div>
-      <p className="text-white/20 text-sm">Тут з'являться результати після генерації</p>
+    <div className="flex-1 flex items-center justify-center rounded-3xl border border-white/8" style={{background:'radial-gradient(120% 90% at 50% 0%, #15141d, #0a0a10)'}}>
+      <div className="flex flex-col items-center gap-3 text-center px-6">
+        <div className="w-16 h-16 rounded-2xl grid place-items-center bg-white/5 border border-white/10 text-2xl">📸</div>
+        <p className="text-white/40 text-sm">Тут з'явиться результат після генерації</p>
+        <p className="text-white/20 text-xs">Завантажте фото та оберіть, як показати товар</p>
+      </div>
     </div>
   )
 
@@ -135,7 +145,7 @@ function ResultGrid({ results, loading, loadingCount }: { results: string[]; loa
   return (
     <div className="flex flex-col gap-3 h-full">
       {/* Main image */}
-      <div className="relative rounded-2xl overflow-hidden bg-white/5 border border-white/10" style={{maxHeight: "calc(100vh - 220px)"}}>
+      <div className="relative rounded-3xl overflow-hidden border border-white/10" style={{maxHeight: "calc(100vh - 220px)", background:'radial-gradient(120% 90% at 50% 0%, #15141d, #0a0a10)'}}>
         {current ? (
           <>
             <img src={current} alt="" className="w-full object-contain" style={{maxHeight: "calc(100vh - 240px)"}} />
@@ -408,9 +418,15 @@ export default function StudioPage() {
   if (!ready) return <div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin"/></div>
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#08080b]">
+    <div className="min-h-screen flex flex-col bg-[#08080b] relative overflow-x-hidden">
+      <style>{`@keyframes stDrift{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(40px,30px) scale(1.08)}66%{transform:translate(-30px,20px) scale(.95)}}@keyframes stUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}.st-aurora span{position:absolute;border-radius:9999px;filter:blur(90px);animation:stDrift 22s ease-in-out infinite}.st-up{opacity:0;animation:stUp .6s cubic-bezier(.2,.7,.3,1) forwards}`}</style>
+      <div className="st-aurora pointer-events-none fixed inset-0 z-0 overflow-hidden">
+        <span style={{width:560,height:560,background:'#8B7FE8',opacity:.18,top:-180,left:-120}}/>
+        <span style={{width:480,height:480,background:'#E8B24A',opacity:.12,bottom:-160,right:'8%',animationDelay:'-7s'}}/>
+        <span style={{width:420,height:420,background:'#5BD6E8',opacity:.09,top:'30%',right:-140,animationDelay:'-13s'}}/>
+      </div>
       {/* Header */}
-      <header className="border-b border-white/8 px-6 py-3 flex items-center justify-between shrink-0">
+      <header className="relative z-10 border-b border-white/8 px-6 py-3 flex items-center justify-between shrink-0 backdrop-blur-md bg-[#08080b]/70">
         <Link href="/" className="font-display font-black text-lg"><span className="text-gradient">Картка</span><span className="text-white">АІ</span></Link>
         <div className="flex items-center gap-3">
           <Link href="/pricing" className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium border transition-all ${starsBalance < 10 ? 'bg-red-500/20 text-red-300 border-red-500/30' : 'bg-white/10 text-white border-white/15 hover:border-gold/40'}`}>
@@ -420,15 +436,16 @@ export default function StudioPage() {
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
+      <div className="relative z-10 flex flex-1 overflow-hidden flex-col md:flex-row">
         {/* ── Left Panel ── */}
-        <div className="w-full md:w-72 border-b md:border-b-0 md:border-r border-white/8 overflow-y-auto p-4 md:p-5 space-y-5 md:space-y-6 md:shrink-0 max-h-[55vh] md:max-h-none">
+        <div className="w-full md:w-[340px] border-b md:border-b-0 md:border-r border-white/8 overflow-y-auto p-4 md:p-5 space-y-5 md:space-y-6 md:shrink-0 max-h-[55vh] md:max-h-none">
 
           {/* Step 01 — Product */}
           <div>
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2.5 mb-3">
+              <span className="w-6 h-6 rounded-lg grid place-items-center text-xs font-bold text-gold-light bg-gold/12 border border-gold/30">1</span>
               <span className="text-white font-semibold text-sm">Ваш товар</span>
-              <span className="text-white/25 text-xs font-mono">01</span>
+              <span className="ml-auto text-white/25 text-xs">{photos.length} з {MAX_PHOTOS}</span>
             </div>
             <PhotoUploader
               photos={photos}
@@ -476,9 +493,9 @@ export default function StudioPage() {
 
           {/* Step 02 — Settings */}
           <div>
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-white font-semibold text-sm">Налаштуйте генерацію</span>
-              <span className="text-white/25 text-xs font-mono">02</span>
+            <div className="flex items-center gap-2.5 mb-3">
+              <span className="w-6 h-6 rounded-lg grid place-items-center text-xs font-bold text-gold-light bg-gold/12 border border-gold/30">2</span>
+              <span className="text-white font-semibold text-sm">Як показати</span>
             </div>
 
             {/* Mode tabs */}
@@ -490,18 +507,20 @@ export default function StudioPage() {
 
             {mode === 'photo' && (
               <>
-                <p className="text-white/40 text-xs mb-3">Як показати товар?</p>
-                <div className="space-y-2 mb-4">
-                  {DISPLAY_STYLES.map(s => (
+                <p className="text-white/40 text-xs mb-2.5">Як показати товар?</p>
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                  {DISPLAY_STYLES.map(s => {
+                    const on = displayStyle === s.value
+                    return (
                     <button key={s.value} onClick={() => { if (s.value !== displayStyle) setWishes(''); setDisplayStyle(s.value) }}
-                      className={`w-full flex items-center gap-3 p-2.5 rounded-xl border text-left transition-all ${displayStyle===s.value ? 'border-gold/50 bg-gold/8' : 'border-white/8 hover:border-white/20'}`}>
-                      <span className="text-2xl">{s.emoji}</span>
-                      <div>
-                        <div className="text-white text-sm font-medium">{s.label}</div>
-                        <div className="text-white/40 text-xs">{s.desc}</div>
-                      </div>
+                      className={`relative text-left p-3 rounded-2xl border transition-all duration-200 ${on ? 'border-gold/55 bg-gold/8 shadow-[0_8px_26px_-12px_rgba(232,178,74,0.55)]' : 'border-white/8 bg-white/[0.03] hover:border-white/20 hover:-translate-y-0.5'}`}>
+                      <span className={`w-8 h-8 mb-2 rounded-xl grid place-items-center text-lg transition-all ${on ? 'bg-gradient-to-br from-gold to-gold-light' : 'bg-white/6'}`}>{s.emoji}</span>
+                      <div className="text-white text-[13px] font-medium leading-tight">{s.label}</div>
+                      <div className="text-white/40 text-[10.5px] leading-tight mt-0.5">{s.desc}</div>
+                      {on && <span className="absolute top-2.5 right-2.5 w-4 h-4 rounded-full bg-gold grid place-items-center text-[10px] text-black font-bold">✓</span>}
                     </button>
-                  ))}
+                    )
+                  })}
                 </div>
 
                 {/* Wishes */}
@@ -682,8 +701,9 @@ export default function StudioPage() {
 
         {/* ── Results Panel ── */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex items-center justify-between px-8 py-4 border-b border-white/8 shrink-0">
-            <span className="text-white/40 text-sm">Результати</span>
+          <div className="flex items-center gap-2.5 px-8 py-4 border-b border-white/8 shrink-0">
+            <span className="w-6 h-6 rounded-lg grid place-items-center text-xs font-bold text-gold-light bg-gold/12 border border-gold/30">3</span>
+            <span className="text-white/70 text-sm font-medium">Результат</span>
             {loading && progress > 0 && (
               <div className="flex-1 mx-4">
                 <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
@@ -694,9 +714,8 @@ export default function StudioPage() {
               </div>
             )}
             {results.length > 0 && (
-              <button onClick={() => setResults([])} className="text-white/30 text-xs hover:text-white/60 transition-colors">Очистити ×</button>
+              <button onClick={() => setResults([])} className="ml-auto text-white/30 text-xs hover:text-white/60 transition-colors">Очистити ×</button>
             )}
-            <span className="text-white/25 text-xs font-mono ml-auto">03</span>
           </div>
 
           <div className="flex-1 overflow-hidden p-3 md:p-5 flex flex-col">

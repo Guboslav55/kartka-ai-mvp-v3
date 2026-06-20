@@ -423,6 +423,7 @@ export default function StudioV2() {
     if (n === 1) { setStep(1); return }
     if (n === 2 && step1ok) { setStep(2); return }
     if (n === 3 && (results.length > 0 || loading)) { setStep(3); return }
+    if (n === 4 && results.length > 0) { setStep(4); return }
   }
   function runGenerate() {
     if (!canGenerate) return
@@ -436,6 +437,9 @@ export default function StudioV2() {
   const slide2Ref = React.useRef<HTMLElement>(null)
   const slide3Ref = React.useRef<HTMLElement>(null)
   const slide4Ref = React.useRef<HTMLElement>(null)
+  const stepsRef = React.useRef<HTMLDivElement>(null)
+  const stepsTrackRef = React.useRef<HTMLDivElement>(null)
+  const [stx, setStx] = React.useState(0)
   const [tx, setTx] = React.useState(0)
   const [vh, setVh] = React.useState(0)
   const [pShort, setPShort] = React.useState(''); const [pSeo, setPSeo] = React.useState('')
@@ -482,6 +486,11 @@ export default function StudioV2() {
     if (!vp || !active) return
     setTx((vp.clientWidth - active.offsetWidth) / 2 - active.offsetLeft)
     setVh(active.offsetHeight)
+    const svp = stepsRef.current, strack = stepsTrackRef.current
+    if (svp && strack) {
+      const node = strack.querySelector(`[data-n="${step}"]`) as HTMLElement | null
+      if (node) setStx(svp.clientWidth / 2 - (node.offsetLeft + node.offsetWidth / 2))
+    }
   }, [step])
   React.useLayoutEffect(() => { measure() }, [measure, photos.length, results.length, displayStyle, wishes, error, loading, irrelevant, notForModel, productName, category, aiIdeaLoading])
   React.useEffect(() => {
@@ -512,7 +521,8 @@ export default function StudioV2() {
         #s2 .stars{display:flex;align-items:center;gap:6px;font-weight:600;font-size:14px;background:var(--glass);border:1px solid var(--line2);padding:7px 13px;border-radius:999px;color:#F4F3F8;text-decoration:none}
         #s2 .stars b{color:var(--gold2)}
         #s2 .ghost{color:var(--mut);font-size:13px;text-decoration:none;margin-left:14px}
-        #s2 .steps{display:flex;align-items:center;justify-content:center;padding:26px 20px 6px}
+        #s2 .steps{overflow:hidden;padding:26px 16px 8px}
+        #s2 .steps-track{position:relative;display:inline-flex;align-items:center;white-space:nowrap;transition:transform .5s cubic-bezier(.22,.7,.25,1);will-change:transform}
         #s2 .stepbtn{display:flex;align-items:center;gap:11px;cursor:pointer;background:none;border:none;font-family:inherit;padding:6px 4px}
         #s2 .dot{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:14px;border:1.5px solid var(--line2);color:var(--mut);transition:.3s;background:var(--glass)}
         #s2 .stepbtn.done .dot{background:rgba(232,178,74,.16);border-color:rgba(232,178,74,.5);color:var(--gold2)}
@@ -600,12 +610,17 @@ export default function StudioV2() {
           </div>
         </div>
 
-        <div className="steps">
-          <button className={`stepbtn ${step===1?'active':''} ${step>1?'done':''}`} onClick={() => goStep(1)}><span className="dot">1</span><span className="lbl">Фото</span></button>
-          <div className={`bar ${step>1?'fill':''}`}><i></i></div>
-          <button className={`stepbtn ${step===2?'active':''} ${step>2?'done':''}`} onClick={() => goStep(2)}><span className="dot">2</span><span className="lbl">Як показати</span></button>
-          <div className={`bar ${step>2?'fill':''}`}><i></i></div>
-          <button className={`stepbtn ${step===3?'active':''} ${step>3?'done':''}`} onClick={() => goStep(3)}><span className="dot">3</span><span className="lbl">Результат</span></button>
+        <div className="steps" ref={stepsRef}>
+          <div className="steps-track" ref={stepsTrackRef} style={{transform:`translateX(${stx}px)`}}>
+            {[{n:1,l:'Фото'},{n:2,l:'Як показати'},{n:3,l:'Результат'},{n:4,l:'Товар'}].map((st, idx) => (
+              <React.Fragment key={st.n}>
+                {idx > 0 && <div className={`bar ${step > st.n-1 ? 'fill' : ''}`}><i></i></div>}
+                <button data-n={st.n} className={`stepbtn ${step===st.n?'active':''} ${step>st.n?'done':''}`} onClick={() => goStep(st.n)}>
+                  <span className="dot">{st.n}</span><span className="lbl">{st.l}</span>
+                </button>
+              </React.Fragment>
+            ))}
+          </div>
         </div>
 
         <div className="stage">
@@ -734,7 +749,7 @@ export default function StudioV2() {
                 <div className="h">Зберегти як товар</div>
                 <div className="sub">Одна кнопка зробить назву, опис і категорію. Ти ставиш ціну.</div>
                 <div className="pf-thumbs">{results.map((u, i) => <img key={i} src={u} alt="" className="pf-th" />)}</div>
-                <button className="next" disabled={pGen} onClick={generateProduct} style={{marginTop:14}}>{pGen ? 'Генерую назву, опис, категорію…' : '✦ Згенерувати товар'}</button>
+                <button className="next" disabled={pGen} onClick={generateProduct} style={{marginTop:16, width:'100%'}}>{pGen ? 'Генерую назву, опис, категорію…' : '✦ Згенерувати товар'}</button>
                 <div className="pf-grid">
                   <div className="pf-field" style={{gridColumn:'1 / -1'}}><label>Коротка назва (для картки)</label><input value={pShort} onChange={e => setPShort(e.target.value)} placeholder="Куртка тактична олива" /></div>
                   <div className="pf-field" style={{gridColumn:'1 / -1'}}><label>SEO-назва (Prom/Rozetka)</label><input value={pSeo} onChange={e => setPSeo(e.target.value)} placeholder="Куртка тактична чоловіча олива з капюшоном" /></div>

@@ -688,17 +688,18 @@ async function runFlux(imageUrl: string, prompt: string, token: string, aspectRa
       headers: { Authorization: `Token ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ input: { input_image: imageUrl, prompt, aspect_ratio: aspectRatio, output_format: 'jpg', output_quality: 95, safety_tolerance: 2 } })
     })
-    if (!pred.ok) return null
+    if (!pred.ok) { console.error('flux: predict not ok', pred.status, (await pred.text().catch(() => '')).slice(0, 200)); return null }
     const { id } = await pred.json()
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 35; i++) {
       await new Promise(r => setTimeout(r, 3000))
       const r = await fetch(`https://api.replicate.com/v1/predictions/${id}`, { headers: { Authorization: `Token ${token}` } })
       const d = await r.json()
       if (d.status === 'succeeded') return Array.isArray(d.output) ? d.output[0] : d.output
-      if (d.status === 'failed') return null
+      if (d.status === 'failed' || d.status === 'canceled') { console.error('flux:', d.status, String(d.error || '').slice(0, 200)); return null }
     }
+    console.error('flux: timeout after 105s')
     return null
-  } catch { return null }
+  } catch (e: any) { console.error('flux: threw', e?.message); return null }
 }
 
 async function makeCatalog(b64: string, rmbgKey?: string): Promise<Buffer> {
@@ -858,6 +859,7 @@ export async function POST(req: NextRequest) {
           ? 'Overall look: natural casual lifestyle, soft natural daylight, authentic relatable everyday atmosphere.'
           : 'Overall look: premium commercial e-commerce photography, clean studio-grade lighting, crisp polished high-end result.'
         const QUALITY = 'Ultra-realistic, sharp focus, fine detail, true-to-life colours, natural soft shadows and reflections, high resolution. CRITICAL: preserve every brand logo, swoosh, printed text, stripe, zipper, hood, pocket and fabric texture EXACTLY as in the reference — never redraw, simplify, move or remove them. No added text, no watermark, no extra objects, do not alter the product in any way.'
+        const genStart = Date.now()
         for (let i = 0; i < usableUrls.length; i++) {
           try {
             const base = STYLES[displayStyle] || STYLES.catalog
@@ -868,8 +870,10 @@ export async function POST(req: NextRequest) {
             if (wishEn) prompt += ` Apply the following ONLY to the background, location, scene and lighting mood — it must NOT change the product's own colour, design, materials or details: ${wishEn}.`
             prompt += ' ' + QUALITY
             if (aspect === '16:9' || aspect === '4:3') prompt += ' Compose as a close upper-body / waist-up shot so the product and all its logos and text appear large, sharp and clearly legible — do not show the product small in a wide empty frame.'
-            const url = await runFlux(usableUrls[i], prompt.slice(0, 1900), REPLICATE, aspect)
+            let url = await runFlux(usableUrls[i], prompt.slice(0, 1900), REPLICATE, aspect)
+            if (!url && Date.now() - genStart < 180000) { console.warn(`flux: retry image ${i}`); url = await runFlux(usableUrls[i], prompt.slice(0, 1900), REPLICATE, aspect) }
             if (url) results.push(await saveUrl(supabase, url, user.id, 'studio'))
+            else console.error(`flux: no result for image ${i} after retries`)
           } catch (e) { console.error(e) }
         }
       } else {

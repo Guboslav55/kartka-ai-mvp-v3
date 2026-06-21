@@ -443,10 +443,17 @@ export default function StudioV2() {
   const [tx, setTx] = React.useState(0)
   const [vh, setVh] = React.useState(0)
   const [pShort, setPShort] = React.useState(''); const [pSeo, setPSeo] = React.useState('')
+  const [pNameRu, setPNameRu] = React.useState(''); const [pDescRu, setPDescRu] = React.useState('')
+  const [pKwUa, setPKwUa] = React.useState(''); const [pKwRu, setPKwRu] = React.useState('')
   const [pCat, setPCat] = React.useState(''); const [pSku, setPSku] = React.useState('')
   const [pAvail, setPAvail] = React.useState(true); const [pPrice, setPPrice] = React.useState('')
+  const [pUnit, setPUnit] = React.useState('шт.'); const [pStock, setPStock] = React.useState('')
+  const [pW, setPW] = React.useState(''); const [pH, setPH] = React.useState(''); const [pL, setPL] = React.useState(''); const [pWeight, setPWeight] = React.useState('')
+  const [pVis, setPVis] = React.useState('published')
   const [pDesc, setPDesc] = React.useState(''); const [pGen, setPGen] = React.useState(false)
+  const [pPromGen, setPPromGen] = React.useState(false); const [pRegen, setPRegen] = React.useState('')
   const [pSave, setPSave] = React.useState(false); const [pErr, setPErr] = React.useState('')
+  const pMainImg = results[0] || ''
   async function generateProduct() {
     if (!results.length) { setPErr('Немає фото'); return }
     setPGen(true); setPErr('')
@@ -455,28 +462,70 @@ export default function StudioV2() {
       const res = await fetch('/api/product-assist', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` }, body: JSON.stringify({ imageUrls: results }) })
       const d = await res.json()
       if (d.error) setPErr('Не вдалося: ' + d.error)
-      else { setPShort(d.shortName || ''); setPSeo(d.seoName || ''); setPCat(d.category || ''); setPDesc(d.description || ''); if (!pSku) setPSku('KAI-' + Date.now().toString(36).slice(-5).toUpperCase()) }
+      else { setPShort(d.shortName || ''); setPSeo(d.seoName || d.shortName || ''); setPCat(d.category || ''); setPDesc(d.description || ''); if (!pSku) setPSku('KAI-' + Date.now().toString(36).slice(-5).toUpperCase()) }
     } catch { setPErr('Помилка генерації') }
     setPGen(false)
   }
+  async function prepareProm() {
+    if (!pSeo && !productName) { setPErr('Спочатку «Згенерувати товар»'); return }
+    setPPromGen(true); setPErr('')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/seo', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` }, body: JSON.stringify({ title: pSeo || productName, description: pDesc, keywords: pKwUa ? pKwUa.split(',').map(x => x.trim()).filter(Boolean) : [], platform: 'prom' }) })
+      const d = await res.json()
+      if (d.error) { setPErr(d.needStars ? 'Недостатньо зорь (треба 2⭐)' : d.error); setPPromGen(false); return }
+      const blocks = d.blocks || []
+      const ua = blocks.find((b: any) => b.lang === 'uk') || blocks[0]
+      const ru = blocks.find((b: any) => b.lang === 'ru') || blocks[1]
+      if (ua) { setPSeo(ua.seoTitle || pSeo); setPDesc(ua.descriptionActive || ua.descriptionPremium || pDesc); setPKwUa((ua.searchKeywords || []).join(', ')) }
+      if (ru) { setPNameRu(ru.seoTitle || ''); setPDescRu(ru.descriptionActive || ru.descriptionPremium || ''); setPKwRu((ru.searchKeywords || []).join(', ')) }
+      if (d.categoryPath && !pCat) setPCat(d.categoryPath)
+      if (typeof d.newBalance === 'number') setStarsBalance(d.newBalance)
+    } catch { setPErr('Помилка підготовки для Prom') }
+    setPPromGen(false)
+  }
+  async function regenField(field: string, lang: string) {
+    setPRegen(field + ':' + lang); setPErr('')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/product-field', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` }, body: JSON.stringify({ field, lang, name: pSeo || productName, category: pCat, description: pDesc }) })
+      const d = await res.json()
+      if (d.error) setPErr(d.error)
+      else {
+        const t = d.text || ''
+        if (field === 'name') lang === 'uk' ? setPSeo(t) : setPNameRu(t)
+        else if (field === 'description') lang === 'uk' ? setPDesc(t) : setPDescRu(t)
+        else if (field === 'keywords') lang === 'uk' ? setPKwUa(t) : setPKwRu(t)
+      }
+    } catch { setPErr('Помилка перегенерації') }
+    setPRegen('')
+  }
+  function copyText(t: string) { try { navigator.clipboard.writeText(t || '') } catch {} }
   async function saveProduct() {
     if (!results.length) { setPErr('Немає фото'); return }
-    if (!pShort.trim()) { setPErr('Потрібна назва — натисни «Згенерувати товар»'); return }
+    if (!pSeo.trim()) { setPErr('Потрібна назва UA — натисни «Згенерувати товар»'); return }
     if (!pPrice || isNaN(parseFloat(pPrice))) { setPErr('Встав ціну'); return }
     setPSave(true); setPErr('')
     const { data: { session } } = await supabase.auth.getSession()
     const uid = session?.user?.id
     if (!uid) { setPErr('Сесія закінчилась'); setPSave(false); return }
     const { error: e } = await supabase.from('products').insert({
-      user_id: uid, name: pShort.trim(), seo_name: pSeo.trim(), description: pDesc.trim(),
-      price: parseFloat(pPrice), currency: 'UAH', category: pCat.trim(), available: pAvail, sku: pSku.trim(), image_urls: results,
+      user_id: uid,
+      name: (pShort || pSeo).trim(), seo_name: pSeo.trim(), name_ru: pNameRu.trim() || null,
+      description: pDesc.trim(), description_ru: pDescRu.trim() || null,
+      keywords_ua: pKwUa ? pKwUa.split(',').map(x => x.trim()).filter(Boolean) : null,
+      keywords_ru: pKwRu ? pKwRu.split(',').map(x => x.trim()).filter(Boolean) : null,
+      price: parseFloat(pPrice), currency: 'UAH', unit: pUnit || 'шт.', stock: pStock ? parseInt(pStock) : null,
+      category: pCat.trim(), available: pAvail, sku: pSku.trim(),
+      width_cm: pW ? parseFloat(pW) : null, height_cm: pH ? parseFloat(pH) : null, length_cm: pL ? parseFloat(pL) : null, weight_kg: pWeight ? parseFloat(pWeight) : null,
+      visibility: pVis, image_urls: results,
     })
     setPSave(false)
     if (e) { setPErr('Помилка збереження: ' + e.message); return }
     window.location.href = '/products'
   }
   function openProductStep() {
-    setPShort(v => v || productName)
+    setPSeo(v => v || productName)
     setPCat(v => v || category)
     setStep(4)
   }
@@ -598,6 +647,53 @@ export default function StudioV2() {
         #s2 .pf-field input:focus,#s2 .pf-field textarea:focus{border-color:rgba(232,178,74,.5)}
         #s2 .pf-avail{width:100%;border-radius:11px;padding:11px;font-size:13.5px;font-weight:600;font-family:inherit;cursor:pointer;border:1px solid var(--line);background:var(--glass);color:var(--mut)}
         #s2 .pf-avail.on{background:rgba(34,197,94,.18);border-color:rgba(34,197,94,.4);color:#4ade80}
+        #s2 .pf2-tag{font-size:11px;font-weight:700;color:#1a1206;background:linear-gradient(95deg,var(--gold),var(--gold2));padding:3px 9px;border-radius:999px;margin-left:8px;vertical-align:middle}
+        #s2 .pf2-gens{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0 22px}
+        @media(max-width:560px){#s2 .pf2-gens{grid-template-columns:1fr}}
+        #s2 .pf2-prom{height:52px;border-radius:14px;border:1px solid rgba(139,127,232,.45);background:rgba(139,127,232,.12);color:#c3baff;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+        #s2 .pf2-prom:disabled{opacity:.5;cursor:not-allowed}
+        #s2 .pf2-prom .c{background:rgba(139,127,232,.25);border-radius:7px;padding:2px 8px;font-size:12px}
+        #s2 .pf2-main{display:grid;grid-template-columns:248px 1fr;gap:22px}
+        @media(max-width:680px){#s2 .pf2-main{grid-template-columns:1fr}}
+        #s2 .pf2-pvl{font-size:10.5px;color:var(--dim);text-transform:uppercase;font-weight:700;letter-spacing:.04em;margin-bottom:9px}
+        #s2 .mk{position:sticky;top:16px;border:1px solid var(--line2);border-radius:16px;overflow:hidden;background:#fff;color:#1a1a1a}
+        #s2 .mk-img{aspect-ratio:1;background:#f1f1f1}
+        #s2 .mk-img img{width:100%;height:100%;object-fit:cover;display:block}
+        #s2 .mk-b{padding:11px 12px 13px}
+        #s2 .mk-name{font-size:13px;font-weight:600;line-height:1.3;color:#222;min-height:34px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+        #s2 .mk-price{font-size:20px;font-weight:800;color:#111;margin-top:5px}
+        #s2 .mk-av{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#159a3a;margin-top:5px}
+        #s2 .mk-av.off{color:#b0b0b0}
+        #s2 .mk-av .d{width:7px;height:7px;border-radius:50%;background:currentColor}
+        #s2 .mk-buy{margin-top:10px;text-align:center;height:36px;line-height:36px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:700;font-size:13px}
+        #s2 .pf2-gal{display:flex;gap:6px;margin-top:9px}
+        #s2 .pf2-gal img{width:40px;height:50px;object-fit:cover;border-radius:7px;border:1px solid var(--line2);opacity:.6}
+        #s2 .pf2-gal img.on{opacity:1;border-color:var(--gold)}
+        #s2 .pf2-sect{font-size:11px;font-weight:700;color:var(--gold2);text-transform:uppercase;letter-spacing:.04em;margin:6px 0 12px;display:flex;align-items:center;gap:8px}
+        #s2 .pf2-sect::after{content:'';flex:1;height:1px;background:var(--line)}
+        #s2 .pf2-f{margin-bottom:14px}
+        #s2 .pf2-f label{display:flex;justify-content:space-between;align-items:center;font-size:10.5px;color:var(--mut);text-transform:uppercase;font-weight:700;letter-spacing:.02em;margin-bottom:6px;gap:8px}
+        #s2 .pf2-f label .fl{font-size:9px;padding:1px 5px;border-radius:4px;margin-left:4px}
+        #s2 .pf2-f label .fl.ua{background:rgba(255,215,0,.16);color:#ffd95e}
+        #s2 .pf2-f label .fl.ru{background:rgba(120,160,255,.16);color:#9db8ff}
+        #s2 .pf2-f label .cnt{font-weight:600;color:var(--dim);text-transform:none;letter-spacing:0}
+        #s2 .pf2-f label .cnt.over{color:#E8A23A}
+        #s2 .pf2-f label .acts{display:flex;gap:6px}
+        #s2 .pf2-f label .acts button{border:1px solid var(--line2);background:var(--glass);color:var(--mut);border-radius:7px;width:28px;height:24px;cursor:pointer;font-size:12px;font-family:inherit;display:grid;place-items:center}
+        #s2 .pf2-f label .acts button:hover{color:var(--gold2);border-color:rgba(232,178,74,.4)}
+        #s2 .pf2-f label .acts button:disabled{opacity:.5;cursor:not-allowed}
+        #s2 .pf2-inp,#s2 .pf2-ta{width:100%;background:var(--glass);border:1px solid var(--line);border-radius:11px;padding:10px 12px;color:#F4F3F8;font-size:13.5px;font-family:inherit;outline:none}
+        #s2 .pf2-ta{resize:vertical;min-height:80px;line-height:1.5}
+        #s2 .pf2-ta.sm{min-height:48px}
+        #s2 .pf2-inp:focus,#s2 .pf2-ta:focus{border-color:rgba(232,178,74,.5)}
+        #s2 .pf2-row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+        #s2 .pf2-row3{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:10px}
+        #s2 .pf2-row4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:9px}
+        #s2 .pf2-avail{height:40px;border-radius:11px;border:1px solid var(--line);background:var(--glass);color:var(--mut);font-weight:600;font-size:13px;font-family:inherit;cursor:pointer;width:100%}
+        #s2 .pf2-avail.on{background:rgba(52,199,89,.16);border-color:rgba(52,199,89,.4);color:#4ade80}
+        #s2 .pf2-vis{display:flex;gap:8px}
+        #s2 .pf2-vis button{flex:1;height:40px;border-radius:10px;border:1px solid var(--line);background:var(--glass);color:var(--mut);font-weight:600;font-size:12.5px;font-family:inherit;cursor:pointer}
+        #s2 .pf2-vis button.on{border-color:rgba(232,178,74,.5);background:rgba(232,178,74,.1);color:var(--gold2)}
       `}</style>
 
       <div className="aurora"><span></span><span></span><span></span></div>
@@ -746,20 +842,80 @@ export default function StudioV2() {
             </section>
             <section className={`slide ${step===4?'active':''}`} ref={slide4Ref}>
               <div className="card">
-                <div className="h">Зберегти як товар</div>
-                <div className="sub">Одна кнопка зробить назву, опис і категорію. Ти ставиш ціну.</div>
-                <div className="pf-thumbs">{results.map((u, i) => <img key={i} src={u} alt="" className="pf-th" />)}</div>
-                <button className="next" disabled={pGen} onClick={generateProduct} style={{marginTop:16, width:'100%'}}>{pGen ? 'Генерую назву, опис, категорію…' : '✦ Згенерувати товар'}</button>
-                <div className="pf-grid">
-                  <div className="pf-field" style={{gridColumn:'1 / -1'}}><label>Коротка назва (для картки)</label><input value={pShort} onChange={e => setPShort(e.target.value)} placeholder="Куртка тактична олива" /></div>
-                  <div className="pf-field" style={{gridColumn:'1 / -1'}}><label>SEO-назва (Prom/Rozetka)</label><input value={pSeo} onChange={e => setPSeo(e.target.value)} placeholder="Куртка тактична чоловіча олива з капюшоном" /></div>
-                  <div className="pf-field"><label>Категорія</label><input value={pCat} onChange={e => setPCat(e.target.value)} placeholder="Одяг та взуття > Куртки" /></div>
-                  <div className="pf-field"><label>Артикул</label><input value={pSku} onChange={e => setPSku(e.target.value)} placeholder="KAI-7F3Q2" /></div>
-                  <div className="pf-field"><label>Ціна, грн *</label><input value={pPrice} onChange={e => setPPrice(e.target.value)} inputMode="decimal" placeholder="2500" /></div>
-                  <div className="pf-field"><label>Наявність</label><button className={`pf-avail ${pAvail ? 'on' : ''}`} onClick={() => setPAvail(!pAvail)}>{pAvail ? '✓ В наявності' : 'Немає'}</button></div>
-                  <div className="pf-field" style={{gridColumn:'1 / -1'}}><label>Опис</label><textarea value={pDesc} onChange={e => setPDesc(e.target.value)} rows={5} placeholder="Зʼявиться після «Згенерувати товар» — або напиши свій" /></div>
+                <div className="h">Зберегти як товар <span className="pf2-tag">★ Prom.ua</span></div>
+                <div className="sub">Дві кнопки заповнять усе для Prom — двомовні назву й опис та пошукові запити. Кожен текст можна перегенерувати (↻) або вписати вручну.</div>
+                <div className="pf2-gens">
+                  <button className="next" disabled={pGen} onClick={generateProduct}>{pGen ? 'Генерую…' : '✦ Згенерувати товар'}</button>
+                  <button className="pf2-prom" disabled={pPromGen} onClick={prepareProm}>{pPromGen ? 'Готую UA+RU…' : '★ Підготувати для Prom'} <span className="c">⭐2</span></button>
                 </div>
-                {pErr && <div className="errbox" style={{marginTop:14,marginBottom:0}}>{pErr}</div>}
+                <div className="pf2-main">
+                  <div className="pf2-side">
+                    <div className="pf2-pvl">Як побачить покупець</div>
+                    <div className="mk">
+                      <div className="mk-img">{pMainImg ? <img src={pMainImg} alt="" /> : null}</div>
+                      <div className="mk-b">
+                        <div className="mk-name">{pSeo || 'Назва товару зʼявиться тут'}</div>
+                        <div className="mk-price">{pPrice ? Number(pPrice).toLocaleString('uk-UA') + ' ₴' : '— ₴'}</div>
+                        <div className={`mk-av ${pAvail ? '' : 'off'}`}><span className="d" />{pAvail ? 'В наявності' : 'Немає в наявності'}</div>
+                        <div className="mk-buy">Купити</div>
+                      </div>
+                    </div>
+                    {results.length > 1 && <div className="pf2-gal">{results.map((u, i) => <img key={i} src={u} alt="" className={i === 0 ? 'on' : ''} />)}</div>}
+                  </div>
+                  <div className="pf2-fields">
+                    <div className="pf2-sect">Основне</div>
+                    <div className="pf2-f"><label><span>Код / Артикул</span></label><input className="pf2-inp" value={pSku} onChange={e => setPSku(e.target.value)} placeholder="KAI-…" /></div>
+                    <div className="pf2-f">
+                      <label><span>Назва позиції <i className="fl ua">UA</i> <i className={`cnt ${pSeo.length > 80 ? 'over' : ''}`}>{pSeo.length}/80</i></span><span className="acts"><button onClick={() => regenField('name', 'uk')} disabled={pRegen === 'name:uk'}>{pRegen === 'name:uk' ? '…' : '↻'}</button><button onClick={() => copyText(pSeo)}>⧉</button></span></label>
+                      <input className="pf2-inp" value={pSeo} onChange={e => setPSeo(e.target.value)} placeholder="Куртка тактична чоловіча олива з капюшоном" />
+                    </div>
+                    <div className="pf2-f">
+                      <label><span>Назва позиції <i className="fl ru">RU</i> <i className={`cnt ${pNameRu.length > 80 ? 'over' : ''}`}>{pNameRu.length}/80</i></span><span className="acts"><button onClick={() => regenField('name', 'ru')} disabled={pRegen === 'name:ru'}>{pRegen === 'name:ru' ? '…' : '↻'}</button><button onClick={() => copyText(pNameRu)}>⧉</button></span></label>
+                      <input className="pf2-inp" value={pNameRu} onChange={e => setPNameRu(e.target.value)} placeholder="Куртка тактическая мужская олива с капюшоном" />
+                    </div>
+                    <div className="pf2-f">
+                      <label><span>Опис <i className="fl ua">UA</i></span><span className="acts"><button onClick={() => regenField('description', 'uk')} disabled={pRegen === 'description:uk'}>{pRegen === 'description:uk' ? '…' : '↻'}</button><button onClick={() => copyText(pDesc)}>⧉</button></span></label>
+                      <textarea className="pf2-ta" value={pDesc} onChange={e => setPDesc(e.target.value)} rows={4} placeholder="Зʼявиться після «Згенерувати товар»" />
+                    </div>
+                    <div className="pf2-f">
+                      <label><span>Опис <i className="fl ru">RU</i></span><span className="acts"><button onClick={() => regenField('description', 'ru')} disabled={pRegen === 'description:ru'}>{pRegen === 'description:ru' ? '…' : '↻'}</button><button onClick={() => copyText(pDescRu)}>⧉</button></span></label>
+                      <textarea className="pf2-ta" value={pDescRu} onChange={e => setPDescRu(e.target.value)} rows={4} placeholder="Зʼявиться після «Підготувати для Prom»" />
+                    </div>
+                    <div className="pf2-sect">Пошукові запити</div>
+                    <div className="pf2-f">
+                      <label><span>Ключові слова <i className="fl ua">UA</i></span><span className="acts"><button onClick={() => regenField('keywords', 'uk')} disabled={pRegen === 'keywords:uk'}>{pRegen === 'keywords:uk' ? '…' : '↻'}</button><button onClick={() => copyText(pKwUa)}>⧉</button></span></label>
+                      <textarea className="pf2-ta sm" value={pKwUa} onChange={e => setPKwUa(e.target.value)} rows={2} placeholder="через кому: куртка nike, чоловіча куртка…" />
+                    </div>
+                    <div className="pf2-f">
+                      <label><span>Ключові слова <i className="fl ru">RU</i></span><span className="acts"><button onClick={() => regenField('keywords', 'ru')} disabled={pRegen === 'keywords:ru'}>{pRegen === 'keywords:ru' ? '…' : '↻'}</button><button onClick={() => copyText(pKwRu)}>⧉</button></span></label>
+                      <textarea className="pf2-ta sm" value={pKwRu} onChange={e => setPKwRu(e.target.value)} rows={2} placeholder="через запятую: куртка найк, мужская куртка…" />
+                    </div>
+                    <div className="pf2-sect">Ціна та наявність</div>
+                    <div className="pf2-row3">
+                      <div className="pf2-f"><label><span>Ціна, ₴ *</span></label><input className="pf2-inp" value={pPrice} onChange={e => setPPrice(e.target.value)} inputMode="decimal" placeholder="2500" /></div>
+                      <div className="pf2-f"><label><span>Одиниця</span></label><input className="pf2-inp" value={pUnit} onChange={e => setPUnit(e.target.value)} placeholder="шт." /></div>
+                      <div className="pf2-f"><label><span>Залишок</span></label><input className="pf2-inp" value={pStock} onChange={e => setPStock(e.target.value)} inputMode="numeric" placeholder="10" /></div>
+                    </div>
+                    <div className="pf2-row2">
+                      <div className="pf2-f"><label><span>Категорія Prom</span></label><input className="pf2-inp" value={pCat} onChange={e => setPCat(e.target.value)} placeholder="Одяг та взуття > Куртки" /></div>
+                      <div className="pf2-f"><label><span>Наявність</span></label><button className={`pf2-avail ${pAvail ? 'on' : ''}`} onClick={() => setPAvail(!pAvail)}>{pAvail ? '✓ В наявності' : 'Немає'}</button></div>
+                    </div>
+                    <div className="pf2-sect">Габарити для доставки</div>
+                    <div className="pf2-row4">
+                      <div className="pf2-f"><label><span>Ширина, см</span></label><input className="pf2-inp" value={pW} onChange={e => setPW(e.target.value)} inputMode="decimal" placeholder="30" /></div>
+                      <div className="pf2-f"><label><span>Висота, см</span></label><input className="pf2-inp" value={pH} onChange={e => setPH(e.target.value)} inputMode="decimal" placeholder="5" /></div>
+                      <div className="pf2-f"><label><span>Довжина, см</span></label><input className="pf2-inp" value={pL} onChange={e => setPL(e.target.value)} inputMode="decimal" placeholder="40" /></div>
+                      <div className="pf2-f"><label><span>Вага, кг</span></label><input className="pf2-inp" value={pWeight} onChange={e => setPWeight(e.target.value)} inputMode="decimal" placeholder="0.8" /></div>
+                    </div>
+                    <div className="pf2-sect">Видимість</div>
+                    <div className="pf2-vis">
+                      {[['published', 'Опубліковано'], ['draft', 'Чернетка'], ['hidden', 'Прихований']].map(([v, l]) => (
+                        <button key={v} className={pVis === v ? 'on' : ''} onClick={() => setPVis(v)}>{l}</button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                {pErr && <div className="errbox" style={{marginTop:16,marginBottom:0}}>{pErr}</div>}
                 <div className="nav">
                   <button className="back" onClick={() => setStep(3)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M19 12H5M11 6l-6 6 6 6"/></svg> Назад</button>
                   <button className="save" disabled={pSave} onClick={saveProduct}>{pSave ? 'Зберігаю…' : '✓ Зберегти товар'}</button>

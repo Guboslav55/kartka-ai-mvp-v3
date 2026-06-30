@@ -125,11 +125,32 @@ export default function DashboardPage() {
           Що продаємо <span className="text-gradient">сьогодні?</span>
         </h1>
         <p className="text-white/50 text-sm mb-6">Завантаж фото товару — решту зробить ШІ</p>
-        <Link href="/products/create" className="btn-shine lift block rounded-3xl p-8 border border-gold/30 bg-gradient-to-br from-gold/15 via-coral/8 to-violet/12">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-gold to-coral flex items-center justify-center text-3xl shadow-[0_10px_34px_rgba(255,107,91,0.4)]">✨</div>
-            <div className="font-display font-black text-lg">Створити товар</div>
-            <div className="text-white/50 text-sm">фото → картка, опис і ціна за крок</div>
+        <style>{`
+          @keyframes s2move{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+          @keyframes s2shine{0%,58%{transform:translateX(-160%) skewX(-18deg)}100%{transform:translateX(280%) skewX(-18deg)}}
+          @keyframes s2float{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+          @keyframes s2arrow{0%,100%{transform:translateX(0)}50%{transform:translateX(5px)}}
+          @keyframes s2glow{0%,100%{opacity:.55}50%{opacity:1}}
+          .s2cta{position:relative;overflow:hidden;transition:transform .25s ease, box-shadow .25s ease}
+          .s2cta:hover{transform:translateY(-3px)}
+          .s2cta-bg{position:absolute;inset:0;background:linear-gradient(120deg,rgba(232,178,74,.28),rgba(232,122,107,.18),rgba(139,127,232,.26),rgba(232,178,74,.28));background-size:300% 300%;animation:s2move 8s ease infinite}
+          .s2cta-glow{position:absolute;inset:-1px;border-radius:1.5rem;box-shadow:0 0 44px -8px rgba(232,178,74,.6);animation:s2glow 3.2s ease-in-out infinite;pointer-events:none}
+          .s2cta-shine{position:absolute;top:0;left:0;width:55%;height:100%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.4),transparent);animation:s2shine 4.6s ease-in-out infinite;pointer-events:none}
+          .s2cta-orb{animation:s2float 3.6s ease-in-out infinite}
+          .s2cta-arrow{display:inline-block;animation:s2arrow 1.3s ease-in-out infinite}
+        `}</style>
+        <Link href="/studio-2" className="s2cta lift block rounded-3xl p-8 border border-gold/40">
+          <span className="s2cta-bg" />
+          <span className="s2cta-glow" />
+          <span className="s2cta-shine" />
+          <div className="relative flex flex-col items-center gap-3">
+            <span className="absolute -top-5 right-0 text-[10px] font-black tracking-widest bg-gold text-black px-2.5 py-0.5 rounded-full shadow-[0_4px_14px_rgba(232,178,74,0.6)]">NEW</span>
+            <div className="s2cta-orb w-16 h-16 rounded-2xl bg-gradient-to-br from-gold via-coral to-violet flex items-center justify-center text-3xl shadow-[0_10px_34px_rgba(255,107,91,0.45)]">✨</div>
+            <div className="font-display font-black text-xl">Студія 2.0</div>
+            <div className="text-white/60 text-sm">фото → готова картка для Prom за один крок</div>
+            <div className="mt-2 inline-flex items-center gap-2 bg-gradient-to-r from-gold to-gold-light text-black font-black text-sm px-6 py-2.5 rounded-xl">
+              Почати <span className="s2cta-arrow">→</span>
+            </div>
           </div>
         </Link>
       </div>

@@ -704,10 +704,10 @@ async function runFlux(imageUrl: string, prompt: string, token: string, aspectRa
 
 async function runFaceSwap(targetUrl: string, faceUrl: string, token: string): Promise<string | null> {
   try {
-    const pred = await fetch('https://api.replicate.com/v1/models/cdingram/face-swap/predictions', {
+    const pred = await fetch('https://api.replicate.com/v1/predictions', {
       method: 'POST',
       headers: { Authorization: `Token ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ input: { input_image: targetUrl, swap_image: faceUrl } })
+      body: JSON.stringify({ version: 'd1d6ea8c8be89d664a07a457526f7128109dee7030fdac424788d762c71ed111', input: { input_image: targetUrl, swap_image: faceUrl } })
     })
     if (!pred.ok) { console.error('faceswap: predict not ok', pred.status, (await pred.text().catch(() => '')).slice(0, 200)); return null }
     const { id } = await pred.json()
@@ -884,7 +884,11 @@ export async function POST(req: NextRequest) {
         const genStart = Date.now()
         let faceUrl: string | null = null
         if (faceImage && displayStyle === 'model' && !modelKeep && REPLICATE) {
-          try { faceUrl = await uploadPhoto(supabase, faceImage, user.id, 'faces') } catch (e) { console.error('face upload failed', e) }
+          console.log('face: preparing swap, img len=' + String(faceImage).length)
+          try { faceUrl = await uploadPhoto(supabase, faceImage, user.id, 'faces'); console.log('face: upload result=' + (faceUrl || 'NULL')) }
+          catch (e: any) { console.error('face upload threw', e?.message) }
+        } else if (faceImage) {
+          console.log('face: present but skipped', JSON.stringify({ displayStyle, modelKeep, hasRepl: !!REPLICATE }))
         }
         for (let i = 0; i < usableUrls.length; i++) {
           try {

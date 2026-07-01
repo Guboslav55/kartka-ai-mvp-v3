@@ -248,6 +248,25 @@ export default function StudioV2() {
   const [mGender, setMGender] = useState('any')
   const [mBody, setMBody] = useState('')
   const [mAge, setMAge] = useState('')
+  const [mFaceOn, setMFaceOn] = useState(false)
+  const [mFace, setMFace] = useState('')
+  const [mConsent, setMConsent] = useState(false)
+  function onFaceFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; if (!file) return
+    const rd = new FileReader()
+    rd.onload = () => {
+      const img = new Image()
+      img.onload = () => {
+        const max = 640; let w = img.width, h = img.height
+        if (w > max || h > max) { const sc = max / Math.max(w, h); w = Math.round(w * sc); h = Math.round(h * sc) }
+        const c = document.createElement('canvas'); c.width = w; c.height = h
+        c.getContext('2d')!.drawImage(img, 0, 0, w, h)
+        setMFace(c.toDataURL('image/jpeg', 0.9))
+      }
+      img.src = rd.result as string
+    }
+    rd.readAsDataURL(file)
+  }
   const [checking, setChecking] = useState(false)
   const [results, setResults] = useState<string[]>([])
   const [error, setError] = useState('')
@@ -402,6 +421,7 @@ export default function StudioV2() {
           wishes, photoStyle, cardStyle, bullets: bullets.filter(Boolean),
           format, count,
           modelKeep: displayStyle === 'model' && hasModel && !mNew, modelGender: mGender, modelBody: mBody, modelAge: mAge,
+          faceImage: (displayStyle === 'model' && (mNew || !hasModel) && mFaceOn && mConsent && mFace) ? mFace : null,
         }),
       })
       const d = await res.json()
@@ -709,6 +729,12 @@ export default function StudioV2() {
         #s2 .mseg button small{display:block;color:var(--dim);font-weight:500;font-size:10.5px;margin-top:2px;line-height:1.3}
         #s2 .mseg button.on{border-color:rgba(232,178,74,.5);background:rgba(232,178,74,.1);color:var(--gold2)}
         #s2 .mrev{animation:s2rev .42s cubic-bezier(.2,.7,.3,1)}
+        #s2 .mfacedrop{display:flex;align-items:center;justify-content:center;gap:10px;border:1.5px dashed var(--line2);border-radius:12px;padding:14px;background:var(--glass);cursor:pointer;min-height:72px}
+        #s2 .mfacedrop:hover{border-color:rgba(232,178,74,.5)}
+        #s2 .mfacehint{text-align:center}#s2 .mfacehint b{display:block;font-size:12.5px;color:#F4F3F8}#s2 .mfacehint small{font-size:11px;color:var(--dim)}
+        #s2 .mfaceprev{width:66px;height:66px;border-radius:50%;object-fit:cover;border:2px solid var(--gold)}
+        #s2 .mconsent{display:flex;gap:8px;align-items:flex-start;font-size:11.5px;color:var(--mut);margin-top:10px;cursor:pointer;line-height:1.4}
+        #s2 .mconsent input{margin-top:2px;flex-shrink:0}
       `}</style>
 
       <div className="aurora"><span></span><span></span><span></span></div>
@@ -805,7 +831,7 @@ export default function StudioV2() {
 
                 {displayStyle === 'model' && (
                   <div className="mpanel">
-                    {hasModel && <div className="mdetect">🧍 На фото є модель — можна змінити лише фон, зберігши людину</div>}
+                    {hasModel && !mNew && <div className="mdetect">🧍 На фото є модель — можна змінити лише фон, зберігши людину</div>}
                     {hasModel && (
                       <div className="mseg">
                         <button className={!mNew ? 'on' : ''} onClick={() => setMNew(false)}>Залишити модель з фото<small>змінюється тільки фон · точніше</small></button>
@@ -832,6 +858,19 @@ export default function StudioV2() {
                             <button key={v} className={`chip ${mAge === v ? 'on' : ''}`} onClick={() => setMAge(mAge === v ? '' : v)}>{l}</button>
                           ))}
                         </div>
+                        <div className="lbl2">Обличчя моделі</div>
+                        <div className="chips">
+                          <button className={`chip ${mFaceOn ? 'on' : ''}`} onClick={() => setMFaceOn(!mFaceOn)}>{mFaceOn ? '✓ ' : ''}Своя модель — замінити обличчя</button>
+                        </div>
+                        {mFaceOn && (
+                          <div className="mrev" style={{marginTop:10}}>
+                            <label className="mfacedrop">
+                              <input type="file" accept="image/*" style={{display:'none'}} onChange={onFaceFile} />
+                              {mFace ? <img src={mFace} className="mfaceprev" alt="" /> : <span className="mfacehint"><b>Завантажте фото обличчя</b><small>фронтальне, добре освітлене</small></span>}
+                            </label>
+                            <label className="mconsent"><input type="checkbox" checked={mConsent} onChange={e => setMConsent(e.target.checked)} /> Це обличчя я маю право використовувати (моє або зі згоди людини)</label>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

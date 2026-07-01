@@ -702,6 +702,27 @@ async function runFlux(imageUrl: string, prompt: string, token: string, aspectRa
   } catch (e: any) { console.error('flux: threw', e?.message); return null }
 }
 
+async function runFaceSwap(targetUrl: string, faceUrl: string, token: string): Promise<string | null> {
+  try {
+    const pred = await fetch('https://api.replicate.com/v1/models/cdingram/face-swap/predictions', {
+      method: 'POST',
+      headers: { Authorization: `Token ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: { input_image: targetUrl, swap_image: faceUrl } })
+    })
+    if (!pred.ok) { console.error('faceswap: predict not ok', pred.status, (await pred.text().catch(() => '')).slice(0, 200)); return null }
+    const { id } = await pred.json()
+    for (let i = 0; i < 25; i++) {
+      await new Promise(r => setTimeout(r, 3000))
+      const r = await fetch(`https://api.replicate.com/v1/predictions/${id}`, { headers: { Authorization: `Token ${token}` } })
+      const d = await r.json()
+      if (d.status === 'succeeded') return Array.isArray(d.output) ? d.output[0] : d.output
+      if (d.status === 'failed' || d.status === 'canceled') { console.error('faceswap:', d.status, String(d.error || '').slice(0, 200)); return null }
+    }
+    console.error('faceswap: timeout')
+    return null
+  } catch (e: any) { console.error('faceswap: threw', e?.message); return null }
+}
+
 async function makeCatalog(b64: string, rmbgKey?: string): Promise<Buffer> {
   const sharp = (await import('sharp')).default
   const m = b64.match(/^data:(image\/[\w+]+);base64,(.+)$/s)
@@ -753,7 +774,7 @@ export async function POST(req: NextRequest) {
       cardPreset = 'urban', cardLayout = 'split', creativity = 0.5,
       productPhoto, productPhotos, productPhotoUrl,
       productName = '', category = '', wishes = '', count = 1, bullets = [], format = '2:3', photoStyle = 'commercial',
-      modelKeep = false, modelGender = 'any', modelBody = '', modelAge = ''
+      modelKeep = false, modelGender = 'any', modelBody = '', modelAge = '', faceImage = null
     } = await req.json()
 
     if (!productName.trim()) return NextResponse.json({ error: 'Введіть назву товару' }, { status: 400 })
@@ -861,6 +882,10 @@ export async function POST(req: NextRequest) {
           : 'Overall look: premium commercial e-commerce photography, clean studio-grade lighting, crisp polished high-end result.'
         const QUALITY = 'Ultra-realistic, sharp focus, fine detail, true-to-life colours, natural soft shadows and reflections, high resolution. Preserve all logos, prints, stripes and fabric texture exactly as in the reference. No added text, no watermark, no extra objects; do not alter the product in any way.'
         const genStart = Date.now()
+        let faceUrl: string | null = null
+        if (faceImage && displayStyle === 'model' && !modelKeep && REPLICATE) {
+          try { faceUrl = await uploadPhoto(supabase, faceImage, user.id, 'faces') } catch (e) { console.error('face upload failed', e) }
+        }
         for (let i = 0; i < usableUrls.length; i++) {
           try {
             let base = STYLES[displayStyle] || STYLES.catalog
@@ -884,6 +909,7 @@ export async function POST(req: NextRequest) {
             if (aspect === '16:9' || aspect === '4:3') prompt += ' Compose as a close upper-body / waist-up shot so the product and all its logos and text appear large, sharp and clearly legible — do not show the product small in a wide empty frame.'
             let url = await runFlux(usableUrls[i], prompt.slice(0, 1900), REPLICATE, aspect)
             if (!url && Date.now() - genStart < 180000) { console.warn(`flux: retry image ${i}`); url = await runFlux(usableUrls[i], prompt.slice(0, 1900), REPLICATE, aspect) }
+            if (url && faceUrl) { const swapped = await runFaceSwap(url, faceUrl, REPLICATE); if (swapped) url = swapped; else console.warn(`faceswap: kept original for image ${i}`) }
             if (url) results.push(await saveUrl(supabase, url, user.id, 'studio'))
             else console.error(`flux: no result for image ${i} after retries`)
           } catch (e) { console.error(e) }

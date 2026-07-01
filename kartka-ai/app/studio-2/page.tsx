@@ -243,6 +243,11 @@ export default function StudioV2() {
   const [analyzing, setAnalyzing] = useState(false)
   const [irrelevant, setIrrelevant] = useState<string[]>([])
   const [notForModel, setNotForModel] = useState<string[]>([])
+  const [hasModel, setHasModel] = useState(false)
+  const [mNew, setMNew] = useState(false)
+  const [mGender, setMGender] = useState('any')
+  const [mBody, setMBody] = useState('')
+  const [mAge, setMAge] = useState('')
   const [checking, setChecking] = useState(false)
   const [results, setResults] = useState<string[]>([])
   const [error, setError] = useState('')
@@ -292,7 +297,7 @@ export default function StudioV2() {
 
   // Коли є 2+ фото — перевіряємо, чи всі вони про той самий товар (з debounce)
   React.useEffect(() => {
-    if (photos.length < 2 || !token) { setIrrelevant([]); setNotForModel([]); return }
+    if (photos.length < 2 || !token) { setIrrelevant([]); setNotForModel([]); setHasModel(false); return }
     const t = setTimeout(() => {
       supabase.auth.getSession().then(({ data: { session } }) => {
         if (session?.access_token) checkPhotos(photos, session.access_token, productName)
@@ -327,7 +332,7 @@ export default function StudioV2() {
 
   // Перевіряє всі фото і помічає ті, що не відносяться до товару
   async function checkPhotos(pics: string[], tok: string, name: string) {
-    if (!Array.isArray(pics) || pics.length < 2 || !tok) { setIrrelevant([]); setNotForModel([]); return }
+    if (!Array.isArray(pics) || pics.length < 2 || !tok) { setIrrelevant([]); setNotForModel([]); setHasModel(false); return }
     setChecking(true)
     try {
       const res = await fetch('/api/check-product-photos', {
@@ -341,6 +346,7 @@ export default function StudioV2() {
         const nfm: number[] = Array.isArray(d.notForModel) ? d.notForModel : []
         setIrrelevant(bad.map(i => pics[i]).filter(Boolean))
         setNotForModel(nfm.map(i => pics[i]).filter(Boolean))
+        setHasModel(!!d.hasModel)
       }
     } catch (e) { console.warn('checkPhotos error:', e) }
     setChecking(false)
@@ -395,6 +401,7 @@ export default function StudioV2() {
           mode, productPhoto: sendPhotos[0], productPhotos: sendPhotos, productName, category, displayStyle, cardPreset, cardLayout, creativity,
           wishes, photoStyle, cardStyle, bullets: bullets.filter(Boolean),
           format, count,
+          modelKeep: displayStyle === 'model' && hasModel && !mNew, modelGender: mGender, modelBody: mBody, modelAge: mAge,
         }),
       })
       const d = await res.json()
@@ -694,6 +701,14 @@ export default function StudioV2() {
         #s2 .pf2-vis{display:flex;gap:8px}
         #s2 .pf2-vis button{flex:1;height:40px;border-radius:10px;border:1px solid var(--line);background:var(--glass);color:var(--mut);font-weight:600;font-size:12.5px;font-family:inherit;cursor:pointer}
         #s2 .pf2-vis button.on{border-color:rgba(232,178,74,.5);background:rgba(232,178,74,.1);color:var(--gold2)}
+        @keyframes s2rev{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+        #s2 .mpanel{margin-top:18px;border:1px solid var(--line2);border-radius:16px;padding:16px;background:rgba(255,255,255,.02)}
+        #s2 .mdetect{background:rgba(91,214,232,.1);border:1px solid rgba(91,214,232,.3);color:#8fe6f2;border-radius:11px;padding:10px 12px;font-size:12.5px;margin-bottom:13px}
+        #s2 .mseg{display:flex;gap:8px}
+        #s2 .mseg button{flex:1;border:1px solid var(--line);background:var(--glass);color:var(--mut);border-radius:12px;padding:11px;font-size:12.5px;font-weight:600;font-family:inherit;cursor:pointer;text-align:left}
+        #s2 .mseg button small{display:block;color:var(--dim);font-weight:500;font-size:10.5px;margin-top:2px;line-height:1.3}
+        #s2 .mseg button.on{border-color:rgba(232,178,74,.5);background:rgba(232,178,74,.1);color:var(--gold2)}
+        #s2 .mrev{animation:s2rev .42s cubic-bezier(.2,.7,.3,1)}
       `}</style>
 
       <div className="aurora"><span></span><span></span><span></span></div>
@@ -787,6 +802,40 @@ export default function StudioV2() {
                     )
                   })}
                 </div>
+
+                {displayStyle === 'model' && (
+                  <div className="mpanel">
+                    {hasModel && <div className="mdetect">🧍 На фото є модель — можна змінити лише фон, зберігши людину</div>}
+                    {hasModel && (
+                      <div className="mseg">
+                        <button className={!mNew ? 'on' : ''} onClick={() => setMNew(false)}>Залишити модель з фото<small>змінюється тільки фон · точніше</small></button>
+                        <button className={mNew ? 'on' : ''} onClick={() => setMNew(true)}>Згенерувати нову модель<small>обери стать, статуру, вік</small></button>
+                      </div>
+                    )}
+                    {(mNew || !hasModel) && (
+                      <div className="mrev">
+                        <div className="lbl2" style={{marginTop: hasModel ? 16 : 4}}>Стать</div>
+                        <div className="chips">
+                          {[['any', 'Будь-яка'], ['female', 'Жінка'], ['male', 'Чоловік']].map(([v, l]) => (
+                            <button key={v} className={`chip ${mGender === v ? 'on' : ''}`} onClick={() => setMGender(v)}>{l}</button>
+                          ))}
+                        </div>
+                        <div className="lbl2">Статура</div>
+                        <div className="chips">
+                          {[['slim', 'Струнка'], ['regular', 'Звичайна'], ['athletic', 'Атлетична'], ['plus', 'Plus-size']].map(([v, l]) => (
+                            <button key={v} className={`chip ${mBody === v ? 'on' : ''}`} onClick={() => setMBody(mBody === v ? '' : v)}>{l}</button>
+                          ))}
+                        </div>
+                        <div className="lbl2">Вік</div>
+                        <div className="chips">
+                          {[['young', 'Молодий'], ['adult', 'Дорослий']].map(([v, l]) => (
+                            <button key={v} className={`chip ${mAge === v ? 'on' : ''}`} onClick={() => setMAge(mAge === v ? '' : v)}>{l}</button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="lbl2">Стиль фотографії</div>
                 <div className="chips">

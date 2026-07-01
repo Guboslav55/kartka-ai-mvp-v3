@@ -752,7 +752,8 @@ export async function POST(req: NextRequest) {
       mode = 'photo', displayStyle = 'catalog',
       cardPreset = 'urban', cardLayout = 'split', creativity = 0.5,
       productPhoto, productPhotos, productPhotoUrl,
-      productName = '', category = '', wishes = '', count = 1, bullets = [], format = '2:3', photoStyle = 'commercial'
+      productName = '', category = '', wishes = '', count = 1, bullets = [], format = '2:3', photoStyle = 'commercial',
+      modelKeep = false, modelGender = 'any', modelBody = '', modelAge = ''
     } = await req.json()
 
     if (!productName.trim()) return NextResponse.json({ error: 'Введіть назву товару' }, { status: 400 })
@@ -862,7 +863,18 @@ export async function POST(req: NextRequest) {
         const genStart = Date.now()
         for (let i = 0; i < usableUrls.length; i++) {
           try {
-            const base = STYLES[displayStyle] || STYLES.catalog
+            let base = STYLES[displayStyle] || STYLES.catalog
+            if (displayStyle === 'model') {
+              if (modelKeep) {
+                base = 'Keep the SAME person from the reference photo — their face, hair, skin tone, body, pose and the exact garment they are wearing — completely unchanged and identical. Change ONLY the background and surrounding scene into a clean professional setting. Photorealistic, natural light, do not alter the person or the clothing.'
+              } else {
+                const g = modelGender === 'female' ? 'female' : modelGender === 'male' ? 'male' : ''
+                const b = ({ slim: 'slim', regular: 'average-build', athletic: 'athletic', plus: 'plus-size curvy' } as any)[modelBody] || ''
+                const a = ({ young: 'young', adult: 'adult' } as any)[modelAge] || ''
+                const who = [a, b, g, 'model'].filter(Boolean).join(' ')
+                base = STYLES.model + ` The garment is worn by a ${who}.`
+              }
+            }
             let prompt = base
             prompt += ' CRITICAL: reproduce the garment EXACTLY as in the reference photo — the same colour (black stays black, no recolour or colour cast), the same shape, fabric, proportions, stripes, seams, logos and details, shown from the SAME side and orientation as the reference. Do not redraw, restyle, rotate, flip, add or remove anything on the product. Change ONLY the background and scene around it; the product itself must stay faithful to the reference.'
             if (NO_PEOPLE.has(displayStyle)) prompt += ' Absolutely no humans, no model, no mannequin, no hands, no clothing hanger — the product is the only subject.'

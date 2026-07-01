@@ -23,8 +23,9 @@ export async function POST(req: NextRequest) {
       text: `Перевір набір фото товару${productName ? ` ("${productName}")` : ''}. Для КОЖНОГО фото по порядку поверни два булевих:
 - "keep": true для БУДЬ-ЯКОГО фото, де видно сам товар — спереду, ЗЗАДУ, збоку, зсередини, капюшон, рукав, комір, деталь крупним планом, складеним, на вішаку, розкладкою чи вдягненим. false ТІЛЬКИ коли ГОЛОВНИЙ об'єкт фото — НЕ сам товар: бирка, паперова етикетка, розмірна таблиця/догляд, штрихкод, наклейка, чек, коробка/пакет-упаковка або зовсім сторонній предмет. За сумнівів — keep:true.
 - "wearable": true ЛИШЕ якщо товар показано крупно, чітко й приблизно АНФАС (вид спереду — на вішаку, розкладкою чи вдягнений). false якщо це вид ЗЗАДУ, збоку, дрібно/здалеку, під дивним кутом чи частково за кадром. Вид ЗЗАДУ — це keep:true, wearable:false (НЕ keep:false).
+- "person": true якщо на фото є людина (модель), яка вдягнена в товар або тримає його; false якщо людини немає (товар сам, на вішаку, розкладкою тощо).
 
-Поверни ТІЛЬКИ JSON: {"items":[{"keep":bool,"wearable":bool}, ...]} — рівно ${pics.length} записів у тому ж порядку.`
+Поверни ТІЛЬКИ JSON: {"items":[{"keep":bool,"wearable":bool,"person":bool}, ...]} — рівно ${pics.length} записів у тому ж порядку.`
     }]
     pics.forEach(url => content.push({ type: 'image_url', image_url: { url, detail: 'high' } }))
 
@@ -50,7 +51,9 @@ export async function POST(req: NextRequest) {
       .map((x, i) => (keep[i] && x?.wearable === false ? i : -1))
       .filter(i => i >= 0 && !irrelevant.includes(i))
 
-    return NextResponse.json({ irrelevant, notForModel })
+    const hasModel = items.some((x, i) => keep[i] && x?.person === true)
+
+    return NextResponse.json({ irrelevant, notForModel, hasModel })
   } catch (e: any) {
     console.error('check-product-photos:', e?.message)
     return NextResponse.json({ irrelevant: [], notForModel: [] })
